@@ -6,39 +6,43 @@
 > repair this snapshot before ending the session.
 
 ## Last Updated
-_Not yet initialized._
+2026-03-12
 
 ## Active Phase
-_None — awaiting initial planning._
+Phase 1 — Foundation
 
 ## Active Task
-_None._
+1.1 — Project scaffolding and baseline CLI
 
 ## Queue Snapshot
-- pending: —
+- pending: 1.2, 1.3, 1.4
 - ready: —
-- in-progress: —
+- in-progress: 1.1
 - needs-review: —
 - revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
-- coordination branch: _none_
-- active task branch: _none_
-- last processed builder session: _none_
+- coordination branch: `phase/01-foundation`
+- active task branch: `task/1.1-project-scaffolding`
+- last processed builder session: `none`
 
 ## What Changed Recently
-- `.ai` system installed.
+- Initialized the coordination workflow on `main` and `phase/01-foundation`.
+- Decomposed Phase 1 into tasks `1.1` through `1.4`.
+- Assigned task `1.1` to the Builder and prepared its prompt.
 
 ## Known Blockers
-_None._
+None.
 
 ## Next Recommended Action
-_Coordinator: read `plan.md`, create the first phase branch, and break the
-work into the first set of tasks._
+Builder: switch to `task/1.1-project-scaffolding`, implement the task prompt,
+run the listed verification, and write a Builder session note with
+`Outcome: READY_FOR_REVIEW` or `Outcome: BLOCKED`.
 
 ## Next Agent Read Order
-1. `.ai/plan.md`
-2. `.ai/tasks/queue.md`
-3. `.ai/roles/coordinator.md`
+1. `.ai/tasks/prompts/1.1.md`
+2. `.ai/plans/01-foundation.md`
+3. `.ai/plan.md`
+4. `.ai/git-rules.md`

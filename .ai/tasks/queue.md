@@ -26,3 +26,7 @@
 
 | Task ID | Phase | Title | Status | Depends On | Branch | Assigned |
 |---------|-------|-------|--------|------------|--------|----------|
+| 1.1 | 1 | Project scaffolding and baseline CLI | in-progress | — | task/1.1-project-scaffolding | Builder |
+| 1.2 | 1 | Config and logging foundation | pending | 1.1 | task/1.2-config-and-logging | — |
+| 1.3 | 1 | SSH, transfer, and compression primitives | pending | 1.1 | task/1.3-ssh-transfer-compression | — |
+| 1.4 | 1 | Operator commands and diagnostics | pending | 1.2, 1.3 | task/1.4-operator-commands-diagnostics | — |
