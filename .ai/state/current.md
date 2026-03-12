@@ -17,8 +17,8 @@ Phase 1 — Foundation
 ## Queue Snapshot
 - pending: 1.2, 1.3, 1.4
 - ready: —
-- in-progress: 1.1
-- needs-review: —
+- in-progress: —
+- needs-review: 1.1
 - revision-needed: —
 - blocked: —
 
@@ -26,23 +26,23 @@ Phase 1 — Foundation
 - default branch: `main`
 - coordination branch: `phase/01-foundation`
 - active task branch: `task/1.1-project-scaffolding`
-- last processed builder session: `none`
+- last processed builder session: `2026-03-12-1538-builder-1.1-project-scaffolding.md`
 
 ## What Changed Recently
 - Initialized the coordination workflow on `main` and `phase/01-foundation`.
 - Decomposed Phase 1 into tasks `1.1` through `1.4`.
-- Assigned task `1.1` to the Builder and prepared its prompt.
+- Recorded Builder handoff `2026-03-12-1538-builder-1.1-project-scaffolding.md`
+  and moved task `1.1` to `needs-review`.
 
 ## Known Blockers
 None.
 
 ## Next Recommended Action
-Builder: switch to `task/1.1-project-scaffolding`, implement the task prompt,
-run the listed verification, and write a Builder session note with
-`Outcome: READY_FOR_REVIEW` or `Outcome: BLOCKED`.
+Coordinator: review task `1.1` on `task/1.1-project-scaffolding`, run the
+prompt verification, and either accept the task or issue actionable revisions.
 
 ## Next Agent Read Order
 1. `.ai/tasks/prompts/1.1.md`
-2. `.ai/plans/01-foundation.md`
-3. `.ai/plan.md`
+2. `.ai/reviews/1.1.md` if created during review
+3. `.ai/plans/01-foundation.md`
 4. `.ai/git-rules.md`
