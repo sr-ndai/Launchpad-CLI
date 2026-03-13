@@ -6,10 +6,10 @@
 > repair this snapshot before ending the session.
 
 ## Last Updated
-_Not yet initialized._
+2026-03-12
 
 ## Active Phase
-_None — awaiting initial planning._
+Phase 1 — Foundation
 
 ## Active Task
 _None._
@@ -24,21 +24,30 @@ _None._
 
 ## Repo State
 - default branch: `main`
-- coordination branch: _none_
-- active task branch: _none_
-- last processed builder session: _none_
+- coordination branch: `phase/01-foundation`
+- active task branch: `none`
+- last processed builder session: `2026-03-12-1913-builder-1.4.md`
 
 ## What Changed Recently
-- `.ai` system installed.
+- Accepted task `1.4` and merged `task/1.4-operator-commands-diagnostics`
+  into `phase/01-foundation`.
+- Phase 1 queue is now fully complete with tasks `1.1` through `1.4` marked
+  done.
+- PR creation is still pending because the remote repository only exposes
+  `origin/master` and no local PR CLI is installed.
 
 ## Known Blockers
-_None._
+- Remote branch alignment for PR creation: the local workflow uses `main`, but
+  the remote currently only exposes `origin/master`, and `gh` is not installed
+  locally.
 
 ## Next Recommended Action
-_Coordinator: read `plan.md`, create the first phase branch, and break the
-work into the first set of tasks._
+Coordinator or human owner: align the remote `main` branch strategy, push
+`phase/01-foundation` if needed, and open the Phase 1 PR from
+`phase/01-foundation` to `main`.
 
 ## Next Agent Read Order
-1. `.ai/plan.md`
-2. `.ai/tasks/queue.md`
-3. `.ai/roles/coordinator.md`
+1. `.ai/state/current.md`
+2. `.ai/state/decisions.md`
+3. `.ai/git-rules.md`
+4. `.ai/plan.md`
