@@ -15,11 +15,12 @@ The CLI boots, exposes the planned top-level commands, registers both
 - `launchpad config show`
 - `launchpad ssh`
 - `launchpad doctor`
+- `launchpad submit`
 
 Core SSH, single-stream transfer, local compression primitives, the Phase 2
-solver-adapter layer for Nastran discovery, and the reusable remote-submit
-helpers are present for the commands that depend on them. Full CLI submission,
-status, logs, download, and cleanup workflows remain future work.
+solver-adapter layer for Nastran discovery, the reusable remote-submit helpers,
+and the first functional `launchpad submit` command are present. Status, logs,
+download, and cleanup workflows remain future work.
 
 ## Quickstart
 
@@ -29,6 +30,7 @@ uv run launchpad --help
 uv run lp --help
 uv run launchpad config init --non-interactive --host headnode.example.com --username sergey --key-path C:\Users\sergey\.ssh\id_ed25519 --force
 uv run launchpad config show
+uv run launchpad submit --dry-run .
 uv run launchpad doctor
 uv run pytest
 ```
@@ -108,3 +110,8 @@ Phase 2 now includes reusable remote submission helpers beneath the future
 - SLURM submit-script generation with manifest freezing, shared-filesystem
   scratch handling, and remote-directory tracking via the SLURM job comment
 - a remote `sbatch --parsable` wrapper that returns the submitted job ID
+
+The `launchpad submit` command now orchestrates solver discovery, local
+archive creation, upload, remote extraction, SLURM script generation, and
+remote submission. `--dry-run` shows the resolved manifest, remote paths, and
+generated submit script without making remote changes.
