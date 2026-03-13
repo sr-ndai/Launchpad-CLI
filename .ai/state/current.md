@@ -34,16 +34,14 @@ _None._
 - Accepted task `2.3` and merged `task/2.3-submit-orchestration-dry-run` into
   `phase/02-submission-pipeline`.
 - Phase 2 queue is now fully complete with tasks `2.1` through `2.3` marked
-  done.
+  done, and PR `#2` is open from `phase/02-submission-pipeline` to `main`.
 
 ## Known Blockers
-- Automated PR creation is blocked in this environment because `gh` is not
-  installed and no GitHub API token is configured for direct API use.
+- None.
 
 ## Next Recommended Action
-Human owner or Coordinator with GitHub credentials: open the Phase 2 PR from
-`phase/02-submission-pipeline` to `main`, then merge it after review. After the
-merge lands, the next coordination pass should open Phase 3.
+Human owner: review and merge PR `#2` from `phase/02-submission-pipeline` to
+`main`. After the merge lands, the next coordination pass should open Phase 3.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
