@@ -3,14 +3,22 @@
 Launchpad is a Windows-first command-line tool for packaging solver inputs,
 transferring them to a shared SLURM cluster, submitting runs, monitoring job
 state, and downloading results. The repository now includes the Phase 1 package
-scaffold plus the initial config and logging foundation used by later commands.
+scaffold, config and logging foundation, transport primitives, and the first
+operator-facing cluster access commands.
 
 ## Status
 
 The CLI boots, exposes the planned top-level commands, registers both
-`launchpad` and `lp` entry points, and now supports `launchpad config init` and
-`launchpad config show`. Transfers, compression, SLURM interaction, and
-diagnostics are still deferred to later Phase 1 tasks.
+`launchpad` and `lp` entry points, and now supports:
+
+- `launchpad config init`
+- `launchpad config show`
+- `launchpad ssh`
+- `launchpad doctor`
+
+Core SSH, single-stream transfer, and local compression primitives are present
+for the commands that depend on them. Submission, status, logs, download, and
+cleanup workflows remain future work.
 
 ## Quickstart
 
@@ -20,6 +28,7 @@ uv run launchpad --help
 uv run lp --help
 uv run launchpad config init --non-interactive --host headnode.example.com --username sergey --key-path C:\Users\sergey\.ssh\id_ed25519 --force
 uv run launchpad config show
+uv run launchpad doctor
 uv run pytest
 ```
 
@@ -36,6 +45,15 @@ Launchpad resolves configuration in this order, highest priority first:
 Use `launchpad config init` to create the user config file and `launchpad config show`
 to inspect the resolved result. `launchpad config show --docs` prints the
 annotated schema for all currently supported settings.
+
+## Operator Commands
+
+Use `launchpad ssh` to open an interactive shell on the configured cluster head
+node using the resolved SSH settings.
+
+Use `launchpad doctor` to validate the local config, SSH key path, shared
+cluster config access, SSH reachability, configured remote binaries, and the
+remote writable root path when a cluster connection is available.
 
 ## Planned Commands
 

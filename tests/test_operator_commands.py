@@ -1,0 +1,117 @@
+"""Tests for operator command wiring and diagnostics."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from click.testing import CliRunner
+
+from launchpad_cli.cli import cli
+from launchpad_cli.cli import doctor as doctor_module
+from launchpad_cli.cli import ssh_cmd as ssh_module
+from launchpad_cli.core.config import LaunchpadConfig, SSHConfig
+
+
+def test_ssh_command_invokes_interactive_shell(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The SSH command should resolve config and invoke the async shell helper."""
+
+    called: dict[str, SSHConfig] = {}
+
+    monkeypatch.setattr(
+        ssh_module,
+        "configure_logging",
+        lambda **kwargs: tmp_path / "launchpad.log",
+    )
+    monkeypatch.setattr(
+        ssh_module,
+        "resolve_config",
+        lambda **kwargs: SimpleNamespace(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey")
+            )
+        ),
+    )
+
+    async def fake_open_interactive_shell(config: SSHConfig) -> int:
+        called["config"] = config
+        return 0
+
+    monkeypatch.setattr(ssh_module, "_open_interactive_shell", fake_open_interactive_shell)
+
+    result = CliRunner().invoke(cli, ["ssh"])
+
+    assert result.exit_code == 0
+    assert called["config"].host == "cluster.example.com"
+    assert called["config"].username == "sergey"
+
+
+def test_doctor_command_supports_json_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The doctor command should emit structured JSON when requested."""
+
+    monkeypatch.setattr(
+        doctor_module,
+        "configure_logging",
+        lambda **kwargs: tmp_path / "launchpad.log",
+    )
+
+    async def fake_collect_diagnostics(*, cwd: Path, env: dict[str, str]) -> list[doctor_module.DiagnosticResult]:
+        return [
+            doctor_module.DiagnosticResult(
+                name="python",
+                status="pass",
+                detail="Python 3.12.13",
+            )
+        ]
+
+    monkeypatch.setattr(doctor_module, "_collect_diagnostics", fake_collect_diagnostics)
+
+    result = CliRunner().invoke(cli, ["--json", "doctor"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload == [
+        {
+            "name": "python",
+            "status": "pass",
+            "detail": "Python 3.12.13",
+            "suggestion": None,
+        }
+    ]
+
+
+def test_doctor_ssh_key_check_requires_existing_key(tmp_path: Path) -> None:
+    """Local SSH key validation should fail for missing key files."""
+
+    result = doctor_module._ssh_key_check(
+        SSHConfig(
+            host="cluster.example.com",
+            username="sergey",
+            key_path=str(tmp_path / "missing_key"),
+        )
+    )
+
+    assert result.status == "fail"
+    assert "not found" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_doctor_remote_binary_check_reports_missing_tools() -> None:
+    """Remote binary validation should fail when a configured tool is absent."""
+
+    class FakeConnection:
+        async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            if "command -v sbatch" in command:
+                return SimpleNamespace(exit_status=0, stdout="/usr/bin/sbatch")
+            return SimpleNamespace(exit_status=1, stdout="")
+
+    config = LaunchpadConfig(
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+
+    result = await doctor_module._remote_binaries_check(FakeConnection(), config)
+
+    assert result.status == "fail"
+    assert "squeue" in result.detail
