@@ -1148,14 +1148,14 @@ launchpad config init
 
 **Goal:** Full submit workflow for Nastran.
 
-- [ ] `solvers/base.py` — SolverAdapter Protocol definition
-- [ ] `solvers/nastran.py` — Nastran adapter (input discovery, run command, scratch setup)
-- [ ] `solvers/ansys.py` — ANSYS stub (Protocol-compliant skeleton with `NotImplementedError`)
-- [ ] `core/slurm.py` — Submit script generation, `sbatch` execution over SSH
-- [ ] `core/remote_ops.py` — Remote mkdir, tar, file listing, du
-- [ ] `cli/submit.py` — Full orchestration: discover → compress → upload → decompress → generate script → submit
-- [ ] `--dry-run` support
-- [ ] `display.py` — Rich output formatting for submit confirmation
+- [x] `solvers/base.py` — SolverAdapter Protocol definition
+- [x] `solvers/nastran.py` — Nastran adapter (input discovery, run command, scratch setup)
+- [x] `solvers/ansys.py` — ANSYS stub (Protocol-compliant skeleton with `NotImplementedError`)
+- [x] `core/slurm.py` — Submit script generation, `sbatch` execution over SSH
+- [x] `core/remote_ops.py` — Remote mkdir, tar, file listing, du
+- [x] `cli/submit.py` — Full orchestration: discover → compress → upload → decompress → generate script → submit
+- [x] `--dry-run` support
+- [x] `display.py` — Rich output formatting for submit confirmation
 
 **Milestone:** `launchpad submit` works end-to-end for Nastran jobs from a Windows terminal.
 

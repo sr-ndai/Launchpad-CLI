@@ -12,41 +12,41 @@
 Phase 2 — Submission Pipeline
 
 ## Active Task
-2.3 — Submit orchestration and dry-run UX
+_None._
 
 ## Queue Snapshot
 - pending: —
 - ready: —
 - in-progress: —
 - needs-review: —
-- revision-needed: 2.3
+- revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/02-submission-pipeline`
-- active task branch: `task/2.3-submit-orchestration-dry-run`
-- last processed builder session: `2026-03-12-2057-builder-2.3.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-12-2110-builder-2.3.md`
 
 ## What Changed Recently
-- Recorded Builder handoff `2026-03-12-2057-builder-2.3.md` and reviewed task
-  `2.3`.
-- Wrote a revision-needed review for `task/2.3-submit-orchestration-dry-run`
-  covering uncaught AsyncSSH errors in the submit execute path.
-- Kept task `2.3` assigned on its current branch so the Builder can resume
-  directly from the review feedback.
+- Recorded revised Builder handoff `2026-03-12-2110-builder-2.3.md` and
+  reviewed task `2.3`.
+- Accepted task `2.3` and merged `task/2.3-submit-orchestration-dry-run` into
+  `phase/02-submission-pipeline`.
+- Phase 2 queue is now fully complete with tasks `2.1` through `2.3` marked
+  done.
 
 ## Known Blockers
-- None.
+- Automated PR creation is blocked in this environment because `gh` is not
+  installed and no GitHub API token is configured for direct API use.
 
 ## Next Recommended Action
-Builder: stay on `task/2.3-submit-orchestration-dry-run`, read
-`.ai/reviews/2.3.md`, implement the requested fix, rerun the prompt
-verification, and record the next handoff with `Outcome: READY_FOR_REVIEW` or
-`BLOCKED`.
+Human owner or Coordinator with GitHub credentials: open the Phase 2 PR from
+`phase/02-submission-pipeline` to `main`, then merge it after review. After the
+merge lands, the next coordination pass should open Phase 3.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
-2. `.ai/plans/02-submission-pipeline.md`
-3. `.ai/tasks/prompts/2.3.md`
-4. `.ai/reviews/2.3.md`
+2. `.ai/state/decisions.md`
+3. `.ai/plan.md`
+4. `.ai/tasks/queue.md`
