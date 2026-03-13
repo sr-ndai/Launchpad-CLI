@@ -10,11 +10,12 @@
   `phase/02-submission-pipeline`.
 - Updated the shared queue and routing state to mark `2.1` done and assign task
   `2.2` as the next active Builder task.
+- Created and published `task/2.2-slurm-and-remote-submission`.
 
 ## Branches Touched
 
 - coordination: `phase/02-submission-pipeline`
-- task: `task/2.1-solver-adapters-discovery`
+- task: `task/2.2-slurm-and-remote-submission`
 
 ## Decisions Made
 
@@ -30,5 +31,5 @@
 
 ## Next Recommended Action
 
-Create and publish `task/2.2-slurm-and-remote-submission`, then hand the
-Builder the next prompt at `.ai/tasks/prompts/2.2.md`.
+Builder should start from `task/2.2-slurm-and-remote-submission` and execute
+`.ai/tasks/prompts/2.2.md`.
