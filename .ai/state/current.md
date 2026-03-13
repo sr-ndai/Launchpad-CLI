@@ -12,45 +12,40 @@
 Phase 3 — Monitoring & Logs
 
 ## Active Task
-3.3 — Logs and cancel operator commands
+None — Phase 3 complete locally
 
 ## Queue Snapshot
 - pending: —
 - ready: —
 - in-progress: —
 - needs-review: —
-- revision-needed: 3.3
+- revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/03-monitoring-logs`
-- active task branch: `task/3.3-logs-and-cancel`
-- last processed builder session: `2026-03-12-2216-builder-3.3.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-13-0741-builder-3.3.md`
 
 ## What Changed Recently
-- Ingested Builder handoff `2026-03-12-2216-builder-3.3.md` and reviewed task
-  `3.3` against `phase/03-monitoring-logs`.
-- Prompt verification passed for `uv run pytest tests/test_logs.py
-  tests/test_cancel.py`, `uv run launchpad logs --help`, `uv run launchpad
-  cancel --help`, and `uv run pytest`.
-- Marked task `3.3` as `revision-needed` because `launchpad logs --follow`
-  uses a buffered `conn.run()` path and therefore does not stream live log
-  output while the remote `tail -f` is running.
+- Ingested Builder handoff `2026-03-13-0741-builder-3.3.md`, reviewed the
+  revision, and reran the task `3.3` prompt verification successfully.
+- Accepted and merged `task/3.3-logs-and-cancel` into
+  `phase/03-monitoring-logs`.
+- All Phase 3 tasks are now done on the phase branch; the remaining closeout
+  step is opening the phase PR to `main`.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder: switch to `task/3.3-logs-and-cancel`, read
-`.ai/tasks/prompts/3.3.md` and `.ai/reviews/3.3.md`, rework
-`launchpad logs --follow` to stream remote output live, add regression
-coverage for that execution path, rerun the prompt verification, and hand the
-task back with `Outcome: READY_FOR_REVIEW` or `BLOCKED`.
+Coordinator: push `phase/03-monitoring-logs`, open the Phase 3 PR to `main`,
+and then hand off to the human owner for review and merge.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/3.3.md`
+3. `.ai/sessions/2026-03-13-0741-builder-3.3.md`
 4. `.ai/reviews/3.3.md`
-5. `.ai/sessions/2026-03-12-2216-builder-3.3.md`
+5. `.ai/plan.md`

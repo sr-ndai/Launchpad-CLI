@@ -35,4 +35,4 @@
 | 2.3 | 2 | Submit orchestration and dry-run UX | done | 2.1, 2.2 | task/2.3-submit-orchestration-dry-run | — |
 | 3.1 | 3 | SLURM status parsing and query primitives | done | — | task/3.1-slurm-status-parsing | — |
 | 3.2 | 3 | Status command and live monitoring UI | done | 3.1 | task/3.2-status-command-watch | — |
-| 3.3 | 3 | Logs and cancel operator commands | revision-needed | 3.1 | task/3.3-logs-and-cancel | Builder |
+| 3.3 | 3 | Logs and cancel operator commands | done | 3.1 | task/3.3-logs-and-cancel | — |
