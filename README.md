@@ -16,9 +16,10 @@ The CLI boots, exposes the planned top-level commands, registers both
 - `launchpad ssh`
 - `launchpad doctor`
 
-Core SSH, single-stream transfer, and local compression primitives are present
-for the commands that depend on them. Submission, status, logs, download, and
-cleanup workflows remain future work.
+Core SSH, single-stream transfer, local compression primitives, and the Phase 2
+solver-adapter layer for Nastran discovery are present for the commands that
+depend on them. Submission, status, logs, download, and cleanup workflows
+remain future work.
 
 ## Quickstart
 
@@ -86,3 +87,13 @@ tests/        CLI smoke tests and scaffold verification
 ```
 
 See `ARCHITECTURE.md` for the module map and extension guidance.
+
+## Solver Layer
+
+The Phase 2 solver layer now exposes a concrete Nastran adapter for deterministic
+top-level `.dat` discovery, validation-friendly file metadata, run-command
+construction, and shared-filesystem scratch environment setup.
+
+The ANSYS adapter remains an explicit stub. It keeps the shared solver contract
+stable but raises a clear `NotImplementedError` until the team defines the real
+ANSYS workflow.
