@@ -260,13 +260,28 @@ async def _collect_status_snapshot(
     """Query SLURM and normalize the response into a status snapshot."""
 
     if job_id:
-        active_jobs = await query_squeue(conn, config=config, job_id=job_id)
-        accounting_jobs = await query_sacct(
-            conn,
-            config=config,
-            job_id=job_id,
-            duplicates=True,
-        )
+        active_jobs: tuple[JobStatus, ...] = ()
+        accounting_jobs: tuple[JobAccounting, ...] = ()
+        errors: list[str] = []
+
+        try:
+            active_jobs = await query_squeue(conn, config=config, job_id=job_id)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+
+        try:
+            accounting_jobs = await query_sacct(
+                conn,
+                config=config,
+                job_id=job_id,
+                duplicates=True,
+            )
+        except RuntimeError as exc:
+            errors.append(str(exc))
+
+        if not active_jobs and not accounting_jobs and errors:
+            raise RuntimeError(" ; ".join(errors))
+
         return _build_detail_snapshot(
             requested_job_id=job_id,
             queried_user=config.ssh.username,

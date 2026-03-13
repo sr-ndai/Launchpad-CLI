@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
 
 from launchpad_cli.cli import cli
 from launchpad_cli.cli import status as status_module
+from launchpad_cli.core.config import LaunchpadConfig, SSHConfig
+from launchpad_cli.core.slurm import JobAccounting, JobStatus
 
 
 def test_status_command_renders_overview_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,6 +139,109 @@ def test_status_command_watch_passes_interval_to_async_runner(monkeypatch: pytes
     assert captured["watch"] is True
     assert captured["interval"] == 5
     assert callable(captured["on_snapshot"])
+
+
+def test_status_command_falls_back_to_sacct_when_squeue_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Specific-job status should still render when only accounting data is available."""
+
+    monkeypatch.setattr(status_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        status_module,
+        "resolve_config",
+        lambda **kwargs: SimpleNamespace(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey")
+            )
+        ),
+    )
+
+    @asynccontextmanager
+    async def fake_ssh_session(config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield object()
+
+    async def fake_query_squeue(*args, **kwargs) -> tuple[JobStatus, ...]:  # type: ignore[no-untyped-def]
+        raise RuntimeError("SLURM squeue query failed: invalid job id")
+
+    async def fake_query_sacct(*args, **kwargs) -> tuple[JobAccounting, ...]:  # type: ignore[no-untyped-def]
+        return (
+            JobAccounting(
+                job_id="12345_2",
+                job_name="tank_v3",
+                state="COMPLETED",
+                array_job_id="12345",
+                array_task_id="2",
+                partition="simulation-r6i-8x",
+                node_list="compute-dy-2",
+                elapsed="01:45:12",
+                total_cpu="17:33.221",
+                max_rss="178G",
+                comment="/shared/sergey/tank_v3",
+            ),
+        )
+
+    monkeypatch.setattr(status_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
+    monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
+
+    result = CliRunner().invoke(cli, ["status", "12345"])
+
+    assert result.exit_code == 0
+    assert "tank_v3" in result.output
+    assert "COMPLETED" in result.output
+    assert "178G" in result.output
+
+
+def test_status_command_falls_back_to_squeue_when_sacct_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Specific-job status should still render when accounting is unavailable."""
+
+    monkeypatch.setattr(status_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        status_module,
+        "resolve_config",
+        lambda **kwargs: SimpleNamespace(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey")
+            )
+        ),
+    )
+
+    @asynccontextmanager
+    async def fake_ssh_session(config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield object()
+
+    async def fake_query_squeue(*args, **kwargs) -> tuple[JobStatus, ...]:  # type: ignore[no-untyped-def]
+        return (
+            JobStatus(
+                job_id="12345_0",
+                job_name="tank_v3",
+                state="RUNNING",
+                array_job_id="12345",
+                array_task_id="0",
+                partition="simulation-r6i-8x",
+                node_list="compute-dy-1",
+                elapsed="00:12:00",
+                comment="/shared/sergey/tank_v3",
+            ),
+        )
+
+    async def fake_query_sacct(*args, **kwargs) -> tuple[JobAccounting, ...]:  # type: ignore[no-untyped-def]
+        raise RuntimeError("SLURM sacct query failed: accounting disabled")
+
+    monkeypatch.setattr(status_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
+    monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
+
+    result = CliRunner().invoke(cli, ["status", "12345"])
+
+    assert result.exit_code == 0
+    assert "tank_v3" in result.output
+    assert "RUNNING" in result.output
+    assert "CPU" not in result.output
+    assert "Max RSS" not in result.output
 
 
 @pytest.mark.asyncio
