@@ -10,11 +10,13 @@
 - Created the Phase 2 plan and task prompts for tasks `2.1` through `2.3`.
 - Updated the shared queue and routing state to assign task `2.1` as the
   active Builder task.
+- Created and published `task/2.1-solver-adapters-discovery` from the Phase 2
+  coordination branch.
 
 ## Branches Touched
 
 - coordination: `phase/02-submission-pipeline`
-- task: `none`
+- task: `task/2.1-solver-adapters-discovery`
 
 ## Decisions Made
 
@@ -33,5 +35,5 @@
 
 ## Next Recommended Action
 
-Create and publish `task/2.1-solver-adapters-discovery`, then hand the Builder
-the Phase 2 entry point at `.ai/tasks/prompts/2.1.md`.
+Builder should start from `task/2.1-solver-adapters-discovery` and execute
+`.ai/tasks/prompts/2.1.md`.
