@@ -33,3 +33,6 @@
 | 2.1 | 2 | Solver adapters and input discovery | done | — | task/2.1-solver-adapters-discovery | — |
 | 2.2 | 2 | SLURM and remote submission primitives | done | 2.1 | task/2.2-slurm-and-remote-submission | — |
 | 2.3 | 2 | Submit orchestration and dry-run UX | done | 2.1, 2.2 | task/2.3-submit-orchestration-dry-run | — |
+| 3.1 | 3 | SLURM status parsing and query primitives | in-progress | — | task/3.1-slurm-status-parsing | Builder |
+| 3.2 | 3 | Status command and live monitoring UI | pending | 3.1 | task/3.2-status-command-watch | — |
+| 3.3 | 3 | Logs and cancel operator commands | pending | 3.1 | task/3.3-logs-and-cancel | — |

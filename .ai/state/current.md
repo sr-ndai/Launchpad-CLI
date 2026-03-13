@@ -9,42 +9,43 @@
 2026-03-12
 
 ## Active Phase
-Phase 2 — Submission Pipeline
+Phase 3 — Monitoring & Logs
 
 ## Active Task
-_None._
+3.1 — SLURM status parsing and query primitives
 
 ## Queue Snapshot
-- pending: —
+- pending: 3.2, 3.3
 - ready: —
-- in-progress: —
+- in-progress: 3.1
 - needs-review: —
 - revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `phase/02-submission-pipeline`
-- active task branch: `none`
+- coordination branch: `phase/03-monitoring-logs`
+- active task branch: `task/3.1-slurm-status-parsing`
 - last processed builder session: `2026-03-12-2110-builder-2.3.md`
 
 ## What Changed Recently
-- Recorded revised Builder handoff `2026-03-12-2110-builder-2.3.md` and
-  reviewed task `2.3`.
-- Accepted task `2.3` and merged `task/2.3-submit-orchestration-dry-run` into
-  `phase/02-submission-pipeline`.
-- Phase 2 queue is now fully complete with tasks `2.1` through `2.3` marked
-  done, and PR `#2` is open from `phase/02-submission-pipeline` to `main`.
+- Phase 2 was merged to `main`, so the submission-pipeline work is now in the
+  human-approved baseline.
+- Created the new coordination branch `phase/03-monitoring-logs` from the
+  updated `main` baseline.
+- Seeded Phase 3 with tasks `3.1` through `3.3` and assigned task `3.1` to the
+  Builder.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human owner: review and merge PR `#2` from `phase/02-submission-pipeline` to
-`main`. After the merge lands, the next coordination pass should open Phase 3.
+Builder: switch to `task/3.1-slurm-status-parsing`, execute
+`.ai/tasks/prompts/3.1.md`, and record the handoff with `Outcome:
+READY_FOR_REVIEW` or `BLOCKED`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
-2. `.ai/state/decisions.md`
-3. `.ai/plan.md`
-4. `.ai/tasks/queue.md`
+2. `.ai/plans/03-monitoring-logs.md`
+3. `.ai/tasks/prompts/3.1.md`
+4. `.ai/plan.md`
