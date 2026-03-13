@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import asyncssh
 import click
 
 from launchpad_cli.core.compress import compress_path
@@ -157,7 +158,7 @@ def command(
 
     try:
         submitted_job = asyncio.run(_execute_submit(plan))
-    except (RuntimeError, OSError, ValueError, NotImplementedError) as exc:
+    except (asyncssh.Error, RuntimeError, OSError, ValueError, NotImplementedError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     render_submit_confirmation(

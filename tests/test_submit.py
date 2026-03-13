@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
+
+import asyncssh
 
 from click.testing import CliRunner
 
@@ -87,6 +88,38 @@ def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_pat
     assert "Submission Complete" in result.output
     assert "12345" in result.output
     assert "launchpad status 12345" in result.output
+
+
+def test_submit_wraps_asyncssh_errors_as_click_exceptions(monkeypatch, tmp_path: Path) -> None:
+    """Submit should surface AsyncSSH failures as normal CLI errors."""
+
+    (tmp_path / "wing.dat").write_text("SOL 101\n", encoding="utf-8")
+    config = LaunchpadConfig(
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+    resolved = ResolvedConfig(config=config, layers=())
+
+    monkeypatch.setattr(
+        submit_module,
+        "configure_logging",
+        lambda **kwargs: tmp_path / "launchpad.log",
+    )
+    monkeypatch.setattr(
+        submit_module,
+        "resolve_config",
+        lambda **kwargs: resolved,
+    )
+
+    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> SubmittedJob:
+        raise asyncssh.Error(1, "boom")
+
+    monkeypatch.setattr(submit_module, "_execute_submit", fake_execute_submit)
+
+    result = CliRunner().invoke(cli, ["submit", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert not isinstance(result.exception, asyncssh.Error)
+    assert "Error: boom" in result.output
 
 
 def test_build_submit_plan_errors_when_no_supported_inputs(monkeypatch, tmp_path: Path) -> None:
