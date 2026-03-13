@@ -35,7 +35,11 @@ class NastranAdapter:
         config: LaunchpadConfig,
         overrides: SubmitOverrides | None = None,
     ) -> str:
-        """Build the remote Nastran invocation for a single input file."""
+        """Build the remote Nastran invocation for a single input file.
+
+        `input_file` is treated as a shell-ready path expression so later
+        submit scripts can pass quoted variables directly.
+        """
 
         solver_defaults = config.solvers.nastran
         resolved_overrides = overrides if overrides is not None else SubmitOverrides()
@@ -44,7 +48,7 @@ class NastranAdapter:
 
         arguments = [
             quote_arg(solver_defaults.executable_path),
-            quote_arg(input_file),
+            input_file,
             f"smp={cpus}",
             f"memory={quote_arg(memory)}",
             f"buffpool={quote_arg(solver_defaults.buffpool)}",

@@ -16,10 +16,10 @@ The CLI boots, exposes the planned top-level commands, registers both
 - `launchpad ssh`
 - `launchpad doctor`
 
-Core SSH, single-stream transfer, local compression primitives, and the Phase 2
-solver-adapter layer for Nastran discovery are present for the commands that
-depend on them. Submission, status, logs, download, and cleanup workflows
-remain future work.
+Core SSH, single-stream transfer, local compression primitives, the Phase 2
+solver-adapter layer for Nastran discovery, and the reusable remote-submit
+helpers are present for the commands that depend on them. Full CLI submission,
+status, logs, download, and cleanup workflows remain future work.
 
 ## Quickstart
 
@@ -97,3 +97,14 @@ construction, and shared-filesystem scratch environment setup.
 The ANSYS adapter remains an explicit stub. It keeps the shared solver contract
 stable but raises a clear `NotImplementedError` until the team defines the real
 ANSYS workflow.
+
+## Submit Primitives
+
+Phase 2 now includes reusable remote submission helpers beneath the future
+`launchpad submit` command:
+
+- remote job-directory layout and setup helpers
+- remote archive extraction using configured `tar` and `zstd` binaries
+- SLURM submit-script generation with manifest freezing, shared-filesystem
+  scratch handling, and remote-directory tracking via the SLURM job comment
+- a remote `sbatch --parsable` wrapper that returns the submitted job ID
