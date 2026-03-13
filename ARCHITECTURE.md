@@ -15,9 +15,10 @@ contracts.
 - `src/launchpad_cli/cli/__init__.py` defines the root Click group, global
   options, and command registration.
 - `src/launchpad_cli/cli/*.py` modules own individual commands or command
-  groups. In this scaffold they expose placeholder callbacks and help text only.
-- `src/launchpad_cli/display.py` centralizes Rich console creation for later
-  user-facing output work.
+  groups. `submit.py` now orchestrates the functional Phase 2 Nastran submit
+  path and dry-run preview, while other Phase 3+ commands continue to evolve.
+- `src/launchpad_cli/display.py` centralizes Rich console creation plus the
+  submit-focused dry-run and confirmation formatting.
 
 ### Core Layer
 
@@ -54,6 +55,8 @@ contracts.
   scratch environment setup, and the ANSYS stub behavior.
 - `tests/test_remote_ops.py` and `tests/test_slurm.py` cover the reusable
   remote-submit primitives with fakes instead of a live cluster.
+- `tests/test_submit.py` covers the submit command’s dry-run preview and mocked
+  execution wiring.
 - `tests/conftest.py` adds the `src/` tree to `sys.path` so local test runs can
   import the package without extra setup.
 
@@ -67,9 +70,9 @@ The intended steady-state data flow is:
 4. Display helpers render human-facing output while JSON output stays
    script-friendly.
 
-The repository now implements the solver layer plus the reusable remote-submit
-primitives beneath `launchpad submit`, while CLI orchestration and Rich-facing
-presentation remain future work.
+The repository now implements the solver layer, reusable remote-submit
+primitives, and the first functional `launchpad submit` orchestration path with
+Rich dry-run and confirmation output.
 
 ## Common Changes
 
@@ -85,7 +88,6 @@ presentation remain future work.
 ## Current Limits
 
 - Command implementations are placeholders only.
-- No submit orchestration, remote SLURM integration, or result workflows are
-  active yet.
+- Status, logs, download, and cleanup orchestration are not active yet.
 - The ANSYS adapter remains intentionally unimplemented until the team defines
   the supported runtime contract.
