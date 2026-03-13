@@ -32,4 +32,4 @@
 | 1.4 | 1 | Operator commands and diagnostics | done | 1.2, 1.3 | task/1.4-operator-commands-diagnostics | — |
 | 2.1 | 2 | Solver adapters and input discovery | done | — | task/2.1-solver-adapters-discovery | — |
 | 2.2 | 2 | SLURM and remote submission primitives | done | 2.1 | task/2.2-slurm-and-remote-submission | — |
-| 2.3 | 2 | Submit orchestration and dry-run UX | in-progress | 2.1, 2.2 | task/2.3-submit-orchestration-dry-run | Builder |
+| 2.3 | 2 | Submit orchestration and dry-run UX | revision-needed | 2.1, 2.2 | task/2.3-submit-orchestration-dry-run | Builder |
