@@ -7,11 +7,13 @@
 - Created the Phase 3 plan and task prompts for tasks `3.1` through `3.3`.
 - Updated the shared queue and routing state to assign task `3.1` as the active
   Builder task.
+- Created and published `task/3.1-slurm-status-parsing` from the Phase 3
+  coordination branch.
 
 ## Branches Touched
 
 - coordination: `phase/03-monitoring-logs`
-- task: `none`
+- task: `task/3.1-slurm-status-parsing`
 
 ## Decisions Made
 
@@ -30,5 +32,5 @@
 
 ## Next Recommended Action
 
-Create and publish `task/3.1-slurm-status-parsing`, then hand the Builder the
-Phase 3 entry point at `.ai/tasks/prompts/3.1.md`.
+Builder should start from `task/3.1-slurm-status-parsing` and execute
+`.ai/tasks/prompts/3.1.md`.
