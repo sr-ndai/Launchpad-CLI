@@ -17,8 +17,8 @@ Phase 1 — Foundation
 ## Queue Snapshot
 - pending: 1.4
 - ready: 1.3
-- in-progress: 1.2
-- needs-review: —
+- in-progress: —
+- needs-review: 1.2
 - revision-needed: —
 - blocked: —
 
@@ -26,24 +26,24 @@ Phase 1 — Foundation
 - default branch: `main`
 - coordination branch: `phase/01-foundation`
 - active task branch: `task/1.2-config-and-logging`
-- last processed builder session: `2026-03-12-1538-builder-1.1-project-scaffolding.md`
+- last processed builder session: `2026-03-12-1700-builder-1.2-config-and-logging.md`
 
 ## What Changed Recently
 - Accepted task `1.1` and merged `task/1.1-project-scaffolding` into
   `phase/01-foundation`.
 - Promoted task `1.3` to `ready` because dependency `1.1` is complete.
-- Assigned task `1.2` on `task/1.2-config-and-logging`.
+- Recorded Builder handoff `2026-03-12-1700-builder-1.2-config-and-logging.md`
+  and moved task `1.2` to `needs-review`.
 
 ## Known Blockers
 None.
 
 ## Next Recommended Action
-Builder: switch to `task/1.2-config-and-logging`, implement the task prompt,
-run the listed verification, and write a Builder session note with
-`Outcome: READY_FOR_REVIEW` or `Outcome: BLOCKED`.
+Coordinator: review task `1.2` on `task/1.2-config-and-logging`, run the
+prompt verification, and either accept the task or issue actionable revisions.
 
 ## Next Agent Read Order
 1. `.ai/tasks/prompts/1.2.md`
-2. `.ai/plans/01-foundation.md`
-3. `.ai/plan.md`
+2. `.ai/reviews/1.2.md` if created during review
+3. `.ai/plans/01-foundation.md`
 4. `.ai/git-rules.md`
