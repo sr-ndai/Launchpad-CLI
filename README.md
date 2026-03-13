@@ -2,16 +2,15 @@
 
 Launchpad is a Windows-first command-line tool for packaging solver inputs,
 transferring them to a shared SLURM cluster, submitting runs, monitoring job
-state, and downloading results. This repository currently contains the Phase 1
-scaffold: package layout, command surface, documentation skeleton, and test
-baseline.
+state, and downloading results. The repository now includes the Phase 1 package
+scaffold plus the initial config and logging foundation used by later commands.
 
 ## Status
 
-The CLI boots, exposes the planned top-level commands, and registers both
-`launchpad` and `lp` entry points. Functional implementations for config,
-transfers, compression, SLURM interaction, and diagnostics are intentionally
-deferred to later Phase 1 tasks.
+The CLI boots, exposes the planned top-level commands, registers both
+`launchpad` and `lp` entry points, and now supports `launchpad config init` and
+`launchpad config show`. Transfers, compression, SLURM interaction, and
+diagnostics are still deferred to later Phase 1 tasks.
 
 ## Quickstart
 
@@ -19,8 +18,24 @@ deferred to later Phase 1 tasks.
 uv sync
 uv run launchpad --help
 uv run lp --help
+uv run launchpad config init --non-interactive --host headnode.example.com --username sergey --key-path C:\Users\sergey\.ssh\id_ed25519 --force
+uv run launchpad config show
 uv run pytest
 ```
+
+## Configuration Layers
+
+Launchpad resolves configuration in this order, highest priority first:
+
+1. CLI flag overrides
+2. `LAUNCHPAD_*` environment variables
+3. Project-local `.launchpad.toml`
+4. User config at `~/.launchpad/config.toml`
+5. Cluster config at `/shared/config/launchpad.toml`
+
+Use `launchpad config init` to create the user config file and `launchpad config show`
+to inspect the resolved result. `launchpad config show --docs` prints the
+annotated schema for all currently supported settings.
 
 ## Planned Commands
 
