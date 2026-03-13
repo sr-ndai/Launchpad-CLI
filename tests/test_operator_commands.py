@@ -97,6 +97,35 @@ def test_doctor_ssh_key_check_requires_existing_key(tmp_path: Path) -> None:
     assert "not found" in result.detail
 
 
+def test_doctor_config_check_fails_when_required_ssh_fields_are_missing() -> None:
+    """Config validity should fail when SSH connection fields are unresolved."""
+
+    result = doctor_module._config_resolution_check((), LaunchpadConfig())
+
+    assert result.status == "fail"
+    assert "ssh.host" in result.detail
+    assert "ssh.username" in result.detail
+    assert result.suggestion is not None
+
+
+def test_doctor_config_check_passes_for_complete_ssh_configuration() -> None:
+    """Config validity should pass when the SSH session requirements are present."""
+
+    result = doctor_module._config_resolution_check(
+        (),
+        LaunchpadConfig(
+            ssh=SSHConfig(
+                host="cluster.example.com",
+                username="sergey",
+            )
+        ),
+    )
+
+    assert result.status == "pass"
+    assert "cluster.example.com" in result.detail
+    assert "sergey" in result.detail
+
+
 @pytest.mark.asyncio
 async def test_doctor_remote_binary_check_reports_missing_tools() -> None:
     """Remote binary validation should fail when a configured tool is absent."""

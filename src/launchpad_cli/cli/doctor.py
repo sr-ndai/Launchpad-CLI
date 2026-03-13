@@ -82,17 +82,32 @@ async def _collect_diagnostics(
         )
         return results
 
-    results.append(_config_resolution_check(resolved.loaded_files, resolved.config))
+    config_result = _config_resolution_check(resolved.loaded_files, resolved.config)
+    results.append(config_result)
     key_result = _ssh_key_check(resolved.config.ssh)
     shared_config_result = _shared_config_check()
     results.extend([key_result, shared_config_result])
 
-    if key_result.status == "fail":
+    if config_result.status == "fail" or key_result.status == "fail":
         results.append(
             DiagnosticResult(
                 name="ssh-connection",
                 status="skip",
-                detail="Skipped remote checks because local SSH key configuration is incomplete.",
+                detail="Skipped remote checks because local SSH configuration is incomplete.",
+            )
+        )
+        results.append(
+            DiagnosticResult(
+                name="remote-binaries",
+                status="skip",
+                detail="Skipped remote binary checks because local SSH configuration is incomplete.",
+            )
+        )
+        results.append(
+            DiagnosticResult(
+                name="remote-root",
+                status="skip",
+                detail="Skipped remote writable-path checks because local SSH configuration is incomplete.",
             )
         )
         return results
@@ -158,8 +173,29 @@ def _config_resolution_check(loaded_files: tuple[Path, ...], config: LaunchpadCo
     """Summarize the resolved configuration inputs relevant to operator commands."""
 
     source_text = ", ".join(str(path) for path in loaded_files) if loaded_files else "defaults only"
+    missing_fields: list[str] = []
+    if not config.ssh.host:
+        missing_fields.append("ssh.host")
+    if not config.ssh.username:
+        missing_fields.append("ssh.username")
+
     host = config.ssh.host or "<missing>"
     username = config.ssh.username or "<missing>"
+
+    if missing_fields:
+        return DiagnosticResult(
+            name="config",
+            status="fail",
+            detail=(
+                f"Config resolved from {source_text}, but required SSH fields are missing: "
+                f"{', '.join(missing_fields)}."
+            ),
+            suggestion=(
+                "Set the missing SSH values with `launchpad config init`, a user/project config "
+                "file, or `LAUNCHPAD_HOST` / `LAUNCHPAD_USER`."
+            ),
+        )
+
     return DiagnosticResult(
         name="config",
         status="pass",
