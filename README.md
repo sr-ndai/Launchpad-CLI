@@ -16,11 +16,18 @@ The CLI boots, exposes the planned top-level commands, registers both
 - `launchpad ssh`
 - `launchpad doctor`
 - `launchpad submit`
+- `launchpad status`
+- `launchpad logs`
+- `launchpad cancel`
 
 Core SSH, single-stream transfer, local compression primitives, the Phase 2
 solver-adapter layer for Nastran discovery, the reusable remote-submit helpers,
-and the first functional `launchpad submit` command are present. Status, logs,
-download, and cleanup workflows remain future work.
+the first functional `launchpad submit` command, and the reusable Phase 3
+SLURM status/accounting query layer are present. `launchpad status` now
+supports current-user and specific-job queries plus `--watch` polling.
+`launchpad logs` and `launchpad cancel` now provide the remaining Phase 3
+operator workflows for remote log inspection and job cancellation. Download and
+cleanup workflows remain future work.
 
 ## Quickstart
 
@@ -115,3 +122,32 @@ The `launchpad submit` command now orchestrates solver discovery, local
 archive creation, upload, remote extraction, SLURM script generation, and
 remote submission. `--dry-run` shows the resolved manifest, remote paths, and
 generated submit script without making remote changes.
+
+## Monitoring Primitives
+
+Phase 3 now extends the SLURM core layer with:
+
+- typed `squeue --json` status parsing
+- typed `sacct --json` accounting parsing
+- reusable remote query wrappers for scheduler metadata over SSH
+
+The command-facing `launchpad status`, `launchpad logs`, and `launchpad cancel`
+workflows now build on that scheduler data contract.
+
+## Status Command
+
+`launchpad status` now provides the first monitoring workflow:
+
+- no arguments: query the configured user's active jobs
+- `launchpad status <JOB_ID>`: show per-task detail for a specific job
+- `--all`: include recent accounting rows for completed or failed work
+- `--watch --interval N`: refresh the Rich status view every `N` seconds
+
+## Logs And Cancel
+
+Phase 3 now also includes:
+
+- `launchpad logs <JOB_ID> [TASK_ID]` for SLURM stdout/stderr log viewing,
+  solver-log selection, and follow mode
+- `launchpad cancel <JOB_ID> [TASK_IDS...]` for cancelling whole jobs or
+  selected array tasks, with confirmation by default
