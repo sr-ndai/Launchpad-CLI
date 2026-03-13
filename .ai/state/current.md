@@ -9,45 +9,43 @@
 2026-03-12
 
 ## Active Phase
-Phase 1 — Foundation
+Phase 2 — Submission Pipeline
 
 ## Active Task
-_None._
+2.1 — Solver adapters and input discovery
 
 ## Queue Snapshot
-- pending: —
+- pending: 2.2, 2.3
 - ready: —
-- in-progress: —
+- in-progress: 2.1
 - needs-review: —
 - revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `phase/01-foundation`
-- active task branch: `none`
+- coordination branch: `phase/02-submission-pipeline`
+- active task branch: `task/2.1-solver-adapters-discovery`
 - last processed builder session: `2026-03-12-1913-builder-1.4.md`
 
 ## What Changed Recently
-- Accepted task `1.4` and merged `task/1.4-operator-commands-diagnostics`
-  into `phase/01-foundation`.
-- Phase 1 queue is now fully complete with tasks `1.1` through `1.4` marked
-  done.
-- PR creation is still pending because the remote repository only exposes
-  `origin/master` and no local PR CLI is installed.
+- Phase 1 was merged to `main`, so the prior PR-alignment blocker is cleared in
+  repository history.
+- Created the new coordination branch `phase/02-submission-pipeline` from the
+  updated `main` baseline.
+- Seeded Phase 2 with tasks `2.1` through `2.3` and assigned task `2.1` to the
+  Builder.
 
 ## Known Blockers
-- Remote branch alignment for PR creation: the local workflow uses `main`, but
-  the remote currently only exposes `origin/master`, and `gh` is not installed
-  locally.
+- None.
 
 ## Next Recommended Action
-Coordinator or human owner: align the remote `main` branch strategy, push
-`phase/01-foundation` if needed, and open the Phase 1 PR from
-`phase/01-foundation` to `main`.
+Builder: switch to `task/2.1-solver-adapters-discovery`, execute
+`.ai/tasks/prompts/2.1.md`, and record the handoff with `Outcome:
+READY_FOR_REVIEW` or `BLOCKED`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
-2. `.ai/state/decisions.md`
-3. `.ai/git-rules.md`
+2. `.ai/plans/02-submission-pipeline.md`
+3. `.ai/tasks/prompts/2.1.md`
 4. `.ai/plan.md`

@@ -30,3 +30,6 @@
 | 1.2 | 1 | Config and logging foundation | done | 1.1 | task/1.2-config-and-logging | — |
 | 1.3 | 1 | SSH, transfer, and compression primitives | done | 1.1 | task/1.3-ssh-transfer-compression | — |
 | 1.4 | 1 | Operator commands and diagnostics | done | 1.2, 1.3 | task/1.4-operator-commands-diagnostics | — |
+| 2.1 | 2 | Solver adapters and input discovery | in-progress | — | task/2.1-solver-adapters-discovery | Builder |
+| 2.2 | 2 | SLURM and remote submission primitives | pending | 2.1 | task/2.2-slurm-and-remote-submission | — |
+| 2.3 | 2 | Submit orchestration and dry-run UX | pending | 2.1, 2.2 | task/2.3-submit-orchestration-dry-run | — |

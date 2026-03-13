@@ -1129,18 +1129,18 @@ launchpad config init
 
 **Goal:** SSH connection, config system, and basic file transfer working end-to-end.
 
-- [ ] Project scaffolding (`pyproject.toml`, `src/` layout, `uv` for dependency management and dev workflow)
-- [ ] `core/config.py` — Pydantic models, TOML loading, layered merge logic with env var support
-- [ ] `core/logging.py` — loguru setup: console sink (verbosity-dependent), file sink (rotation, retention)
-- [ ] `core/ssh.py` — asyncssh connection manager with retry logic
-- [ ] `core/transfer.py` — Single-stream SFTP upload/download with Rich progress bar
-- [ ] `core/compress.py` — Local zstd compress/decompress using `zstandard`
-- [ ] `launchpad config init` / `launchpad config show` commands
-- [ ] `launchpad ssh` command (interactive session passthrough)
-- [ ] `launchpad doctor` command — full diagnostics (config, SSH, remote binaries, writable paths)
-- [ ] Basic test infrastructure with pytest
-- [ ] `ARCHITECTURE.md` — Codebase map for human and AI agent contributors
-- [ ] README skeleton with installation instructions
+- [x] Project scaffolding (`pyproject.toml`, `src/` layout, `uv` for dependency management and dev workflow)
+- [x] `core/config.py` — Pydantic models, TOML loading, layered merge logic with env var support
+- [x] `core/logging.py` — loguru setup: console sink (verbosity-dependent), file sink (rotation, retention)
+- [x] `core/ssh.py` — asyncssh connection manager with retry logic
+- [x] `core/transfer.py` — Single-stream SFTP upload/download with Rich progress bar
+- [x] `core/compress.py` — Local zstd compress/decompress using `zstandard`
+- [x] `launchpad config init` / `launchpad config show` commands
+- [x] `launchpad ssh` command (interactive session passthrough)
+- [x] `launchpad doctor` command — full diagnostics (config, SSH, remote binaries, writable paths)
+- [x] Basic test infrastructure with pytest
+- [x] `ARCHITECTURE.md` — Codebase map for human and AI agent contributors
+- [x] README skeleton with installation instructions
 
 **Milestone:** Can SSH into cluster and upload/download a file from the command line.
 
