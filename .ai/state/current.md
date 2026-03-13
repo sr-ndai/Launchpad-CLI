@@ -17,38 +17,40 @@ Phase 3 — Monitoring & Logs
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 3.3
+- in-progress: —
 - needs-review: —
-- revision-needed: —
+- revision-needed: 3.3
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/03-monitoring-logs`
 - active task branch: `task/3.3-logs-and-cancel`
-- last processed builder session: `2026-03-12-2204-builder-3.2.md`
+- last processed builder session: `2026-03-12-2216-builder-3.3.md`
 
 ## What Changed Recently
-- Ingested Builder handoff `2026-03-12-2204-builder-3.2.md` and reviewed the
-  revised task against the phase branch.
-- Accepted and merged `task/3.2-status-command-watch` into
-  `phase/03-monitoring-logs`; the merge had a single review-file conflict in
-  `.ai/reviews/3.2.md`, resolved in favor of the accepted review.
-- Advanced Phase 3 by creating `task/3.3-logs-and-cancel` and assigning task
-  `3.3` as the next active Builder task.
+- Ingested Builder handoff `2026-03-12-2216-builder-3.3.md` and reviewed task
+  `3.3` against `phase/03-monitoring-logs`.
+- Prompt verification passed for `uv run pytest tests/test_logs.py
+  tests/test_cancel.py`, `uv run launchpad logs --help`, `uv run launchpad
+  cancel --help`, and `uv run pytest`.
+- Marked task `3.3` as `revision-needed` because `launchpad logs --follow`
+  uses a buffered `conn.run()` path and therefore does not stream live log
+  output while the remote `tail -f` is running.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
 Builder: switch to `task/3.3-logs-and-cancel`, read
-`.ai/tasks/prompts/3.3.md`, implement the logs and cancel operator commands,
-run the prompt verification, and hand the task back with `Outcome:
-READY_FOR_REVIEW` or `BLOCKED`.
+`.ai/tasks/prompts/3.3.md` and `.ai/reviews/3.3.md`, rework
+`launchpad logs --follow` to stream remote output live, add regression
+coverage for that execution path, rerun the prompt verification, and hand the
+task back with `Outcome: READY_FOR_REVIEW` or `BLOCKED`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
 3. `.ai/tasks/prompts/3.3.md`
-4. `.ai/plans/03-monitoring-logs.md`
-5. `.ai/plan.md`
+4. `.ai/reviews/3.3.md`
+5. `.ai/sessions/2026-03-12-2216-builder-3.3.md`
