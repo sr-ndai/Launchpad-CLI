@@ -1163,11 +1163,11 @@ launchpad config init
 
 **Goal:** Status tracking and log access.
 
-- [ ] `core/slurm.py` — `squeue --json` and `sacct --json` parsing
-- [ ] `cli/status.py` — Status table with resource utilization
-- [ ] `cli/logs.py` — Remote log tailing (SLURM logs + solver output files)
-- [ ] `--watch` mode for status (polling loop with Rich live display)
-- [ ] `launchpad cancel` command
+- [x] `core/slurm.py` — `squeue --json` and `sacct --json` parsing
+- [x] `cli/status.py` — Status table with resource utilization
+- [x] `cli/logs.py` — Remote log tailing (SLURM logs + solver output files)
+- [x] `--watch` mode for status (polling loop with Rich live display)
+- [x] `launchpad cancel` command
 
 **Milestone:** Can monitor and manage jobs entirely from local terminal.
 
