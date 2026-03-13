@@ -10,11 +10,12 @@
   `phase/02-submission-pipeline`.
 - Updated the shared queue and routing state to mark `2.2` done and assign task
   `2.3` as the next active Builder task.
+- Created and published `task/2.3-submit-orchestration-dry-run`.
 
 ## Branches Touched
 
 - coordination: `phase/02-submission-pipeline`
-- task: `task/2.2-slurm-and-remote-submission`
+- task: `task/2.3-submit-orchestration-dry-run`
 
 ## Decisions Made
 
@@ -30,5 +31,5 @@
 
 ## Next Recommended Action
 
-Create and publish `task/2.3-submit-orchestration-dry-run`, then hand the
-Builder the next prompt at `.ai/tasks/prompts/2.3.md`.
+Builder should start from `task/2.3-submit-orchestration-dry-run` and execute
+`.ai/tasks/prompts/2.3.md`.
