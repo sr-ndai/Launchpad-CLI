@@ -18,8 +18,8 @@ Phase 1 — Foundation
 - pending: —
 - ready: —
 - in-progress: —
-- needs-review: 1.4
-- revision-needed: —
+- needs-review: —
+- revision-needed: 1.4
 - blocked: —
 
 ## Repo State
@@ -29,22 +29,23 @@ Phase 1 — Foundation
 - last processed builder session: `2026-03-12-1728-builder-1.4.md`
 
 ## What Changed Recently
-- Accepted task `1.3` and merged `task/1.3-ssh-transfer-compression` into
-  `phase/01-foundation`.
-- Recorded Builder handoff `2026-03-12-1728-builder-1.4.md` and moved task
-  `1.4` to `needs-review`.
-- Phase 1 is awaiting the final task review.
+- Recorded Builder handoff `2026-03-12-1728-builder-1.4.md` and reviewed task
+  `1.4`.
+- Requested revisions for the `launchpad doctor` config-validity diagnostic on
+  `task/1.4-operator-commands-diagnostics`.
+- Phase 1 remains open until task `1.4` is revised and accepted.
 
 ## Known Blockers
 None.
 
 ## Next Recommended Action
-Coordinator: review task `1.4` on `task/1.4-operator-commands-diagnostics`,
-run the prompt verification, and either accept the task or issue actionable
-revisions.
+Builder: switch to `task/1.4-operator-commands-diagnostics`, read
+`.ai/reviews/1.4.md`, address the requested revisions, rerun the prompt
+verification, and leave a new Builder session note with `Outcome:
+READY_FOR_REVIEW` or `Outcome: BLOCKED`.
 
 ## Next Agent Read Order
 1. `.ai/tasks/prompts/1.4.md`
-2. `.ai/reviews/1.4.md` if created during review
+2. `.ai/reviews/1.4.md`
 3. `.ai/plans/01-foundation.md`
 4. `.ai/git-rules.md`
