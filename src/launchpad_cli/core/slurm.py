@@ -1,10 +1,12 @@
-"""SLURM submit-script generation and submission helpers."""
+"""SLURM submit, status, and accounting helpers."""
 
 from __future__ import annotations
 
+import json
 import shlex
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+from typing import Any
 
 import asyncssh
 
@@ -37,6 +39,68 @@ class SubmittedJob:
     remote_job_dir: str
     stdout: str
     stderr: str
+
+
+@dataclass(frozen=True, slots=True)
+class JobStatus:
+    """Structured status metadata parsed from `squeue --json`."""
+
+    job_id: str
+    job_name: str
+    state: str
+    array_job_id: str | None = None
+    array_task_id: str | None = None
+    user_name: str | None = None
+    partition: str | None = None
+    node_list: str | None = None
+    nodes: int | None = None
+    cpus: int | None = None
+    elapsed: str | None = None
+    time_limit: str | None = None
+    state_reason: str | None = None
+    comment: str | None = None
+    work_dir: str | None = None
+    standard_output: str | None = None
+    standard_error: str | None = None
+    submit_time: str | None = None
+    start_time: str | None = None
+
+    @property
+    def remote_job_dir(self) -> str | None:
+        """Return the tracked remote job directory when stored in the comment."""
+
+        return self.comment
+
+
+@dataclass(frozen=True, slots=True)
+class JobAccounting:
+    """Structured accounting metadata parsed from `sacct --json`."""
+
+    job_id: str
+    job_name: str | None
+    state: str
+    array_job_id: str | None = None
+    array_task_id: str | None = None
+    partition: str | None = None
+    node_list: str | None = None
+    elapsed: str | None = None
+    total_cpu: str | None = None
+    max_rss: str | None = None
+    exit_code: str | None = None
+    derived_exit_code: str | None = None
+    comment: str | None = None
+    work_dir: str | None = None
+    standard_output: str | None = None
+    standard_error: str | None = None
+    submit_time: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+
+    @property
+    def remote_job_dir(self) -> str | None:
+        """Return the tracked remote job directory when stored in the comment."""
+
+        return self.comment
 
 
 def build_submit_script(
@@ -118,6 +182,114 @@ def build_submit_script(
     return "\n".join(script_lines) + "\n"
 
 
+def build_squeue_command(
+    *,
+    job_id: str | None = None,
+    user: str | None = None,
+    squeue_binary: str = "squeue",
+) -> str:
+    """Build the remote `squeue --json` command for active-job queries."""
+
+    command = [shlex.quote(squeue_binary), "--json"]
+    if job_id:
+        command.extend(["--jobs", shlex.quote(job_id)])
+    elif user:
+        command.extend(["--user", shlex.quote(user)])
+    return " ".join(command)
+
+
+def build_sacct_command(
+    *,
+    job_id: str | None = None,
+    user: str | None = None,
+    start_time: str | None = None,
+    duplicates: bool = False,
+    sacct_binary: str = "sacct",
+) -> str:
+    """Build the remote `sacct --json` command for accounting queries."""
+
+    command = [shlex.quote(sacct_binary), "--json", "--allocations"]
+    if duplicates:
+        command.append("--duplicates")
+    if start_time:
+        command.extend(["--starttime", shlex.quote(start_time)])
+    if job_id:
+        command.extend(["--jobs", shlex.quote(job_id)])
+    elif user:
+        command.extend(["--user", shlex.quote(user)])
+    return " ".join(command)
+
+
+def parse_squeue_output(raw: str) -> tuple[JobStatus, ...]:
+    """Parse `squeue --json` output into structured job status records."""
+
+    payload = _load_slurm_json(raw, command_name="squeue")
+    jobs = _extract_jobs(payload, command_name="squeue")
+    return tuple(_parse_job_status(job) for job in jobs)
+
+
+def parse_sacct_output(raw: str) -> tuple[JobAccounting, ...]:
+    """Parse `sacct --json` output into structured job accounting records."""
+
+    payload = _load_slurm_json(raw, command_name="sacct")
+    jobs = _extract_jobs(payload, command_name="sacct")
+    return tuple(_parse_job_accounting(job) for job in jobs)
+
+
+async def query_squeue(
+    conn: asyncssh.SSHClientConnection,
+    *,
+    config: LaunchpadConfig,
+    job_id: str | None = None,
+    user: str | None = None,
+    squeue_binary: str | None = None,
+) -> tuple[JobStatus, ...]:
+    """Run `squeue --json` remotely and parse the returned active-job records."""
+
+    resolved_user = user if job_id else (user or config.ssh.username)
+    command = build_squeue_command(
+        job_id=job_id,
+        user=resolved_user,
+        squeue_binary=squeue_binary or config.remote_binaries.squeue,
+    )
+    result = await conn.run(command, check=False)
+    if result.exit_status != 0:
+        raise RuntimeError(
+            "SLURM squeue query failed: "
+            f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
+    return parse_squeue_output(result.stdout)
+
+
+async def query_sacct(
+    conn: asyncssh.SSHClientConnection,
+    *,
+    config: LaunchpadConfig,
+    job_id: str | None = None,
+    user: str | None = None,
+    start_time: str | None = None,
+    duplicates: bool = False,
+    sacct_binary: str | None = None,
+) -> tuple[JobAccounting, ...]:
+    """Run `sacct --json` remotely and parse the returned accounting records."""
+
+    resolved_user = user if job_id else (user or config.ssh.username)
+    command = build_sacct_command(
+        job_id=job_id,
+        user=resolved_user,
+        start_time=start_time,
+        duplicates=duplicates,
+        sacct_binary=sacct_binary or config.remote_binaries.sacct,
+    )
+    result = await conn.run(command, check=False)
+    if result.exit_status != 0:
+        raise RuntimeError(
+            "SLURM sacct query failed: "
+            f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
+    return parse_sacct_output(result.stdout)
+
+
 async def submit_job(
     conn: asyncssh.SSHClientConnection,
     *,
@@ -178,3 +350,178 @@ def _default_solver_cpus(solver: SolverAdapter, config: LaunchpadConfig) -> int:
     if name == "ansys":
         return config.solvers.ansys.default_cpus
     raise ValueError(f"No default CPU configuration is available for solver `{solver.name}`.")
+
+
+def _load_slurm_json(raw: str, *, command_name: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid {command_name} JSON payload: {exc.msg}.") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid {command_name} JSON payload: expected an object root.")
+    return payload
+
+
+def _extract_jobs(payload: dict[str, Any], *, command_name: str) -> list[dict[str, Any]]:
+    jobs = payload.get("jobs")
+    if jobs is None:
+        raise ValueError(f"Invalid {command_name} JSON payload: missing `jobs`.")
+    if not isinstance(jobs, list):
+        raise ValueError(f"Invalid {command_name} JSON payload: `jobs` must be a list.")
+
+    normalized_jobs: list[dict[str, Any]] = []
+    for job in jobs:
+        if isinstance(job, dict):
+            normalized_jobs.append(job)
+            continue
+        raise ValueError(f"Invalid {command_name} JSON payload: each job entry must be an object.")
+    return normalized_jobs
+
+
+def _parse_job_status(job: dict[str, Any]) -> JobStatus:
+    job_id = _required_string(job, "job_id", "job_id_raw")
+    derived_array_job_id, derived_array_task_id = _derive_array_ids(job_id)
+    return JobStatus(
+        job_id=job_id,
+        job_name=_required_string(job, "name", "job_name"),
+        state=_required_string(job, "state.current", "job_state", "state"),
+        array_job_id=_optional_string(job, "array.job_id", "array_job_id") or derived_array_job_id,
+        array_task_id=_optional_string(job, "array.task_id", "array_task_id") or derived_array_task_id,
+        user_name=_optional_string(job, "user_name", "user"),
+        partition=_optional_string(job, "partition"),
+        node_list=_optional_string(job, "node_list", "nodes", "nodes_alloc"),
+        nodes=_optional_int(job, "nodes", "nodes_alloc"),
+        cpus=_optional_int(job, "cpus", "cpus_per_task", "num_cpus"),
+        elapsed=_optional_string(job, "time.elapsed", "elapsed", "elapsed_time"),
+        time_limit=_optional_string(job, "time.limit", "time_limit", "limit"),
+        state_reason=_optional_string(job, "state.reason", "state_reason", "reason"),
+        comment=_optional_string(job, "comment"),
+        work_dir=_optional_string(
+            job,
+            "current_working_directory",
+            "working_directory",
+            "work_dir",
+        ),
+        standard_output=_optional_string(job, "standard_output"),
+        standard_error=_optional_string(job, "standard_error"),
+        submit_time=_optional_string(job, "time.submission", "submit_time"),
+        start_time=_optional_string(job, "time.start", "start_time"),
+    )
+
+
+def _parse_job_accounting(job: dict[str, Any]) -> JobAccounting:
+    job_id = _required_string(job, "job_id", "job_id_raw")
+    derived_array_job_id, derived_array_task_id = _derive_array_ids(job_id)
+    return JobAccounting(
+        job_id=job_id,
+        job_name=_optional_string(job, "name", "job_name"),
+        state=_required_string(job, "state.current", "job_state", "state"),
+        array_job_id=_optional_string(job, "array.job_id", "array_job_id") or derived_array_job_id,
+        array_task_id=_optional_string(job, "array.task_id", "array_task_id") or derived_array_task_id,
+        partition=_optional_string(job, "partition"),
+        node_list=_optional_string(job, "node_list", "nodes", "nodes_alloc"),
+        elapsed=_optional_string(job, "elapsed", "time.elapsed", "elapsed_time"),
+        total_cpu=_optional_string(job, "total_cpu"),
+        max_rss=_optional_string(job, "max_rss"),
+        exit_code=_optional_exit_code(job, "exit_code"),
+        derived_exit_code=_optional_exit_code(job, "derived_exit_code"),
+        comment=_optional_string(job, "comment"),
+        work_dir=_optional_string(job, "work_dir", "working_directory", "current_working_directory"),
+        standard_output=_optional_string(job, "standard_output"),
+        standard_error=_optional_string(job, "standard_error"),
+        submit_time=_optional_string(job, "submit_time", "time.submission"),
+        start_time=_optional_string(job, "start_time", "time.start"),
+        end_time=_optional_string(job, "end_time", "time.end"),
+    )
+
+
+_MISSING = object()
+
+
+def _lookup(record: dict[str, Any], path: str) -> Any:
+    current: Any = record
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return _MISSING
+        current = current[part]
+    return current
+
+
+def _coalesce(record: dict[str, Any], *paths: str) -> Any:
+    for path in paths:
+        value = _lookup(record, path)
+        if value is _MISSING or value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return _MISSING
+
+
+def _required_string(record: dict[str, Any], *paths: str) -> str:
+    value = _coalesce(record, *paths)
+    rendered = _render_string(value)
+    if rendered is None:
+        joined = ", ".join(paths)
+        raise ValueError(f"SLURM payload is missing required field(s): {joined}.")
+    return rendered
+
+
+def _optional_string(record: dict[str, Any], *paths: str) -> str | None:
+    return _render_string(_coalesce(record, *paths))
+
+
+def _optional_int(record: dict[str, Any], *paths: str) -> int | None:
+    value = _coalesce(record, *paths)
+    if value is _MISSING:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        return int(text)
+    return None
+
+
+def _optional_exit_code(record: dict[str, Any], *paths: str) -> str | None:
+    value = _coalesce(record, *paths)
+    if value is _MISSING:
+        return None
+    if isinstance(value, dict):
+        return_code = _render_string(
+            value.get("return_code", value.get("returncode", value.get("status")))
+        )
+        signal = _render_string(value.get("signal"))
+        if return_code is not None and signal is not None:
+            return f"{return_code}:{signal}"
+    return _render_string(value)
+
+
+def _render_string(value: Any) -> str | None:
+    if value is _MISSING or value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        rendered_items = [item for item in (_render_string(item) for item in value) if item]
+        return ",".join(rendered_items) or None
+    return None
+
+
+def _derive_array_ids(job_id: str) -> tuple[str | None, str | None]:
+    if "_" not in job_id:
+        return (None, None)
+    parent, task_id = job_id.split("_", 1)
+    if parent and task_id.isdigit():
+        return (parent, task_id)
+    return (None, None)

@@ -28,9 +28,10 @@ contracts.
   logging.
 - `src/launchpad_cli/core/ssh.py`, `transfer.py`, and `compress.py` define the
   transport and archive contracts used by submit/download flows.
-- `src/launchpad_cli/core/slurm.py` now builds submit scripts and wraps remote
-  `sbatch` submission. Later tasks will extend it with status/accounting
-  parsing.
+- `src/launchpad_cli/core/slurm.py` now builds submit scripts, wraps remote
+  `sbatch` submission, parses `squeue --json` / `sacct --json` payloads into
+  typed records, and exposes reusable remote scheduler query wrappers for later
+  monitoring commands.
 - `src/launchpad_cli/core/remote_ops.py` and `local_ops.py` hold filesystem
   helpers that should stay outside command modules. `remote_ops.py` now covers
   remote job-directory setup, remote text writes, and archive extraction used by
@@ -54,7 +55,8 @@ contracts.
 - `tests/test_solver_adapters.py` covers solver discovery, command building,
   scratch environment setup, and the ANSYS stub behavior.
 - `tests/test_remote_ops.py` and `tests/test_slurm.py` cover the reusable
-  remote-submit primitives with fakes instead of a live cluster.
+  remote-submit and scheduler-query primitives with fakes instead of a live
+  cluster.
 - `tests/test_submit.py` covers the submit command’s dry-run preview and mocked
   execution wiring.
 - `tests/conftest.py` adds the `src/` tree to `sys.path` so local test runs can
@@ -71,8 +73,9 @@ The intended steady-state data flow is:
    script-friendly.
 
 The repository now implements the solver layer, reusable remote-submit
-primitives, and the first functional `launchpad submit` orchestration path with
-Rich dry-run and confirmation output.
+primitives, the first functional `launchpad submit` orchestration path with
+Rich dry-run and confirmation output, and the reusable SLURM status/accounting
+query layer needed by the Phase 3 monitoring commands.
 
 ## Common Changes
 
@@ -87,7 +90,6 @@ Rich dry-run and confirmation output.
 
 ## Current Limits
 
-- Command implementations are placeholders only.
-- Status, logs, download, and cleanup orchestration are not active yet.
+- Status, logs, download, and cleanup command orchestration are not active yet.
 - The ANSYS adapter remains intentionally unimplemented until the team defines
   the supported runtime contract.
