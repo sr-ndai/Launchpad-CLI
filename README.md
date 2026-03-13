@@ -16,12 +16,14 @@ The CLI boots, exposes the planned top-level commands, registers both
 - `launchpad ssh`
 - `launchpad doctor`
 - `launchpad submit`
+- `launchpad status`
 
 Core SSH, single-stream transfer, local compression primitives, the Phase 2
 solver-adapter layer for Nastran discovery, the reusable remote-submit helpers,
 the first functional `launchpad submit` command, and the reusable Phase 3
-SLURM status/accounting query layer are present. Status, logs, download, and
-cleanup workflows remain future work.
+SLURM status/accounting query layer are present. `launchpad status` now
+supports current-user and specific-job queries plus `--watch` polling. Logs,
+download, and cleanup workflows remain future work.
 
 ## Quickstart
 
@@ -128,3 +130,12 @@ Phase 3 now extends the SLURM core layer with:
 The command-facing `launchpad status`, `launchpad logs`, and `launchpad cancel`
 workflows still land in later tasks, but they now have a stable scheduler data
 contract to build on.
+
+## Status Command
+
+`launchpad status` now provides the first monitoring workflow:
+
+- no arguments: query the configured user's active jobs
+- `launchpad status <JOB_ID>`: show per-task detail for a specific job
+- `--all`: include recent accounting rows for completed or failed work
+- `--watch --interval N`: refresh the Rich status view every `N` seconds

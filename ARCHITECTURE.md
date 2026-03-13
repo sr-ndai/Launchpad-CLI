@@ -16,9 +16,12 @@ contracts.
   options, and command registration.
 - `src/launchpad_cli/cli/*.py` modules own individual commands or command
   groups. `submit.py` now orchestrates the functional Phase 2 Nastran submit
-  path and dry-run preview, while other Phase 3+ commands continue to evolve.
+  path and dry-run preview, while `status.py` now provides the first Phase 3
+  monitoring flow for current-user, specific-job, and watch-mode status
+  queries.
 - `src/launchpad_cli/display.py` centralizes Rich console creation plus the
-  submit-focused dry-run and confirmation formatting.
+  submit-focused dry-run/confirmation formatting and the status overview/detail
+  renderables used by watch mode.
 
 ### Core Layer
 
@@ -59,6 +62,8 @@ contracts.
   cluster.
 - `tests/test_submit.py` covers the submit command’s dry-run preview and mocked
   execution wiring.
+- `tests/test_status.py` covers the status command's overview/json/watch
+  wiring plus the polling helper.
 - `tests/conftest.py` adds the `src/` tree to `sys.path` so local test runs can
   import the package without extra setup.
 
@@ -75,7 +80,8 @@ The intended steady-state data flow is:
 The repository now implements the solver layer, reusable remote-submit
 primitives, the first functional `launchpad submit` orchestration path with
 Rich dry-run and confirmation output, and the reusable SLURM status/accounting
-query layer needed by the Phase 3 monitoring commands.
+query layer needed by the Phase 3 monitoring commands. `launchpad status` now
+builds on that layer with the first functional monitoring UI and watch loop.
 
 ## Common Changes
 
@@ -90,6 +96,6 @@ query layer needed by the Phase 3 monitoring commands.
 
 ## Current Limits
 
-- Status, logs, download, and cleanup command orchestration are not active yet.
+- Logs, download, and cleanup command orchestration are not active yet.
 - The ANSYS adapter remains intentionally unimplemented until the team defines
   the supported runtime contract.
