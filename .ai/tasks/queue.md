@@ -29,4 +29,4 @@
 | 1.1 | 1 | Project scaffolding and baseline CLI | done | — | task/1.1-project-scaffolding | — |
 | 1.2 | 1 | Config and logging foundation | done | 1.1 | task/1.2-config-and-logging | — |
 | 1.3 | 1 | SSH, transfer, and compression primitives | done | 1.1 | task/1.3-ssh-transfer-compression | — |
-| 1.4 | 1 | Operator commands and diagnostics | in-progress | 1.2, 1.3 | task/1.4-operator-commands-diagnostics | Builder |
+| 1.4 | 1 | Operator commands and diagnostics | needs-review | 1.2, 1.3 | task/1.4-operator-commands-diagnostics | Builder |
