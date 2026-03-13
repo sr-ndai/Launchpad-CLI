@@ -19,8 +19,9 @@ The CLI boots, exposes the planned top-level commands, registers both
 
 Core SSH, single-stream transfer, local compression primitives, the Phase 2
 solver-adapter layer for Nastran discovery, the reusable remote-submit helpers,
-and the first functional `launchpad submit` command are present. Status, logs,
-download, and cleanup workflows remain future work.
+the first functional `launchpad submit` command, and the reusable Phase 3
+SLURM status/accounting query layer are present. Status, logs, download, and
+cleanup workflows remain future work.
 
 ## Quickstart
 
@@ -115,3 +116,15 @@ The `launchpad submit` command now orchestrates solver discovery, local
 archive creation, upload, remote extraction, SLURM script generation, and
 remote submission. `--dry-run` shows the resolved manifest, remote paths, and
 generated submit script without making remote changes.
+
+## Monitoring Primitives
+
+Phase 3 now extends the SLURM core layer with:
+
+- typed `squeue --json` status parsing
+- typed `sacct --json` accounting parsing
+- reusable remote query wrappers for scheduler metadata over SSH
+
+The command-facing `launchpad status`, `launchpad logs`, and `launchpad cancel`
+workflows still land in later tasks, but they now have a stable scheduler data
+contract to build on.
