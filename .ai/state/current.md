@@ -9,7 +9,7 @@
 2026-03-12
 
 ## Active Phase
-Phase 1 — Foundation
+Phase 2 — Submission Pipeline
 
 ## Active Task
 _None._
@@ -24,30 +24,27 @@ _None._
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `phase/01-foundation`
+- coordination branch: `phase/02-submission-pipeline`
 - active task branch: `none`
-- last processed builder session: `2026-03-12-1913-builder-1.4.md`
+- last processed builder session: `2026-03-12-2110-builder-2.3.md`
 
 ## What Changed Recently
-- Accepted task `1.4` and merged `task/1.4-operator-commands-diagnostics`
-  into `phase/01-foundation`.
-- Phase 1 queue is now fully complete with tasks `1.1` through `1.4` marked
-  done.
-- PR creation is still pending because the remote repository only exposes
-  `origin/master` and no local PR CLI is installed.
+- Recorded revised Builder handoff `2026-03-12-2110-builder-2.3.md` and
+  reviewed task `2.3`.
+- Accepted task `2.3` and merged `task/2.3-submit-orchestration-dry-run` into
+  `phase/02-submission-pipeline`.
+- Phase 2 queue is now fully complete with tasks `2.1` through `2.3` marked
+  done, and PR `#2` is open from `phase/02-submission-pipeline` to `main`.
 
 ## Known Blockers
-- Remote branch alignment for PR creation: the local workflow uses `main`, but
-  the remote currently only exposes `origin/master`, and `gh` is not installed
-  locally.
+- None.
 
 ## Next Recommended Action
-Coordinator or human owner: align the remote `main` branch strategy, push
-`phase/01-foundation` if needed, and open the Phase 1 PR from
-`phase/01-foundation` to `main`.
+Human owner: review and merge PR `#2` from `phase/02-submission-pipeline` to
+`main`. After the merge lands, the next coordination pass should open Phase 3.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/state/decisions.md`
-3. `.ai/git-rules.md`
-4. `.ai/plan.md`
+3. `.ai/plan.md`
+4. `.ai/tasks/queue.md`

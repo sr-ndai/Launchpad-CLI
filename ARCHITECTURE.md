@@ -4,9 +4,9 @@
 
 Launchpad is a Windows-first CLI for packaging solver inputs, transferring them
 to a shared SLURM cluster, submitting jobs, monitoring execution, and
-retrieving results. Phase 1 establishes the package boundaries and command
-surface so later tasks can add real config, transport, compression, and
-diagnostic behavior without reshaping the repository.
+retrieving results. Phase 1 established the package boundaries and command
+surface; Phase 2 begins filling in the submission pipeline around stable solver
+contracts.
 
 ## Code Map
 
@@ -15,9 +15,10 @@ diagnostic behavior without reshaping the repository.
 - `src/launchpad_cli/cli/__init__.py` defines the root Click group, global
   options, and command registration.
 - `src/launchpad_cli/cli/*.py` modules own individual commands or command
-  groups. In this scaffold they expose placeholder callbacks and help text only.
-- `src/launchpad_cli/display.py` centralizes Rich console creation for later
-  user-facing output work.
+  groups. `submit.py` now orchestrates the functional Phase 2 Nastran submit
+  path and dry-run preview, while other Phase 3+ commands continue to evolve.
+- `src/launchpad_cli/display.py` centralizes Rich console creation plus the
+  submit-focused dry-run and confirmation formatting.
 
 ### Core Layer
 
@@ -27,24 +28,35 @@ diagnostic behavior without reshaping the repository.
   logging.
 - `src/launchpad_cli/core/ssh.py`, `transfer.py`, and `compress.py` define the
   transport and archive contracts used by submit/download flows.
-- `src/launchpad_cli/core/slurm.py` will build scheduler commands and parse job
-  status output.
-- `src/launchpad_cli/core/remote_ops.py` and `local_ops.py` are reserved for
-  filesystem helpers that should stay outside command modules.
+- `src/launchpad_cli/core/slurm.py` now builds submit scripts and wraps remote
+  `sbatch` submission. Later tasks will extend it with status/accounting
+  parsing.
+- `src/launchpad_cli/core/remote_ops.py` and `local_ops.py` hold filesystem
+  helpers that should stay outside command modules. `remote_ops.py` now covers
+  remote job-directory setup, remote text writes, and archive extraction used by
+  submit flows.
 
 ### Solver Layer
 
-- `src/launchpad_cli/solvers/base.py` defines the solver adapter protocol.
-- `src/launchpad_cli/solvers/nastran.py` contains the initial implemented solver
-  stub.
+- `src/launchpad_cli/solvers/base.py` defines the solver adapter protocol,
+  discovered-input metadata, and narrow submit override contract.
+- `src/launchpad_cli/solvers/nastran.py` contains the first concrete solver:
+  deterministic input discovery, command construction, and scratch environment
+  setup for Nastran.
 - `src/launchpad_cli/solvers/ansys.py` preserves the planned ANSYS adapter slot
-  while remaining explicitly unimplemented for Phase 1.
+  as a protocol-compliant stub with explicit runtime failure behavior.
 
 ### Tests
 
 - `tests/test_cli.py` provides CLI smoke coverage for the root command.
 - `tests/test_project_scaffold.py` verifies packaging entry points and the
   expected module skeleton.
+- `tests/test_solver_adapters.py` covers solver discovery, command building,
+  scratch environment setup, and the ANSYS stub behavior.
+- `tests/test_remote_ops.py` and `tests/test_slurm.py` cover the reusable
+  remote-submit primitives with fakes instead of a live cluster.
+- `tests/test_submit.py` covers the submit command’s dry-run preview and mocked
+  execution wiring.
 - `tests/conftest.py` adds the `src/` tree to `sys.path` so local test runs can
   import the package without extra setup.
 
@@ -58,8 +70,9 @@ The intended steady-state data flow is:
 4. Display helpers render human-facing output while JSON output stays
    script-friendly.
 
-This task implements only step 1 and the package placeholders needed for later
-steps.
+The repository now implements the solver layer, reusable remote-submit
+primitives, and the first functional `launchpad submit` orchestration path with
+Rich dry-run and confirmation output.
 
 ## Common Changes
 
@@ -75,7 +88,6 @@ steps.
 ## Current Limits
 
 - Command implementations are placeholders only.
-- No cluster connectivity, compression, SLURM integration, or config loading is
-  active yet.
-- The scaffold is intentionally narrow so later Phase 1 tasks can fill in real
-  behavior incrementally.
+- Status, logs, download, and cleanup orchestration are not active yet.
+- The ANSYS adapter remains intentionally unimplemented until the team defines
+  the supported runtime contract.
