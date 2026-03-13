@@ -1,7 +1,8 @@
-"""Remote filesystem helpers used by submit-oriented workflows."""
+"""Remote filesystem helpers used by submit, download, and cleanup workflows."""
 
 from __future__ import annotations
 
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -18,6 +19,28 @@ class RemoteJobLayout:
     scratch_root: str
     archive_path: str
     script_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class RemotePathEntry:
+    """Typed metadata for an entry returned by a remote directory listing."""
+
+    path: str
+    size_bytes: int
+    entry_type: str
+    modified_epoch: float | None = None
+
+    @property
+    def name(self) -> str:
+        """Return the basename for display-oriented workflows."""
+
+        return PurePosixPath(self.path).name
+
+    @property
+    def is_dir(self) -> bool:
+        """Return whether this entry represents a directory."""
+
+        return self.entry_type == "directory"
 
 
 def build_remote_job_layout(
@@ -107,3 +130,133 @@ async def extract_remote_archive(
         raise RuntimeError(
             f"Remote archive extraction failed for {archive_path}: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
         )
+
+
+async def measure_remote_path(
+    conn: asyncssh.SSHClientConnection,
+    path: str,
+    *,
+    du_binary: str = "du",
+) -> int:
+    """Return the size of a remote path in bytes."""
+
+    normalized = str(PurePosixPath(path))
+    command = " ".join(
+        [
+            shlex.quote(du_binary),
+            "-sb",
+            "--",
+            shlex.quote(normalized),
+        ]
+    )
+    result = await conn.run(command, check=False)
+    if result.exit_status != 0:
+        raise RuntimeError(
+            f"Remote size query failed for {normalized}: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
+
+    size_text = (result.stdout or "").strip().split(maxsplit=1)[0] if result.stdout else ""
+    if not size_text.isdigit():
+        raise ValueError(f"Unexpected remote size output for {normalized}: {result.stdout!r}")
+    return int(size_text)
+
+
+async def compute_remote_sha256(
+    conn: asyncssh.SSHClientConnection,
+    path: str,
+    *,
+    sha256_binary: str = "sha256sum",
+) -> str:
+    """Return the SHA-256 checksum for a remote file."""
+
+    normalized = str(PurePosixPath(path))
+    command = " ".join(
+        [
+            shlex.quote(sha256_binary),
+            "--",
+            shlex.quote(normalized),
+        ]
+    )
+    result = await conn.run(command, check=False)
+    if result.exit_status != 0:
+        raise RuntimeError(
+            f"Remote checksum query failed for {normalized}: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
+
+    match = re.match(r"^([0-9a-fA-F]{64})\b", (result.stdout or "").strip())
+    if match is None:
+        raise ValueError(f"Unexpected remote checksum output for {normalized}: {result.stdout!r}")
+    return match.group(1).lower()
+
+
+async def list_remote_directory(
+    conn: asyncssh.SSHClientConnection,
+    path: str,
+    *,
+    recursive: bool = False,
+    find_binary: str = "find",
+) -> tuple[RemotePathEntry, ...]:
+    """List entries beneath a remote directory with typed metadata."""
+
+    normalized = str(PurePosixPath(path))
+    max_depth_clause = "" if recursive else " -maxdepth 1"
+    command = (
+        f"{shlex.quote(find_binary)} {shlex.quote(normalized)} -mindepth 1{max_depth_clause} "
+        "-printf '%y\\t%s\\t%T@\\t%p\\n' | sort"
+    )
+    result = await conn.run(command, check=False)
+    if result.exit_status != 0:
+        raise RuntimeError(
+            f"Remote directory listing failed for {normalized}: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
+
+    entries: list[RemotePathEntry] = []
+    for line in (result.stdout or "").splitlines():
+        if not line.strip():
+            continue
+        kind, size_text, modified_text, entry_path = line.split("\t", maxsplit=3)
+        entries.append(
+            RemotePathEntry(
+                path=entry_path,
+                size_bytes=int(size_text),
+                entry_type=_remote_entry_type(kind),
+                modified_epoch=float(modified_text),
+            )
+        )
+    return tuple(entries)
+
+
+async def delete_remote_path(
+    conn: asyncssh.SSHClientConnection,
+    path: str,
+    *,
+    recursive: bool = True,
+    rm_binary: str = "rm",
+) -> str:
+    """Delete a remote path and return its normalized form."""
+
+    normalized = str(PurePosixPath(path))
+    command = " ".join(
+        [
+            shlex.quote(rm_binary),
+            "-rf" if recursive else "-f",
+            "--",
+            shlex.quote(normalized),
+        ]
+    )
+    result = await conn.run(command, check=False)
+    if result.exit_status != 0:
+        raise RuntimeError(
+            f"Remote delete failed for {normalized}: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
+    return normalized
+
+
+def _remote_entry_type(kind: str) -> str:
+    """Map GNU `find -printf %y` type codes onto stable names."""
+
+    return {
+        "d": "directory",
+        "f": "file",
+        "l": "symlink",
+    }.get(kind, "other")
