@@ -63,6 +63,8 @@ def test_logs_command_reads_slurm_stdout_for_specific_task(monkeypatch: pytest.M
 def test_logs_command_resolves_solver_log_with_follow(monkeypatch: pytest.MonkeyPatch) -> None:
     """The logs command should derive the solver log path from the task work directory."""
 
+    emitted: list[str] = []
+
     monkeypatch.setattr(logs_module, "configure_logging", lambda **kwargs: None)
     monkeypatch.setattr(
         logs_module,
@@ -93,16 +95,19 @@ def test_logs_command_resolves_solver_log_with_follow(monkeypatch: pytest.Monkey
         assert remote_path == "/shared/sergey/nastran-20260312-2148-abcd/results_wing_2/wing.f06"
         assert lines == 100
         assert follow is True
+        logs_module.click.echo("F06\n", nl=False)
         return "F06\n"
 
     monkeypatch.setattr(logs_module, "ssh_session", fake_ssh_session)
     monkeypatch.setattr(logs_module, "_query_job_rows", fake_query_job_rows)
     monkeypatch.setattr(logs_module, "_read_remote_log", fake_read_remote_log)
+    monkeypatch.setattr(logs_module.click, "echo", lambda text, nl=False: emitted.append(text))
 
     result = CliRunner().invoke(cli, ["logs", "12345", "2", "--solver-log", "--follow", "--lines", "100"])
 
     assert result.exit_code == 0
-    assert "F06" in result.output
+    assert result.output == ""
+    assert emitted == ["F06\n"]
 
 
 def test_logs_command_requires_task_id_when_multiple_rows_exist(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -148,3 +153,64 @@ def test_build_tail_command_includes_follow_flag() -> None:
     )
 
     assert command == "tail -n 25 -f /shared/sergey/tank_v3/logs/slurm_12345_2.out"
+
+
+@pytest.mark.asyncio
+async def test_read_remote_log_streams_follow_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Follow mode should stream from a remote process instead of using buffered run()."""
+
+    emitted: list[str] = []
+
+    class FakeStream:
+        def __init__(self, chunks: list[str]) -> None:
+            self._chunks = chunks
+
+        def __aiter__(self):
+            async def iterator():
+                for chunk in self._chunks:
+                    yield chunk
+
+            return iterator()
+
+        async def read(self) -> str:
+            return ""
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdout = FakeStream(["line 1\n", "line 2\n"])
+            self.stderr = FakeStream([])
+            self.exit_status = 0
+
+        def close(self) -> None:
+            return None
+
+        async def wait_closed(self) -> None:
+            return None
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.create_process_calls: list[str] = []
+            self.run_calls: list[str] = []
+
+        async def create_process(self, command: str) -> FakeProcess:
+            self.create_process_calls.append(command)
+            return FakeProcess()
+
+        async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            self.run_calls.append(command)
+            raise AssertionError("follow mode must not use conn.run()")
+
+    monkeypatch.setattr(logs_module.click, "echo", lambda text, nl=False: emitted.append(text))
+    connection = FakeConnection()
+
+    output = await logs_module._read_remote_log(
+        connection,
+        remote_path="/shared/sergey/tank_v3/logs/slurm_12345_2.out",
+        lines=25,
+        follow=True,
+    )
+
+    assert connection.create_process_calls == ["tail -n 25 -f /shared/sergey/tank_v3/logs/slurm_12345_2.out"]
+    assert connection.run_calls == []
+    assert emitted == ["line 1\n", "line 2\n"]
+    assert output == "line 1\nline 2\n"

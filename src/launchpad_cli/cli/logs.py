@@ -90,7 +90,7 @@ def command(
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output:
+    if output and not follow:
         click.echo(output, nl=not output.endswith("\n"))
 
 
@@ -247,6 +247,9 @@ async def _read_remote_log(
 ) -> str:
     """Read or follow a remote log file using `tail` on the cluster head node."""
 
+    if follow:
+        return await _stream_remote_log(conn, remote_path=remote_path, lines=lines)
+
     command = _build_tail_command(remote_path=remote_path, lines=lines, follow=follow)
     result = await conn.run(command, check=False)
     if result.exit_status != 0:
@@ -255,6 +258,37 @@ async def _read_remote_log(
             f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
         )
     return result.stdout
+
+
+async def _stream_remote_log(
+    conn: asyncssh.SSHClientConnection,
+    *,
+    remote_path: str,
+    lines: int,
+) -> str:
+    """Stream a remote `tail -f` session line-by-line to the local terminal."""
+
+    command = _build_tail_command(remote_path=remote_path, lines=lines, follow=True)
+    process = await conn.create_process(command)
+    captured: list[str] = []
+
+    try:
+        async for chunk in process.stdout:
+            text = chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk)
+            captured.append(text)
+            click.echo(text, nl=False)
+    except asyncio.CancelledError:
+        process.close()
+        await process.wait_closed()
+        raise
+
+    await process.wait_closed()
+    if process.exit_status not in (0, None):
+        stderr = await _read_process_stream(process.stderr)
+        raise RuntimeError(
+            f"Remote log read failed for {remote_path}: {stderr.strip() or 'unknown error'}"
+        )
+    return "".join(captured)
 
 
 def _build_tail_command(*, remote_path: str, lines: int, follow: bool) -> str:
@@ -270,6 +304,16 @@ def _substitute_slurm_tokens(path: str, *, job_id: str, task_id: str | None) -> 
     if task_id is not None:
         resolved = resolved.replace("%a", task_id)
     return resolved
+
+
+async def _read_process_stream(stream: object) -> str:
+    reader = getattr(stream, "read", None)
+    if not callable(reader):
+        return ""
+    payload = await reader()
+    if isinstance(payload, bytes):
+        return payload.decode("utf-8", errors="replace")
+    return str(payload)
 
 
 def _row_from_status(job: JobStatus) -> JobLogRow:
