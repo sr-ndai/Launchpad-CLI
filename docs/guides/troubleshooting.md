@@ -77,6 +77,20 @@ Use either:
 - `launchpad logs <JOB_ID> -f`
 - `launchpad --json logs <JOB_ID>`
 
+## `logs` asks for a task ref or opens a picker
+
+Multi-task jobs need one task to be selected before Launchpad can read a
+specific log file.
+
+Use either:
+
+- an explicit task ref such as `launchpad logs <JOB_ID> 001`
+- a filename or path ref such as `launchpad logs <JOB_ID> wing.dat`
+- the human TTY picker via `launchpad logs <JOB_ID>` or `launchpad logs <JOB_ID> -f`
+
+If the job predates `launchpad-manifest.json`, only raw numeric task IDs are
+available for selector fallback.
+
 ## `download` warns about local disk space
 
 Launchpad checks free space before download.

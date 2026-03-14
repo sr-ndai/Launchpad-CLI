@@ -321,7 +321,7 @@ def _apply_help_examples() -> None:
             "launchpad status 12345 --watch --interval 10",
         ],
         logs_command: [
-            "launchpad logs 12345 0 --follow",
+            "launchpad logs 12345 --follow",
             "launchpad logs 12345 2 --solver-log --lines 100",
             "launchpad logs 12345 001 --log-kind telemetry",
         ],

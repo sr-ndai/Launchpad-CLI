@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import shlex
+import sys
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Callable
@@ -25,6 +26,7 @@ from launchpad_cli.core.task_selectors import load_job_manifest, resolve_manifes
 from launchpad_cli.display import (
     build_console,
     build_detail_panel,
+    build_logs_picker_panel,
     build_next_steps_panel,
     build_status_badge,
     build_summary_table,
@@ -83,6 +85,19 @@ class LogSelection:
     task_ref: TaskReference | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class LogPickerOption:
+    """Resolved row metadata shown inside the interactive task picker."""
+
+    row: JobLogRow
+    task_ref: TaskReference | None
+    label: str
+    alias: str
+    state: str
+    log_kind: str
+    filename: str
+
+
 @click.command(
     name="logs",
     short_help="Inspect remote log output.",
@@ -119,6 +134,7 @@ def command(
     """Resolve the requested remote log path and print or follow its content."""
 
     json_output = _json_output(ctx)
+    colorize_output = _colorize_output(ctx)
     if sum(bool(item) for item in (solver_log, log_kind, err)) > 1:
         raise click.ClickException(
             "`launchpad logs` accepts only one of `--solver-log`, `--log-kind`, or `--err`."
@@ -128,9 +144,9 @@ def command(
 
     configure_logging(
         verbosity=_verbosity(ctx),
-        colorize=_colorize_output(ctx),
+        colorize=colorize_output,
     )
-    console = build_console(no_color=not _colorize_output(ctx))
+    console = build_console(no_color=not colorize_output)
 
     try:
         result = asyncio.run(
@@ -144,11 +160,13 @@ def command(
                 solver_log=solver_log,
                 log_kind=log_kind,
                 err=err,
+                colorize_output=colorize_output,
                 on_ready=(
                     lambda item: console.print(_build_live_logs_renderable(item))
                     if follow and not json_output
                     else None
                 ),
+                on_picker=(lambda item: console.print(item)) if not json_output else None,
             )
         )
     except KeyboardInterrupt:
@@ -176,7 +194,9 @@ async def _run_logs(
     solver_log: bool,
     log_kind: str | None,
     err: bool,
+    colorize_output: bool,
     on_ready: Callable[[LogsResult], None] | None = None,
+    on_picker: Callable[[object], None] | None = None,
 ) -> LogsResult:
     """Resolve config, locate the remote log path, and fetch its contents."""
 
@@ -186,13 +206,19 @@ async def _run_logs(
         rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
         remote_job_dir = _remote_job_dir(rows)
         manifest = await load_job_manifest(conn, remote_job_dir)
+        effective_log_kind = _log_kind(solver_log=solver_log, log_kind=log_kind, err=err)
         selection = _select_row(
             rows,
             job_id=job_id,
             requested_task_ref=task_ref,
             manifest=manifest,
+            remote_job_dir=remote_job_dir,
+            log_kind=effective_log_kind,
+            err=err,
+            interactive=_supports_interactive_picker(),
+            colorize_output=colorize_output,
+            on_picker=on_picker,
         )
-        effective_log_kind = _log_kind(solver_log=solver_log, log_kind=log_kind, err=err)
         remote_path = _resolve_remote_log_path(
             selection.row,
             remote_job_dir=remote_job_dir,
@@ -265,6 +291,12 @@ def _select_row(
     job_id: str,
     requested_task_ref: str | None,
     manifest: JobManifest | None,
+    remote_job_dir: str | None,
+    log_kind: str,
+    err: bool,
+    interactive: bool,
+    colorize_output: bool,
+    on_picker: Callable[[object], None] | None,
 ) -> LogSelection:
     """Select the requested task row or fail clearly if the choice is ambiguous."""
 
@@ -284,6 +316,17 @@ def _select_row(
     if len(task_rows) == 1:
         return LogSelection(row=task_rows[0], task_ref=_task_ref_for_row(task_rows[0], manifest))
     if len(task_rows) > 1:
+        if interactive:
+            return _pick_task_interactively(
+                job_id=job_id,
+                task_rows=task_rows,
+                manifest=manifest,
+                remote_job_dir=remote_job_dir,
+                log_kind=log_kind,
+                err=err,
+                colorize_output=colorize_output,
+                on_picker=on_picker,
+            )
         raise click.ClickException(
             f"Job {job_id} has multiple task logs. Specify a TASK_REF explicitly."
         )
@@ -322,6 +365,191 @@ def _task_ref_for_row(row: JobLogRow, manifest: JobManifest | None) -> TaskRefer
         if item.task_id == row.task_id:
             return item
     return None
+
+
+def _pick_task_interactively(
+    *,
+    job_id: str,
+    task_rows: tuple[JobLogRow, ...],
+    manifest: JobManifest | None,
+    remote_job_dir: str | None,
+    log_kind: str,
+    err: bool,
+    colorize_output: bool,
+    on_picker: Callable[[object], None] | None,
+) -> LogSelection:
+    """Open the interactive task picker for ambiguous human `logs` flows."""
+
+    options = _build_log_picker_options(
+        task_rows,
+        manifest=manifest,
+        remote_job_dir=remote_job_dir,
+        log_kind=log_kind,
+        err=err,
+    )
+    if on_picker is not None:
+        on_picker(
+            build_logs_picker_panel(
+                job_id=job_id,
+                log_kind=log_kind,
+                task_count=len(options),
+            )
+        )
+
+    selected = _launch_log_picker(options, colorize_output=colorize_output)
+    if selected is None:
+        raise click.ClickException("Log selection aborted.")
+    return LogSelection(row=selected.row, task_ref=selected.task_ref)
+
+
+def _build_log_picker_options(
+    task_rows: tuple[JobLogRow, ...],
+    *,
+    manifest: JobManifest | None,
+    remote_job_dir: str | None,
+    log_kind: str,
+    err: bool,
+) -> tuple[LogPickerOption, ...]:
+    """Build the human-facing picker rows for interactive task selection."""
+
+    options: list[LogPickerOption] = []
+    for row in task_rows:
+        task_ref = _task_ref_for_row(row, manifest)
+        remote_path = _resolve_remote_log_path(
+            row,
+            remote_job_dir=remote_job_dir,
+            manifest=manifest,
+            selected_task_ref=task_ref,
+            log_kind=log_kind,
+            err=err,
+        )
+        options.append(
+            LogPickerOption(
+                row=row,
+                task_ref=task_ref,
+                label=_picker_label(row, task_ref),
+                alias=task_ref.alias if task_ref is not None else "-",
+                state=row.state,
+                log_kind=log_kind,
+                filename=PurePosixPath(remote_path).name,
+            )
+        )
+    return tuple(options)
+
+
+def _picker_label(row: JobLogRow, task_ref: TaskReference | None) -> str:
+    if task_ref is not None:
+        return task_ref.display_label
+    if row.work_dir:
+        return _derive_input_stem(PurePosixPath(row.work_dir).name, task_id=row.task_id)
+    if row.task_id is not None:
+        return f"task {row.task_id}"
+    return row.run_name or "job"
+
+
+def _launch_log_picker(
+    options: tuple[LogPickerOption, ...],
+    *,
+    colorize_output: bool,
+) -> LogPickerOption | None:
+    """Run the dependency-backed interactive log picker and return the selection."""
+
+    import questionary
+    from prompt_toolkit.styles import Style
+    from questionary import Choice
+
+    widths = _picker_column_widths(options)
+    message = "\n".join(
+        [
+            "Select the task log to open",
+            _format_picker_row(
+                label="Label",
+                alias="Alias",
+                task_id="Task",
+                state="State",
+                log_kind="Kind",
+                filename="File",
+                widths=widths,
+            ),
+        ]
+    )
+    style = (
+        Style(
+            [
+                ("qmark", "fg:#3cc5d9 bold"),
+                ("question", "fg:#d9edf7 bold"),
+                ("pointer", "fg:#3cc5d9 bold"),
+                ("highlighted", "fg:#d9edf7 bold"),
+                ("answer", "fg:#3cc5d9 bold"),
+                ("instruction", "fg:#7f9aab"),
+            ]
+        )
+        if colorize_output
+        else Style(
+            [
+                ("qmark", ""),
+                ("question", ""),
+                ("pointer", ""),
+                ("highlighted", ""),
+                ("answer", ""),
+                ("instruction", ""),
+            ]
+        )
+    )
+    choices = [
+        Choice(
+            title=_format_picker_row(
+                label=option.label,
+                alias=option.alias,
+                task_id=option.row.task_id or "-",
+                state=option.state,
+                log_kind=option.log_kind,
+                filename=option.filename,
+                widths=widths,
+            ),
+            value=option,
+        )
+        for option in options
+    ]
+    return questionary.select(
+        message,
+        choices=choices,
+        instruction="Use arrows to move and Enter to select",
+        qmark="",
+        pointer=">",
+        use_shortcuts=False,
+        style=style,
+    ).ask()
+
+
+def _picker_column_widths(options: tuple[LogPickerOption, ...]) -> dict[str, int]:
+    return {
+        "label": max(len("Label"), *(len(option.label) for option in options)),
+        "alias": max(len("Alias"), *(len(option.alias) for option in options)),
+        "task": max(len("Task"), *(len(option.row.task_id or "-") for option in options)),
+        "state": max(len("State"), *(len(option.state) for option in options)),
+        "kind": max(len("Kind"), *(len(option.log_kind) for option in options)),
+    }
+
+
+def _format_picker_row(
+    *,
+    label: str,
+    alias: str,
+    task_id: str,
+    state: str,
+    log_kind: str,
+    filename: str,
+    widths: dict[str, int],
+) -> str:
+    return (
+        f"{label:<{widths['label']}}  "
+        f"{alias:<{widths['alias']}}  "
+        f"{task_id:>{widths['task']}}  "
+        f"{state:<{widths['state']}}  "
+        f"{log_kind:<{widths['kind']}}  "
+        f"{filename}"
+    )
 
 
 def _resolve_remote_log_path(
@@ -476,7 +704,7 @@ async def _stream_remote_log(
 def _build_tail_command(*, remote_path: str, lines: int, follow: bool) -> str:
     parts = ["tail", "-n", str(lines)]
     if follow:
-        parts.append("-f")
+        parts.extend(["--follow=name", "--retry"])
     parts.append(str(PurePosixPath(remote_path)))
     return " ".join(shlex.quote(part) for part in parts)
 
@@ -555,6 +783,15 @@ def _remote_job_dir(rows: tuple[JobLogRow, ...]) -> str | None:
         if row.remote_job_dir:
             return row.remote_job_dir
     return None
+
+
+def _supports_interactive_picker() -> bool:
+    return (
+        hasattr(sys.stdin, "isatty")
+        and sys.stdin.isatty()
+        and hasattr(sys.stdout, "isatty")
+        and sys.stdout.isatty()
+    )
 
 
 def _verbosity(ctx: click.Context) -> int:
