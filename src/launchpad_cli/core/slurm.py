@@ -14,6 +14,8 @@ from launchpad_cli.core.config import LaunchpadConfig
 from launchpad_cli.core.remote_ops import write_remote_text
 from launchpad_cli.solvers import SolverAdapter, SubmitOverrides
 
+SLURM_LOGIN_SHELL = "/bin/bash"
+
 
 @dataclass(frozen=True, slots=True)
 class SubmitRequest:
@@ -198,6 +200,16 @@ def build_squeue_command(
     return " ".join(command)
 
 
+def build_scancel_command(
+    *,
+    target: str,
+    scancel_binary: str = "scancel",
+) -> str:
+    """Build the remote `scancel` command for whole-job or task cancellation."""
+
+    return " ".join([shlex.quote(scancel_binary), shlex.quote(target)])
+
+
 def build_sacct_command(
     *,
     job_id: str | None = None,
@@ -218,6 +230,12 @@ def build_sacct_command(
     elif user:
         command.extend(["--user", shlex.quote(user)])
     return " ".join(command)
+
+
+def build_slurm_login_shell_command(command: str) -> str:
+    """Wrap a scheduler command so the remote login-shell environment is loaded."""
+
+    return f"{shlex.quote(SLURM_LOGIN_SHELL)} -lc {shlex.quote(command)}"
 
 
 def parse_squeue_output(raw: str) -> tuple[JobStatus, ...]:
@@ -247,17 +265,19 @@ async def query_squeue(
     """Run `squeue --json` remotely and parse the returned active-job records."""
 
     resolved_user = user if job_id else (user or config.ssh.username)
+    resolved_squeue = squeue_binary or config.remote_binaries.squeue
     command = build_squeue_command(
         job_id=job_id,
         user=resolved_user,
-        squeue_binary=squeue_binary or config.remote_binaries.squeue,
+        squeue_binary=resolved_squeue,
     )
-    result = await conn.run(command, check=False)
-    if result.exit_status != 0:
-        raise RuntimeError(
-            "SLURM squeue query failed: "
-            f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
-        )
+    result = await run_slurm_command(
+        conn,
+        command,
+        failure_prefix="SLURM squeue query failed",
+        executable=resolved_squeue,
+        config_field="squeue",
+    )
     return parse_squeue_output(result.stdout)
 
 
@@ -274,19 +294,21 @@ async def query_sacct(
     """Run `sacct --json` remotely and parse the returned accounting records."""
 
     resolved_user = user if job_id else (user or config.ssh.username)
+    resolved_sacct = sacct_binary or config.remote_binaries.sacct
     command = build_sacct_command(
         job_id=job_id,
         user=resolved_user,
         start_time=start_time,
         duplicates=duplicates,
-        sacct_binary=sacct_binary or config.remote_binaries.sacct,
+        sacct_binary=resolved_sacct,
     )
-    result = await conn.run(command, check=False)
-    if result.exit_status != 0:
-        raise RuntimeError(
-            "SLURM sacct query failed: "
-            f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
-        )
+    result = await run_slurm_command(
+        conn,
+        command,
+        failure_prefix="SLURM sacct query failed",
+        executable=resolved_sacct,
+        config_field="sacct",
+    )
     return parse_sacct_output(result.stdout)
 
 
@@ -311,11 +333,13 @@ async def submit_job(
             shlex.quote(request.script_path),
         ]
     )
-    result = await conn.run(command, check=False)
-    if result.exit_status != 0:
-        raise RuntimeError(
-            f"SLURM submission failed for {request.script_path}: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
-        )
+    result = await run_slurm_command(
+        conn,
+        command,
+        failure_prefix=f"SLURM submission failed for {request.script_path}",
+        executable=resolved_sbatch,
+        config_field="sbatch",
+    )
 
     stdout = result.stdout.strip()
     job_id = stdout.split(";", 1)[0].strip()
@@ -350,6 +374,45 @@ def _default_solver_cpus(solver: SolverAdapter, config: LaunchpadConfig) -> int:
     if name == "ansys":
         return config.solvers.ansys.default_cpus
     raise ValueError(f"No default CPU configuration is available for solver `{solver.name}`.")
+
+
+async def run_slurm_command(
+    conn: asyncssh.SSHClientConnection,
+    command: str,
+    *,
+    failure_prefix: str,
+    executable: str,
+    config_field: str | None = None,
+) -> Any:
+    """Run a scheduler command through the remote login shell."""
+
+    result = await conn.run(build_slurm_login_shell_command(command), check=False)
+    if result.exit_status != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+        raise RuntimeError(
+            _format_slurm_failure(
+                failure_prefix,
+                detail=detail,
+                executable=executable,
+                config_field=config_field,
+            )
+        )
+    return result
+
+
+async def resolve_slurm_executable(
+    conn: asyncssh.SSHClientConnection,
+    executable: str,
+) -> str | None:
+    """Resolve a scheduler executable through the cluster login-shell environment."""
+
+    result = await conn.run(
+        build_slurm_login_shell_command(_build_executable_resolution_command(executable)),
+        check=False,
+    )
+    if result.exit_status != 0:
+        return None
+    return result.stdout.strip() or executable
 
 
 def _load_slurm_json(raw: str, *, command_name: str) -> dict[str, Any]:
@@ -516,6 +579,45 @@ def _render_string(value: Any) -> str | None:
         rendered_items = [item for item in (_render_string(item) for item in value) if item]
         return ",".join(rendered_items) or None
     return None
+
+
+def _build_executable_resolution_command(executable: str) -> str:
+    quoted_executable = shlex.quote(executable)
+    return (
+        f"candidate={quoted_executable}; "
+        'path=$(command -v "$candidate" 2>/dev/null || true); '
+        'if [ -n "$path" ] && [ -x "$path" ]; then printf "%s" "$path"; '
+        'elif [ -x "$candidate" ]; then printf "%s" "$candidate"; '
+        "else exit 1; fi"
+    )
+
+
+def _format_slurm_failure(
+    failure_prefix: str,
+    *,
+    detail: str,
+    executable: str,
+    config_field: str | None = None,
+) -> str:
+    message = f"{failure_prefix}: {detail}"
+    if not _is_command_not_found(detail, executable):
+        return message
+
+    guidance = (
+        f"The cluster login shell did not expose `{PurePosixPath(executable).name}`. "
+        "Ensure the head-node login-shell initialization loads SLURM"
+    )
+    if config_field is not None:
+        guidance += f", or set `remote_binaries.{config_field}` to an absolute path."
+    else:
+        guidance += "."
+    return f"{message}. {guidance}"
+
+
+def _is_command_not_found(detail: str, executable: str) -> bool:
+    lowered = detail.lower()
+    basename = PurePosixPath(executable).name.lower()
+    return "command not found" in lowered and basename in lowered
 
 
 def _derive_array_ids(job_id: str) -> tuple[str | None, str | None]:

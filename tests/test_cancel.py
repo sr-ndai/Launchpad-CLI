@@ -11,6 +11,7 @@ from click.testing import CliRunner
 from launchpad_cli.cli import cli
 from launchpad_cli.cli import cancel as cancel_module
 from launchpad_cli.core.config import LaunchpadConfig, SSHConfig
+from launchpad_cli.core.slurm import build_slurm_login_shell_command
 
 
 def test_cancel_command_cancels_entire_job_with_yes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -152,8 +153,49 @@ async def test_run_cancel_invokes_scancel_for_selected_tasks(monkeypatch: pytest
         task_ids=("2", "4"),
     )
 
-    assert connection.commands == ["scancel 12345_2,12345_4"]
+    assert connection.commands == [build_slurm_login_shell_command("scancel 12345_2,12345_4")]
     assert result.message == "Cancelled job 12345 task(s): 2, 4."
+
+
+@pytest.mark.asyncio
+async def test_run_cancel_reports_login_shell_guidance_when_scancel_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancellation failures should explain when the login shell does not expose `scancel`."""
+
+    monkeypatch.setattr(
+        cancel_module,
+        "resolve_config",
+        lambda **kwargs: SimpleNamespace(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey")
+            )
+        ),
+    )
+
+    class FakeConnection:
+        async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            return SimpleNamespace(
+                exit_status=127,
+                stdout="",
+                stderr="bash: line 1: scancel: command not found",
+            )
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def fake_ssh_session(config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield FakeConnection()
+
+    monkeypatch.setattr(cancel_module, "ssh_session", fake_ssh_session)
+
+    with pytest.raises(RuntimeError, match="login shell did not expose `scancel`"):
+        await cancel_module._run_cancel(
+            cwd=cancel_module.Path.cwd(),
+            env={},
+            job_id="12345",
+            task_ids=(),
+        )
 
 
 @pytest.mark.asyncio

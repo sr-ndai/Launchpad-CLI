@@ -99,9 +99,12 @@ Controls how Launchpad connects to the cluster:
 
 Notes:
 
-- `launchpad doctor` checks remote binaries and the writable shared root
-  through Launchpad's non-interactive SSH exec environment, so PATH differences
-  between interactive login shells and command exec sessions matter
+- Launchpad runs scheduler commands (`sbatch`, `squeue`, `sacct`, `scancel`)
+  through the cluster login shell because some head nodes expose SLURM only
+  there
+- `launchpad doctor` checks scheduler binaries through that same login-shell
+  path, but still checks `tar`, `zstd`, and the writable shared root through
+  Launchpad's normal non-interactive SSH exec environment
 - on Windows, `launchpad ssh` maps these same values onto the local OpenSSH
   client instead of using AsyncSSH stdio passthrough
 
