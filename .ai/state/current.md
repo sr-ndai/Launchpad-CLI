@@ -35,21 +35,19 @@ None.
   `phase/07-terminal-experience`, carrying forward the three-surface CLI shell,
   the polished secondary operator flows, and the Phase 7 docs refresh across
   the implemented command set.
-- Added the repo-side GitHub Actions workflow, configured GitHub so `main` now
-  requires pull requests plus the `CI / verify` check before merge, and
-  replaced stale PR `#7` with PR `#8` so the active review branch points at
-  the current protected head.
+- Opened PR `#7` from `phase/07-terminal-experience` to `main` and added the
+  final `.gitignore` update for `.vscode/`.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human should review PR `#8`, wait for the new `CI / verify` workflow to pass,
-and then merge `phase/07-terminal-experience` into `main`.
+Human should review and merge PR `#7` from
+`phase/07-terminal-experience` into `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1223-coordinator-replace-phase-7-pr.md`
+3. `.ai/sessions/2026-03-14-1134-coordinator-open-phase-7-pr.md`
 4. `.ai/plans/07-terminal-experience.md`
 5. `.ai/plan.md`
