@@ -12,12 +12,12 @@
 Phase 7 — Terminal Experience
 
 ## Active Task
-7.4 — Secondary command polish and docs
+None.
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 7.4
+- in-progress: —
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,30 +25,32 @@ Phase 7 — Terminal Experience
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/07-terminal-experience`
-- active task branch: `task/7.4-secondary-command-polish-and-docs`
-- last processed builder session: `2026-03-14-0941-builder-7.3.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-14-1124-builder-7.4.md`
 
 ## What Changed Recently
-- Ingested Builder session `2026-03-14-0941-builder-7.3.md`, reviewed the
-  primary workflow runtime polish, and accepted task `7.3`.
-- Merged `task/7.3-primary-workflow-experience` into
+- Ingested Builder session `2026-03-14-1124-builder-7.4.md`, reviewed the
+  secondary command polish and docs refresh, and accepted task `7.4`.
+- Merged `task/7.4-secondary-command-polish-and-docs` into
   `phase/07-terminal-experience`, carrying forward the three-surface CLI shell,
-  the Phase 7 runtime treatment for `submit`/`status`/`download`, and the
-  docs/test refresh for the primary workflows.
-- Assigned `7.4` as the next active Builder task so the remaining operator
-  commands and docs can be brought into the same terminal design language.
+  the polished secondary operator flows, and the Phase 7 docs refresh across
+  the implemented command set.
+- Phase 7 is now complete locally on `phase/07-terminal-experience`; the
+  compare URL for the phase PR is
+  `https://github.com/sr-ndai/Launchpad-CLI/compare/main...phase/07-terminal-experience?expand=1`.
 
 ## Known Blockers
-- None.
+- GitHub CLI is not installed in this environment and no GitHub auth token is
+  available, so the Phase 7 PR could not be opened directly from the terminal.
 
 ## Next Recommended Action
-Builder should switch to `task/7.4-secondary-command-polish-and-docs`, read the
-prompt for task `7.4`, and finish Phase 7 by applying the accepted terminal
-design system to the remaining operator command surfaces and docs.
+Human should open a PR from `phase/07-terminal-experience` to `main` using:
+`https://github.com/sr-ndai/Launchpad-CLI/compare/main...phase/07-terminal-experience?expand=1`
+and then review the completed Phase 7 branch for merge.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/7.4.md`
+3. `.ai/sessions/2026-03-14-1129-coordinator-accept-7.4-complete-phase-7.md`
 4. `.ai/plans/07-terminal-experience.md`
 5. `.ai/plan.md`
