@@ -38,4 +38,4 @@
 | 3.3 | 3 | Logs and cancel operator commands | done | 3.1 | task/3.3-logs-and-cancel | — |
 | 4.1 | 4 | Download primitives and filesystem groundwork | done | — | task/4.1-download-primitives | — |
 | 4.2 | 4 | Download command orchestration | done | 4.1 | task/4.2-download-command-orchestration | — |
-| 4.3 | 4 | Remote listing and cleanup commands | in-progress | 4.2 | task/4.3-remote-ls-and-cleanup | Builder |
+| 4.3 | 4 | Remote listing and cleanup commands | done | 4.2 | task/4.3-remote-ls-and-cleanup | — |
