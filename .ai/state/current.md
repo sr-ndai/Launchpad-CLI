@@ -12,12 +12,12 @@
 Phase 7 — Terminal Experience
 
 ## Active Task
-7.3 — Primary workflow terminal experience
+7.4 — Secondary command polish and docs
 
 ## Queue Snapshot
-- pending: 7.4
+- pending: —
 - ready: —
-- in-progress: 7.3
+- in-progress: 7.4
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,30 +25,30 @@ Phase 7 — Terminal Experience
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/07-terminal-experience`
-- active task branch: `task/7.3-primary-workflow-experience`
-- last processed builder session: `2026-03-14-0926-builder-7.2.md`
+- active task branch: `task/7.4-secondary-command-polish-and-docs`
+- last processed builder session: `2026-03-14-0941-builder-7.3.md`
 
 ## What Changed Recently
-- Ingested Builder session `2026-03-14-0926-builder-7.2.md`, reviewed the
-  guided setup and diagnostics work, and accepted task `7.2`.
-- Merged `task/7.2-guided-setup-and-diagnostics` into
+- Ingested Builder session `2026-03-14-0941-builder-7.3.md`, reviewed the
+  primary workflow runtime polish, and accepted task `7.3`.
+- Merged `task/7.3-primary-workflow-experience` into
   `phase/07-terminal-experience`, carrying forward the three-surface CLI shell,
-  the guided `config init` flow, grouped `doctor` output, and the docs/test
-  refresh for setup and diagnostics.
-- Assigned `7.3` as the next active Builder task now that the shared shell and
-  onboarding surfaces are complete.
+  the Phase 7 runtime treatment for `submit`/`status`/`download`, and the
+  docs/test refresh for the primary workflows.
+- Assigned `7.4` as the next active Builder task so the remaining operator
+  commands and docs can be brought into the same terminal design language.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should switch to `task/7.3-primary-workflow-experience`, read the
-prompt for task `7.3`, and apply the accepted Phase 7 shell to the
-`submit`/`status`/`download` runtime surfaces.
+Builder should switch to `task/7.4-secondary-command-polish-and-docs`, read the
+prompt for task `7.4`, and finish Phase 7 by applying the accepted terminal
+design system to the remaining operator command surfaces and docs.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/7.3.md`
+3. `.ai/tasks/prompts/7.4.md`
 4. `.ai/plans/07-terminal-experience.md`
 5. `.ai/plan.md`
