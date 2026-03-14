@@ -8,15 +8,25 @@ import os
 import shlex
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
+from typing import Callable
 
 import asyncssh
 import click
 from loguru import logger
+from rich.console import Group
+from rich.text import Text
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.display import (
+    build_console,
+    build_detail_panel,
+    build_next_steps_panel,
+    build_status_badge,
+    build_summary_table,
+)
 from launchpad_cli.solvers import AnsysAdapter, NastranAdapter
 
 
@@ -93,15 +103,17 @@ def command(
 ) -> None:
     """Resolve the requested remote log path and print or follow its content."""
 
+    json_output = _json_output(ctx)
     if solver_log and err:
         raise click.ClickException("`launchpad logs` accepts either `--solver-log` or `--err`, not both.")
-    if follow and _json_output(ctx):
+    if follow and json_output:
         raise click.ClickException("`launchpad logs --follow` does not support `--json` output.")
 
     configure_logging(
         verbosity=_verbosity(ctx),
         colorize=_colorize_output(ctx),
     )
+    console = build_console(no_color=not _colorize_output(ctx))
 
     try:
         result = asyncio.run(
@@ -114,6 +126,11 @@ def command(
                 lines=lines,
                 solver_log=solver_log,
                 err=err,
+                on_ready=(
+                    lambda item: console.print(_build_live_logs_renderable(item))
+                    if follow and not json_output
+                    else None
+                ),
             )
         )
     except KeyboardInterrupt:
@@ -124,10 +141,10 @@ def command(
 
     if follow:
         return
-    if _json_output(ctx):
+    if json_output:
         click.echo(json.dumps(result.as_dict(), indent=2))
-    elif result.content:
-        click.echo(result.content, nl=not result.content.endswith("\n"))
+    else:
+        console.print(_build_logs_renderable(result))
 
 
 async def _run_logs(
@@ -140,6 +157,7 @@ async def _run_logs(
     lines: int,
     solver_log: bool,
     err: bool,
+    on_ready: Callable[[LogsResult], None] | None = None,
 ) -> LogsResult:
     """Resolve config, locate the remote log path, and fetch its contents."""
 
@@ -155,14 +173,7 @@ async def _run_logs(
             solver_log=solver_log,
             err=err,
         )
-        logger.trace("Reading {} log for job {} from {}", log_kind, job_id, remote_path)
-        content = await _read_remote_log(
-            conn,
-            remote_path=remote_path,
-            lines=lines,
-            follow=follow,
-        )
-        return LogsResult(
+        preview = LogsResult(
             job_id=row.job_id,
             task_id=row.task_id,
             run_name=row.run_name,
@@ -170,8 +181,18 @@ async def _run_logs(
             log_kind=log_kind,
             remote_path=remote_path,
             lines=lines,
-            content=content,
+            content="",
         )
+        if on_ready is not None:
+            on_ready(preview)
+        logger.trace("Reading {} log for job {} from {}", log_kind, job_id, remote_path)
+        content = await _read_remote_log(
+            conn,
+            remote_path=remote_path,
+            lines=lines,
+            follow=follow,
+        )
+        return replace(preview, content=content)
 
 
 async def _query_job_rows(
@@ -438,3 +459,89 @@ def _log_kind(*, solver_log: bool, err: bool) -> str:
     if err:
         return "stderr"
     return "stdout"
+
+
+def _build_logs_renderable(result: LogsResult) -> Group:
+    """Render the buffered log view in the shared Phase 7 layout."""
+
+    intro = Text()
+    intro.append("Remote log snapshot", style="lp.brand.secondary")
+    intro.append(
+        " for the selected SLURM target and log file.",
+        style="lp.brand.subtle",
+    )
+
+    renderables = [
+        build_detail_panel(
+            Group(intro, _build_logs_summary(result)),
+            title="Log Snapshot",
+        )
+    ]
+    if result.content.strip():
+        renderables.append(
+            build_detail_panel(
+                Text(result.content.rstrip("\n")),
+                title="Tail Output",
+            )
+        )
+    else:
+        renderables.append(
+            build_detail_panel(
+                "The selected log is empty right now. The job may still be starting or this file has not been written yet.",
+                title="No Log Output Yet",
+                tone="warn",
+            )
+        )
+
+    renderables.append(build_next_steps_panel(_logs_next_steps(result)))
+    return Group(*renderables)
+
+
+def _build_live_logs_renderable(result: LogsResult) -> Group:
+    """Render the pre-stream banner for `launchpad logs --follow`."""
+
+    intro = Text()
+    intro.append("Streaming", style="lp.brand.secondary")
+    intro.append(
+        " the selected remote log. Press Ctrl+C to stop.",
+        style="lp.brand.subtle",
+    )
+    return Group(
+        build_detail_panel(
+            Group(intro, _build_logs_summary(result)),
+            title="Live Log Tail",
+        )
+    )
+
+
+def _build_logs_summary(result: LogsResult):
+    summary = build_summary_table()
+    summary.add_row("Job", result.job_id)
+    summary.add_row("Task", result.task_id or "—")
+    summary.add_row("Run name", result.run_name or "—")
+    summary.add_row("State", build_status_badge(result.state))
+    summary.add_row("Log kind", result.log_kind)
+    summary.add_row("Path", result.remote_path)
+    summary.add_row("Lines", f"last {result.lines}")
+    return summary
+
+
+def _logs_next_steps(result: LogsResult) -> list[str]:
+    steps = [f"launchpad status {result.job_id}"]
+    if result.log_kind != "stderr":
+        steps.append(f"{_logs_command(result)} --err")
+    elif result.log_kind != "solver":
+        steps.append(f"{_logs_command(result)} --solver-log")
+    else:
+        steps.append(f"{_logs_command(result)} --follow")
+
+    if result.state.upper() == "COMPLETED":
+        steps.append(f"launchpad download {result.job_id}")
+    return steps
+
+
+def _logs_command(result: LogsResult) -> str:
+    parts = ["launchpad", "logs", result.job_id]
+    if result.task_id:
+        parts.append(result.task_id)
+    return " ".join(parts)

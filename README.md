@@ -47,6 +47,12 @@ Launchpad now has three help surfaces:
 - `launchpad --help` shows the compact root command reference.
 - `launchpad <command> --help` shows command-specific flags and examples.
 
+Human-readable command flows now follow the same Phase 7 terminal language
+across `submit`, `status`, `download`, `logs`, `ls`, `cancel`, `cleanup`, and
+`doctor`: summary panels up front, explicit empty-state copy, and concrete
+follow-up commands. Root `--json` still keeps the machine-readable payloads for
+the commands that support it.
+
 Use `--no-color` or `NO_COLOR=1` when you want plain output.
 
 Developer install from a source checkout:

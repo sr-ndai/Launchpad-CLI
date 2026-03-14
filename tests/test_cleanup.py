@@ -53,6 +53,7 @@ def test_cleanup_command_deletes_explicit_job_ids_with_yes(monkeypatch: pytest.M
     result = CliRunner().invoke(cli, ["cleanup", "12345", "23456", "--yes"])
 
     assert result.exit_code == 0
+    assert "Cleanup Complete" in result.output
     assert "Deleted 2 remote directories" in result.output
 
 
@@ -87,6 +88,30 @@ def test_cleanup_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPat
     assert payload["requested_job_ids"] == ["12345"]
     assert payload["deleted_paths"] == ["/shared/sergey/tank_v3"]
     assert payload["deleted_count"] == 1
+
+
+def test_cleanup_command_renders_empty_state_when_nothing_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Human-readable cleanup should not silently exit when no directories match."""
+
+    monkeypatch.setattr(cleanup_module, "configure_logging", lambda **kwargs: None)
+
+    async def fake_run_cleanup(**kwargs) -> cleanup_module.CleanupResult:  # type: ignore[no-untyped-def]
+        return cleanup_module.CleanupResult(
+            requested_job_ids=(),
+            older_than="30d",
+            selected_targets=(),
+            deleted_paths=(),
+        )
+
+    monkeypatch.setattr(cleanup_module, "_run_cleanup", fake_run_cleanup)
+
+    result = CliRunner().invoke(cli, ["cleanup", "--older-than", "30d", "--yes"])
+
+    assert result.exit_code == 0
+    assert "Nothing To Clean" in result.output
+    assert "No matching remote job directories found." in result.output
 
 
 @pytest.mark.asyncio

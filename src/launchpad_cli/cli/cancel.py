@@ -12,10 +12,18 @@ from pathlib import Path
 import asyncssh
 import click
 from loguru import logger
+from rich.console import Group
+from rich.text import Text
 
 from launchpad_cli.core.config import resolve_config
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.display import (
+    build_console,
+    build_detail_panel,
+    build_next_steps_panel,
+    build_summary_table,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,8 +73,11 @@ def command(
         verbosity=_verbosity(ctx),
         colorize=_colorize_output(ctx),
     )
+    console = build_console(stderr=json_output, no_color=not _colorize_output(ctx))
 
     normalized_task_ids = _normalize_task_ids(task_ids)
+    if not yes and not json_output:
+        console.print(_build_cancel_preview(job_id, normalized_task_ids))
     if not yes and not click.confirm(
         _confirmation_text(job_id, normalized_task_ids),
         default=True,
@@ -89,7 +100,7 @@ def command(
     if json_output:
         click.echo(json.dumps(result.as_dict(), indent=2))
     else:
-        click.echo(result.message)
+        console.print(_build_cancel_result_renderable(result))
 
 
 async def _run_cancel(
@@ -139,8 +150,8 @@ def _build_scancel_command(target: str) -> str:
 
 def _confirmation_text(job_id: str, task_ids: tuple[str, ...]) -> str:
     if not task_ids:
-        return f"Cancel SLURM job {job_id}?"
-    return f"Cancel SLURM job {job_id} task(s) {', '.join(task_ids)}?"
+        return f"Proceed with cancellation for SLURM job {job_id}?"
+    return f"Proceed with cancellation for SLURM job {job_id} task(s) {', '.join(task_ids)}?"
 
 
 def _success_text(job_id: str, task_ids: tuple[str, ...]) -> str:
@@ -163,3 +174,70 @@ def _colorize_output(ctx: click.Context) -> bool:
     options = getattr(ctx.find_root(), "obj", None)
     no_color = bool(getattr(options, "no_color", False))
     return not no_color and "NO_COLOR" not in os.environ
+
+
+def _build_cancel_preview(job_id: str, task_ids: tuple[str, ...]) -> Group:
+    """Render the human-facing preview before a destructive cancel action."""
+
+    intro = Text()
+    intro.append("This sends ", style="lp.brand.subtle")
+    intro.append("scancel", style="lp.brand.secondary")
+    intro.append(
+        " immediately once you confirm.",
+        style="lp.brand.subtle",
+    )
+    return Group(
+        build_detail_panel(
+            Group(intro, _build_cancel_summary(job_id, task_ids, target=_cancel_target(job_id, task_ids))),
+            title="Cancel Preview",
+            tone="warn",
+        ),
+        build_next_steps_panel(
+            [
+                "Review the target below before confirming.",
+                "Use Ctrl+C now if you do not want to send the cancellation request.",
+            ],
+            title="What Happens Next",
+        ),
+    )
+
+
+def _build_cancel_result_renderable(result: CancelResult) -> Group:
+    """Render the post-cancel success summary."""
+
+    intro = Text()
+    intro.append("Cancellation requested. ", style="lp.brand.secondary")
+    intro.append(
+        "SLURM may take a moment to reflect the new state.",
+        style="lp.brand.subtle",
+    )
+    summary = _build_cancel_summary(result.job_id, result.task_ids, target=result.target)
+    summary.add_row("Result", result.message)
+    return Group(
+        build_detail_panel(
+            Group(intro, summary),
+            title="Cancellation Requested",
+            tone="success",
+        ),
+        build_next_steps_panel(
+            [
+                f"launchpad status {result.job_id}",
+                f"launchpad logs {result.job_id}",
+            ]
+        ),
+    )
+
+
+def _build_cancel_summary(job_id: str, task_ids: tuple[str, ...], *, target: str):
+    summary = build_summary_table()
+    summary.add_row("Job", job_id)
+    summary.add_row("Scope", _task_scope_label(task_ids))
+    summary.add_row("Tasks", ", ".join(task_ids) if task_ids else "all tasks")
+    summary.add_row("Target", target)
+    return summary
+
+
+def _task_scope_label(task_ids: tuple[str, ...]) -> str:
+    if not task_ids:
+        return "whole job"
+    return f"{len(task_ids)} selected task(s)"
