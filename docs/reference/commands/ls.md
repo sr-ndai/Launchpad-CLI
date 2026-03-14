@@ -1,0 +1,41 @@
+# `launchpad ls`
+
+Use `ls` to inspect remote files and directories without opening an SSH shell.
+
+## Syntax
+
+```text
+launchpad ls [OPTIONS] [REMOTE_PATH]
+```
+
+## Common Uses
+
+List your default remote root:
+
+```powershell
+launchpad ls
+```
+
+Show a long listing:
+
+```powershell
+launchpad ls -l
+```
+
+List an explicit remote path or glob:
+
+```powershell
+launchpad ls /shared/sergey/project
+launchpad ls "results_*"
+```
+
+## Important Options
+
+- `-l`, `--long`
+
+## Behavior Notes
+
+- if you omit `REMOTE_PATH`, Launchpad uses `<shared_root>/<ssh.username>`
+- relative paths are resolved beneath that default root
+- glob patterns are supported
+- root `--json` is supported
