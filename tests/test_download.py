@@ -376,6 +376,21 @@ async def test_run_download_transfers_multi_file_payload_and_applies_excludes(
                     job_id="12345",
                     task_id="0",
                     run_name="tank_v3",
+                    state="CANCELLED",
+                    remote_job_dir="/shared/sergey/tank_v3",
+                    work_dir="/shared/sergey/tank_v3/results_wing_0",
+                ),
+            ),
+            None,
+            (),
+            "not allowed when cancelled tasks are selected",
+        ),
+        (
+            (
+                download_module.DownloadJobRow(
+                    job_id="12345",
+                    task_id="0",
+                    run_name="tank_v3",
                     state="COMPLETED",
                     remote_job_dir="/shared/sergey/tank_v3",
                     work_dir="/shared/sergey/tank_v3/results_wing_0",

@@ -3,16 +3,44 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shlex
+from dataclasses import dataclass
 from pathlib import Path
 
 import asyncssh
 import click
+from loguru import logger
 
 from launchpad_cli.core.config import resolve_config
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.ssh import ssh_session
+
+
+@dataclass(frozen=True, slots=True)
+class CancelResult:
+    """Structured cancellation response."""
+
+    job_id: str
+    task_ids: tuple[str, ...]
+    target: str
+
+    @property
+    def message(self) -> str:
+        """Return the human-readable cancellation summary."""
+
+        return _success_text(self.job_id, self.task_ids)
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the cancellation response for `--json` output."""
+
+        return {
+            "job_id": self.job_id,
+            "task_ids": list(self.task_ids),
+            "target": self.target,
+            "message": self.message,
+        }
 
 
 @click.command(
@@ -32,17 +60,22 @@ def command(
 ) -> None:
     """Cancel the requested SLURM job or selected array tasks."""
 
+    json_output = _json_output(ctx)
     configure_logging(
         verbosity=_verbosity(ctx),
         colorize=_colorize_output(ctx),
     )
 
     normalized_task_ids = _normalize_task_ids(task_ids)
-    if not yes and not click.confirm(_confirmation_text(job_id, normalized_task_ids), default=True):
+    if not yes and not click.confirm(
+        _confirmation_text(job_id, normalized_task_ids),
+        default=True,
+        err=json_output,
+    ):
         raise click.ClickException("Cancellation aborted.")
 
     try:
-        message = asyncio.run(
+        result = asyncio.run(
             _run_cancel(
                 cwd=Path.cwd(),
                 env=os.environ,
@@ -53,7 +86,10 @@ def command(
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    click.echo(message)
+    if json_output:
+        click.echo(json.dumps(result.as_dict(), indent=2))
+    else:
+        click.echo(result.message)
 
 
 async def _run_cancel(
@@ -62,13 +98,14 @@ async def _run_cancel(
     env: dict[str, str],
     job_id: str,
     task_ids: tuple[str, ...],
-) -> str:
+) -> CancelResult:
     """Resolve config, invoke remote `scancel`, and summarize the action."""
 
     resolved = resolve_config(cwd=cwd, env=env)
 
     async with ssh_session(resolved.config.ssh) as conn:
         target = _cancel_target(job_id, task_ids)
+        logger.trace("Cancelling SLURM target {}", target)
         command = _build_scancel_command(target)
         result = await conn.run(command, check=False)
         if result.exit_status != 0:
@@ -77,7 +114,7 @@ async def _run_cancel(
                 f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
             )
 
-    return _success_text(job_id, task_ids)
+    return CancelResult(job_id=job_id, task_ids=task_ids, target=target)
 
 
 def _normalize_task_ids(task_ids: tuple[str, ...]) -> tuple[str, ...]:
@@ -115,6 +152,11 @@ def _success_text(job_id: str, task_ids: tuple[str, ...]) -> str:
 def _verbosity(ctx: click.Context) -> int:
     options = getattr(ctx.find_root(), "obj", None)
     return int(getattr(options, "verbose", 0))
+
+
+def _json_output(ctx: click.Context) -> bool:
+    options = getattr(ctx.find_root(), "obj", None)
+    return bool(getattr(options, "json_output", False))
 
 
 def _colorize_output(ctx: click.Context) -> bool:

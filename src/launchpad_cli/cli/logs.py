@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shlex
 from dataclasses import dataclass, replace
@@ -10,6 +11,7 @@ from pathlib import Path, PurePosixPath
 
 import asyncssh
 import click
+from loguru import logger
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
 from launchpad_cli.core.logging import configure_logging
@@ -31,6 +33,34 @@ class JobLogRow:
     work_dir: str | None = None
     remote_job_dir: str | None = None
     source: str = "squeue"
+
+
+@dataclass(frozen=True, slots=True)
+class LogsResult:
+    """Structured response for buffered log reads."""
+
+    job_id: str
+    task_id: str | None
+    run_name: str | None
+    state: str
+    log_kind: str
+    remote_path: str
+    lines: int
+    content: str
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the log read for `--json` output."""
+
+        return {
+            "job_id": self.job_id,
+            "task_id": self.task_id,
+            "run_name": self.run_name,
+            "state": self.state,
+            "log_kind": self.log_kind,
+            "remote_path": self.remote_path,
+            "lines": self.lines,
+            "content": self.content,
+        }
 
 
 @click.command(
@@ -65,6 +95,8 @@ def command(
 
     if solver_log and err:
         raise click.ClickException("`launchpad logs` accepts either `--solver-log` or `--err`, not both.")
+    if follow and _json_output(ctx):
+        raise click.ClickException("`launchpad logs --follow` does not support `--json` output.")
 
     configure_logging(
         verbosity=_verbosity(ctx),
@@ -72,7 +104,7 @@ def command(
     )
 
     try:
-        output = asyncio.run(
+        result = asyncio.run(
             _run_logs(
                 cwd=Path.cwd(),
                 env=os.environ,
@@ -90,8 +122,12 @@ def command(
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output and not follow:
-        click.echo(output, nl=not output.endswith("\n"))
+    if follow:
+        return
+    if _json_output(ctx):
+        click.echo(json.dumps(result.as_dict(), indent=2))
+    elif result.content:
+        click.echo(result.content, nl=not result.content.endswith("\n"))
 
 
 async def _run_logs(
@@ -104,7 +140,7 @@ async def _run_logs(
     lines: int,
     solver_log: bool,
     err: bool,
-) -> str:
+) -> LogsResult:
     """Resolve config, locate the remote log path, and fetch its contents."""
 
     resolved = resolve_config(cwd=cwd, env=env)
@@ -112,17 +148,29 @@ async def _run_logs(
     async with ssh_session(resolved.config.ssh) as conn:
         rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
         row = _select_row(rows, job_id=job_id, requested_task_id=task_id)
+        log_kind = _log_kind(solver_log=solver_log, err=err)
         remote_path = _resolve_remote_log_path(
             row,
             requested_task_id=task_id,
             solver_log=solver_log,
             err=err,
         )
-        return await _read_remote_log(
+        logger.trace("Reading {} log for job {} from {}", log_kind, job_id, remote_path)
+        content = await _read_remote_log(
             conn,
             remote_path=remote_path,
             lines=lines,
             follow=follow,
+        )
+        return LogsResult(
+            job_id=row.job_id,
+            task_id=row.task_id,
+            run_name=row.run_name,
+            state=row.state,
+            log_kind=log_kind,
+            remote_path=remote_path,
+            lines=lines,
+            content=content,
         )
 
 
@@ -373,7 +421,20 @@ def _verbosity(ctx: click.Context) -> int:
     return int(getattr(options, "verbose", 0))
 
 
+def _json_output(ctx: click.Context) -> bool:
+    options = getattr(ctx.find_root(), "obj", None)
+    return bool(getattr(options, "json_output", False))
+
+
 def _colorize_output(ctx: click.Context) -> bool:
     options = getattr(ctx.find_root(), "obj", None)
     no_color = bool(getattr(options, "no_color", False))
     return not no_color and "NO_COLOR" not in os.environ
+
+
+def _log_kind(*, solver_log: bool, err: bool) -> str:
+    if solver_log:
+        return "solver"
+    if err:
+        return "stderr"
+    return "stdout"

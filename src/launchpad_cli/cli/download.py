@@ -15,6 +15,7 @@ from typing import Mapping
 
 import asyncssh
 import click
+from loguru import logger
 from rich.panel import Panel
 from rich.table import Table
 
@@ -109,6 +110,12 @@ class DownloadPlan:
         return any(row.state.upper() not in TERMINAL_STATES for row in self.selected_rows)
 
     @property
+    def cancelled(self) -> bool:
+        """Return whether any selected task state is cancelled."""
+
+        return any(row.state.upper() == "CANCELLED" for row in self.selected_rows)
+
+    @property
     def required_local_bytes(self) -> int:
         """Return the local-space requirement for this transfer mode."""
 
@@ -140,6 +147,7 @@ class DownloadResult:
     cleaned_up: bool
     selected_tasks: tuple[str, ...]
     partial: bool
+    cancelled: bool = False
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the result for future machine-readable output."""
@@ -157,6 +165,7 @@ class DownloadResult:
             "cleaned_up": self.cleaned_up,
             "selected_tasks": list(self.selected_tasks),
             "partial": self.partial,
+            "cancelled": self.cancelled,
         }
 
 
@@ -543,6 +552,7 @@ async def _execute_single_file_download(
         cleaned_up=plan.cleanup,
         selected_tasks=plan.selected_tasks,
         partial=plan.partial,
+        cancelled=plan.cancelled,
     )
 
 
@@ -620,6 +630,7 @@ async def _execute_multi_file_download(
         cleaned_up=plan.cleanup,
         selected_tasks=plan.selected_tasks,
         partial=plan.partial,
+        cancelled=plan.cancelled,
     )
 
 
@@ -636,7 +647,11 @@ async def _select_transfer_mode(
     if transfer_mode == "multi-file":
         return "multi-file"
     if await _remote_compression_available(conn, config=config):
+        logger.debug("Download auto mode selected single-file because remote tar/zstd are available")
         return "single-file"
+    logger.warning(
+        "Download auto mode fell back to multi-file because remote tar/zstd are unavailable"
+    )
     return "multi-file"
 
 
@@ -649,6 +664,9 @@ def _resolve_requested_download_transfer_mode(
 
     alias_mode = None
     if remote_compress is not None:
+        logger.warning(
+            "`--remote-compress` is deprecated; use `--transfer-mode` instead"
+        )
         alias_mode = {
             "auto": "auto",
             "always": "single-file",
@@ -796,6 +814,10 @@ def _validate_cleanup_request(
     if plan.partial:
         raise click.ClickException(
             "`--cleanup` is only allowed for terminal jobs; partial downloads cannot remove the remote job directory."
+        )
+    if plan.cancelled:
+        raise click.ClickException(
+            "`--cleanup` is not allowed when cancelled tasks are selected because their results may be incomplete."
         )
     if requested_tasks:
         raise click.ClickException(
@@ -952,6 +974,8 @@ def _build_summary_panel(plan: DownloadPlan) -> Panel:
         summary.add_row("Cleanup", "remote job directory will be deleted after success")
     if plan.partial:
         summary.add_row("Warning", "selection includes non-terminal tasks; results may be partial")
+    elif plan.cancelled:
+        summary.add_row("Warning", "selection includes cancelled tasks; results may be incomplete")
     if plan.exclude_patterns:
         summary.add_row("Excludes", ", ".join(plan.exclude_patterns))
 
@@ -970,6 +994,8 @@ def _build_completion_panel(result: DownloadResult) -> Panel:
     summary.add_row("Transferred", _format_bytes(result.downloaded_bytes))
     summary.add_row("Tasks", _format_selected_tasks(result.selected_tasks))
     summary.add_row("Remote cleanup", "completed" if result.cleaned_up else "not requested")
+    if result.cancelled:
+        summary.add_row("Warning", "download included cancelled tasks; verify results before cleanup")
     return Panel(summary, title="Download Complete", expand=False)
 
 

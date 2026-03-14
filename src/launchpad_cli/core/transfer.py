@@ -205,6 +205,12 @@ async def upload_many(
     if not items:
         return TransferExecution(effective_streams=1)
 
+    logger.debug(
+        "Starting multi-file upload of {} item(s) with {} requested stream(s)",
+        len(items),
+        streams,
+    )
+
     async def runner(effective_streams: int) -> None:
         async def worker(conn: asyncssh.SSHClientConnection, item: UploadItem) -> None:
             await upload(conn, item.local_path, item.remote_path, resume=resume)
@@ -236,6 +242,12 @@ async def download_many(
 
     if not items:
         return TransferExecution(effective_streams=1)
+
+    logger.debug(
+        "Starting multi-file download of {} item(s) with {} requested stream(s)",
+        len(items),
+        streams,
+    )
 
     async def runner(effective_streams: int) -> None:
         async def worker(conn: asyncssh.SSHClientConnection, item: DownloadItem) -> None:
@@ -277,6 +289,7 @@ async def striped_upload(
     remote_target = str(PurePosixPath(remote_path))
     existing_size = await _remote_size(conn, remote_target)
     if resume and existing_size == total_size:
+        logger.info("Striped upload already complete for {}; reusing remote payload", remote_target)
         return TransferExecution(effective_streams=1)
 
     with TemporaryDirectory(prefix=f"{source.stem}-parts-") as temp_dir:
@@ -290,6 +303,12 @@ async def striped_upload(
             )
             for part in parts
         ]
+        logger.debug(
+            "Starting striped upload of {} ({} bytes) as {} part(s)",
+            source,
+            total_size,
+            len(remote_items),
+        )
 
         effective = await upload_many(
             ssh_config,
@@ -326,11 +345,18 @@ async def striped_download(
     if destination.exists() and not destination.is_file():
         raise IsADirectoryError(f"Download destination is not a file: {destination}")
     if resume and destination.exists() and destination.stat().st_size == remote_size:
+        logger.info("Striped download already complete for {}; reusing local payload", destination)
         return TransferExecution(effective_streams=1)
 
     part_dir = _local_part_dir(destination)
     part_dir.mkdir(parents=True, exist_ok=True)
     parts = _build_local_parts(part_dir, total_size=remote_size, chunk_size=chunk_size)
+    logger.debug(
+        "Starting striped download of {} ({} bytes) as {} part(s)",
+        remote_target,
+        remote_size,
+        len(parts),
+    )
 
     async def runner(effective_streams: int) -> None:
         async def worker(conn: asyncssh.SSHClientConnection, part: _LocalPart) -> None:
@@ -409,6 +435,14 @@ async def _run_with_stream_fallback(
     """Retry a parallel transfer with fewer streams when the server rejects concurrency."""
 
     effective_streams = max(1, min(requested_streams, item_count))
+    if effective_streams < requested_streams:
+        logger.debug(
+            "{} stream budget capped from {} to {} for {} item(s)",
+            operation_name.capitalize(),
+            requested_streams,
+            effective_streams,
+            item_count,
+        )
     while True:
         try:
             await runner(effective_streams)
@@ -606,6 +640,7 @@ async def _assemble_remote_parts(
             f"mv -f -- {quoted_partial} {quoted_target}",
         ]
     )
+    logger.debug("Assembling {} striped part(s) into {}", len(remote_parts), remote_target)
     result = await conn.run(command, check=False)
     if result.exit_status != 0:
         raise RuntimeError(
