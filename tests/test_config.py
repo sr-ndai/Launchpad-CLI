@@ -145,6 +145,43 @@ def test_config_init_writes_user_config_non_interactively(tmp_path: Path, monkey
     contents = config_path.read_text(encoding="utf-8")
     assert 'host = "headnode.example.com"' in contents
     assert 'username = "sergey"' in contents
+    assert "Config Ready" in result.output
+    assert "launchpad doctor" in result.output
+
+
+def test_config_init_interactive_flow_prompts_with_guided_copy(tmp_path: Path, monkeypatch) -> None:
+    """Interactive setup should guide the operator through the required values."""
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        ["config", "init"],
+        input=f"headnode.example.com\nsergey\n{tmp_path / 'id_ed25519'}\n22\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Guided Setup" in result.output
+    assert "Cluster SSH host or IP" in result.output
+    assert "Cluster username" in result.output
+    assert "Path to SSH private key" in result.output
+    assert "Config Ready" in result.output
+
+
+def test_config_init_existing_file_has_actionable_error(tmp_path: Path, monkeypatch) -> None:
+    """Existing user config errors should point to the recovery path."""
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    config_dir = tmp_path / ".launchpad"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text("[ssh]\nhost = \"cluster\"\n", encoding="utf-8")
+
+    result = CliRunner().invoke(cli, ["config", "init", "--non-interactive"])
+
+    assert result.exit_code == 1
+    assert "--force" in result.output
+    assert "current settings" in result.output
 
 
 def test_config_show_supports_docs_output() -> None:
