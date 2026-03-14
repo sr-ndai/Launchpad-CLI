@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -108,6 +109,64 @@ def test_logs_command_resolves_solver_log_with_follow(monkeypatch: pytest.Monkey
     assert result.exit_code == 0
     assert result.output == ""
     assert emitted == ["F06\n"]
+
+
+def test_logs_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Buffered log reads should emit structured JSON under the root flag."""
+
+    monkeypatch.setattr(logs_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        logs_module,
+        "resolve_config",
+        lambda **kwargs: SimpleNamespace(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey")
+            )
+        ),
+    )
+
+    @asynccontextmanager
+    async def fake_ssh_session(config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield object()
+
+    async def fake_query_job_rows(*args, **kwargs) -> tuple[logs_module.JobLogRow, ...]:  # type: ignore[no-untyped-def]
+        return (
+            logs_module.JobLogRow(
+                job_id="12345",
+                task_id="2",
+                run_name="tank_v3",
+                state="COMPLETED",
+                stdout_path="/shared/sergey/tank_v3/logs/slurm_%A_%a.out",
+            ),
+        )
+
+    async def fake_read_remote_log(conn, *, remote_path: str, lines: int, follow: bool) -> str:  # type: ignore[no-untyped-def]
+        return "line 1\nline 2\n"
+
+    monkeypatch.setattr(logs_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(logs_module, "_query_job_rows", fake_query_job_rows)
+    monkeypatch.setattr(logs_module, "_read_remote_log", fake_read_remote_log)
+
+    result = CliRunner().invoke(cli, ["--json", "logs", "12345", "2"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["job_id"] == "12345"
+    assert payload["task_id"] == "2"
+    assert payload["log_kind"] == "stdout"
+    assert payload["remote_path"] == "/shared/sergey/tank_v3/logs/slurm_12345_2.out"
+    assert payload["content"] == "line 1\nline 2\n"
+
+
+def test_logs_command_rejects_follow_with_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Streaming follow mode should not claim to support structured JSON."""
+
+    monkeypatch.setattr(logs_module, "configure_logging", lambda **kwargs: None)
+
+    result = CliRunner().invoke(cli, ["--json", "logs", "12345", "--follow"])
+
+    assert result.exit_code == 1
+    assert "does not support `--json` output" in result.output
 
 
 def test_logs_command_requires_task_id_when_multiple_rows_exist(monkeypatch: pytest.MonkeyPatch) -> None:

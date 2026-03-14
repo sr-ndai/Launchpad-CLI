@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import time
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Mapping
 
 import asyncssh
 import click
+from loguru import logger
 from rich.table import Table
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
@@ -63,6 +65,36 @@ class CleanupTarget:
     source: str
 
 
+@dataclass(frozen=True, slots=True)
+class CleanupResult:
+    """Structured cleanup response for human and JSON output."""
+
+    requested_job_ids: tuple[str, ...]
+    older_than: str | None
+    selected_targets: tuple[CleanupTarget, ...]
+    deleted_paths: tuple[str, ...]
+
+    @property
+    def message(self) -> str:
+        """Return the human-readable cleanup summary."""
+
+        if not self.selected_targets:
+            return "No matching remote job directories found."
+        return _cleanup_summary(list(self.deleted_paths))
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the cleanup result for `--json` output."""
+
+        return {
+            "requested_job_ids": list(self.requested_job_ids),
+            "older_than": self.older_than,
+            "selected_targets": [asdict(target) for target in self.selected_targets],
+            "deleted_paths": list(self.deleted_paths),
+            "deleted_count": len(self.deleted_paths),
+            "message": self.message,
+        }
+
+
 @click.command(
     name="cleanup",
     short_help="Remove remote job directories.",
@@ -83,15 +115,16 @@ def command(
 ) -> None:
     """Delete remote job directories resolved from job IDs or the user root."""
 
+    json_output = _json_output(ctx)
     configure_logging(
         verbosity=_verbosity(ctx),
         colorize=_colorize_output(ctx),
     )
 
-    console = build_console(no_color=not _colorize_output(ctx))
+    console = build_console(stderr=json_output, no_color=not _colorize_output(ctx))
 
     try:
-        message = asyncio.run(
+        result = asyncio.run(
             _run_cleanup(
                 cwd=Path.cwd(),
                 env=os.environ,
@@ -99,13 +132,16 @@ def command(
                 job_ids=job_ids,
                 older_than=older_than,
                 yes=yes,
+                json_output=json_output,
             )
         )
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if message:
-        click.echo(message)
+    if json_output:
+        click.echo(json.dumps(result.as_dict(), indent=2))
+    elif result.message:
+        click.echo(result.message)
 
 
 async def _run_cleanup(
@@ -116,7 +152,8 @@ async def _run_cleanup(
     job_ids: tuple[str, ...],
     older_than: str | None,
     yes: bool,
-) -> str:
+    json_output: bool,
+) -> CleanupResult:
     """Resolve cleanup targets, confirm the selection, and delete remotely."""
 
     resolved = resolve_config(cwd=cwd, env=env)
@@ -139,25 +176,37 @@ async def _run_cleanup(
             )
 
         if not targets:
-            return "No matching remote job directories found."
+            logger.trace("Cleanup found no matching remote job directories")
+            return CleanupResult(
+                requested_job_ids=job_ids,
+                older_than=older_than,
+                selected_targets=(),
+                deleted_paths=(),
+            )
 
         if not job_ids:
             console.print(_build_target_table(targets, title="Cleanup Candidates"))
-            selected_targets = _select_targets_from_prompt(targets, yes=yes)
+            selected_targets = _select_targets_from_prompt(targets, yes=yes, err=json_output)
         else:
             selected_targets = targets
 
         if not selected_targets:
             raise click.ClickException("Cleanup aborted.")
 
-        if not yes and not click.confirm(_confirmation_text(selected_targets), default=False):
+        if not yes and not click.confirm(_confirmation_text(selected_targets), default=False, err=json_output):
             raise click.ClickException("Cleanup aborted.")
 
         deleted_paths: list[str] = []
+        logger.trace("Deleting {} remote cleanup target(s)", len(selected_targets))
         for target in selected_targets:
             deleted_paths.append(await delete_remote_path(conn, target.path))
 
-    return _cleanup_summary(deleted_paths)
+    return CleanupResult(
+        requested_job_ids=job_ids,
+        older_than=older_than,
+        selected_targets=selected_targets,
+        deleted_paths=tuple(deleted_paths),
+    )
 
 
 async def _cleanup_targets_for_job_ids(
@@ -261,7 +310,12 @@ async def _load_cleanup_target(
     )
 
 
-def _select_targets_from_prompt(targets: tuple[CleanupTarget, ...], *, yes: bool) -> tuple[CleanupTarget, ...]:
+def _select_targets_from_prompt(
+    targets: tuple[CleanupTarget, ...],
+    *,
+    yes: bool,
+    err: bool,
+) -> tuple[CleanupTarget, ...]:
     """Select cleanup targets interactively when no explicit job IDs were provided."""
 
     if yes:
@@ -271,6 +325,7 @@ def _select_targets_from_prompt(targets: tuple[CleanupTarget, ...], *, yes: bool
         "Directories to delete (comma-separated numbers, `all`, or `none`)",
         default="none",
         show_default=False,
+        err=err,
     ).strip()
 
     if not response or response.lower() == "none":
@@ -451,6 +506,11 @@ def _format_timestamp(value: float | None) -> str:
 def _verbosity(ctx: click.Context) -> int:
     options = getattr(ctx.find_root(), "obj", None)
     return int(getattr(options, "verbose", 0))
+
+
+def _json_output(ctx: click.Context) -> bool:
+    options = getattr(ctx.find_root(), "obj", None)
+    return bool(getattr(options, "json_output", False))
 
 
 def _colorize_output(ctx: click.Context) -> bool:

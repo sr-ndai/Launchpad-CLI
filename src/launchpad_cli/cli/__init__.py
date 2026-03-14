@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import get_close_matches
 
 import click
 import rich_click
@@ -35,7 +36,29 @@ class GlobalOptions:
     no_color: bool
 
 
+class SuggestingGroup(click.Group):
+    """Click group which suggests nearby subcommands for typos."""
+
+    def resolve_command(
+        self,
+        ctx: click.Context,
+        args: list[str],
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError as exc:
+            if args:
+                suggestion = _closest_command(args[0], self.list_commands(ctx))
+                if suggestion is not None:
+                    raise click.UsageError(
+                        f"No such command '{args[0]}'. Did you mean '{suggestion}'?",
+                        ctx=ctx,
+                    ) from exc
+            raise
+
+
 @click.group(
+    cls=SuggestingGroup,
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
 )
@@ -95,3 +118,9 @@ def main() -> None:
 
     cli()
 
+
+def _closest_command(candidate: str, commands: list[str]) -> str | None:
+    matches = get_close_matches(candidate, commands, n=1, cutoff=0.6)
+    if not matches:
+        return None
+    return matches[0]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import secrets
 import shutil
@@ -13,6 +14,7 @@ from tempfile import TemporaryDirectory
 
 import asyncssh
 import click
+from loguru import logger
 
 from launchpad_cli.core.compress import compress_path
 from launchpad_cli.core.config import LaunchpadConfig, ResolvedConfig, resolve_config
@@ -76,6 +78,56 @@ class SubmitExecution:
 
     submitted_job: SubmittedJob
     effective_streams: int
+
+
+@dataclass(frozen=True, slots=True)
+class SubmitResult:
+    """Structured JSON-friendly submit response."""
+
+    mode: str
+    run_name: str
+    solver: str
+    input_dir: Path
+    remote_job_dir: str
+    payload_label: str
+    remote_payload_path: str
+    transfer_mode: str
+    requested_streams: int
+    script_preview: str | None = None
+    job_id: str | None = None
+    effective_streams: int | None = None
+    primary_inputs: tuple[dict[str, object], ...] = ()
+    package_files: tuple[str, ...] = ()
+    manifest_entries: tuple[str, ...] = ()
+    partition: str | None = None
+    time_limit: str | None = None
+    begin: str | None = None
+    monitor_command: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the submit response for `--json` output."""
+
+        return {
+            "mode": self.mode,
+            "run_name": self.run_name,
+            "solver": self.solver,
+            "input_dir": str(self.input_dir),
+            "remote_job_dir": self.remote_job_dir,
+            "payload_label": self.payload_label,
+            "remote_payload_path": self.remote_payload_path,
+            "transfer_mode": self.transfer_mode,
+            "requested_streams": self.requested_streams,
+            "effective_streams": self.effective_streams,
+            "job_id": self.job_id,
+            "monitor_command": self.monitor_command,
+            "partition": self.partition,
+            "time_limit": self.time_limit,
+            "begin": self.begin,
+            "primary_inputs": list(self.primary_inputs),
+            "package_files": list(self.package_files),
+            "manifest_entries": list(self.manifest_entries),
+            "script_preview": self.script_preview,
+        }
 
 
 @click.command(
@@ -159,6 +211,7 @@ def command(
 ) -> None:
     """Build the Phase 5 submit workflow."""
 
+    json_output = _json_output(ctx)
     configure_logging(
         verbosity=_verbosity(ctx),
         colorize=_colorize_output(ctx),
@@ -180,6 +233,12 @@ def command(
         extra_files=extra_files,
         include_all=include_all,
     )
+    logger.trace(
+        "Prepared submit plan for {} using {} transfer mode with {} requested stream(s)",
+        plan.run_name,
+        plan.transfer_mode,
+        plan.requested_streams,
+    )
 
     console = build_console(no_color=not _colorize_output(ctx))
     script_preview = build_submit_script(
@@ -189,6 +248,9 @@ def command(
     )
 
     if dry_run:
+        if json_output:
+            click.echo(json.dumps(_build_submit_dry_run_result(plan, script_preview).as_dict(), indent=2))
+            return
         render_submit_dry_run(
             console,
             run_name=plan.run_name,
@@ -214,6 +276,16 @@ def command(
     except (asyncssh.Error, RuntimeError, OSError, ValueError, NotImplementedError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    logger.trace(
+        "Submitted {} as SLURM job {} with {} effective stream(s)",
+        plan.run_name,
+        execution.submitted_job.job_id,
+        execution.effective_streams,
+    )
+    if json_output:
+        click.echo(json.dumps(_build_submit_result(plan, execution).as_dict(), indent=2))
+        return
+
     render_submit_confirmation(
         console,
         run_name=plan.run_name,
@@ -236,9 +308,15 @@ async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
         temp_root = Path(temp_dir)
 
         async with ssh_session(config.ssh) as conn:
+            await _ensure_remote_job_dir_available(conn, plan.remote_layout.job_dir)
             await prepare_remote_job_directory(conn, plan.remote_layout)
 
             if plan.transfer_mode == "single-file":
+                logger.trace(
+                    "Submitting {} via single-file archive upload to {}",
+                    plan.run_name,
+                    plan.remote_layout.archive_path,
+                )
                 archive_path = _materialize_archive(
                     plan,
                     temp_root,
@@ -261,6 +339,11 @@ async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
                     zstd_binary=config.remote_binaries.zstd,
                 )
             else:
+                logger.trace(
+                    "Submitting {} via multi-file upload into {}",
+                    plan.run_name,
+                    plan.remote_layout.job_dir,
+                )
                 payload_root = _materialize_payload_root(plan, temp_root)
                 upload_items = _build_multi_file_upload_items(plan, payload_root)
                 transfer_execution = await upload_many(
@@ -525,6 +608,21 @@ def _build_multi_file_upload_items(plan: SubmitPlan, payload_root: Path) -> tupl
     return tuple(upload_items)
 
 
+async def _ensure_remote_job_dir_available(
+    conn: asyncssh.SSHClientConnection,
+    remote_job_dir: str,
+) -> None:
+    """Fail clearly when a submit run name would reuse an existing remote directory."""
+
+    async with conn.start_sftp_client() as sftp:
+        if await sftp.exists(remote_job_dir):
+            logger.warning("Remote submit directory already exists: {}", remote_job_dir)
+            raise click.ClickException(
+                f"Remote job directory already exists: {remote_job_dir}. "
+                "Use `--name` to choose a new run name or remove the old directory with `launchpad cleanup`."
+            )
+
+
 def _generate_run_name(solver_key: str, *, name_prefix: str | None) -> str:
     """Generate the default run name described in the plan."""
 
@@ -545,7 +643,69 @@ def _verbosity(ctx: click.Context) -> int:
     return int(getattr(options, "verbose", 0))
 
 
+def _json_output(ctx: click.Context) -> bool:
+    options = getattr(ctx.find_root(), "obj", None)
+    return bool(getattr(options, "json_output", False))
+
+
 def _colorize_output(ctx: click.Context) -> bool:
     options = getattr(ctx.find_root(), "obj", None)
     no_color = bool(getattr(options, "no_color", False))
     return not no_color and "NO_COLOR" not in os.environ
+
+
+def _build_submit_dry_run_result(plan: SubmitPlan, script_preview: str) -> SubmitResult:
+    """Build the machine-readable dry-run response."""
+
+    config = plan.resolved_config.config
+    return SubmitResult(
+        mode="dry-run",
+        run_name=plan.run_name,
+        solver=plan.solver_key,
+        input_dir=plan.input_dir,
+        remote_job_dir=plan.remote_layout.job_dir,
+        payload_label=plan.payload_label,
+        remote_payload_path=plan.remote_payload_path,
+        transfer_mode=plan.transfer_mode,
+        requested_streams=plan.requested_streams,
+        script_preview=script_preview,
+        primary_inputs=tuple(_serialize_discovered_input(item) for item in plan.primary_inputs),
+        package_files=tuple(str(path) for path in plan.package_files),
+        manifest_entries=plan.manifest_entries,
+        partition=plan.submit_request.partition
+        or config.submit.partition
+        or config.cluster.default_partition,
+        time_limit=plan.submit_request.time_limit or config.cluster.default_wall_time,
+        begin=plan.submit_request.begin,
+    )
+
+
+def _build_submit_result(plan: SubmitPlan, execution: SubmitExecution) -> SubmitResult:
+    """Build the machine-readable response for an executed submit."""
+
+    return SubmitResult(
+        mode="submitted",
+        run_name=plan.run_name,
+        solver=plan.solver_key,
+        input_dir=plan.input_dir,
+        remote_job_dir=plan.remote_layout.job_dir,
+        payload_label=plan.payload_label,
+        remote_payload_path=plan.remote_payload_path,
+        transfer_mode=plan.transfer_mode,
+        requested_streams=plan.requested_streams,
+        job_id=execution.submitted_job.job_id,
+        effective_streams=execution.effective_streams,
+        monitor_command=f"launchpad status {execution.submitted_job.job_id}",
+    )
+
+
+def _serialize_discovered_input(item: DiscoveredInput) -> dict[str, object]:
+    """Serialize a discovered input for JSON output."""
+
+    return {
+        "path": str(item.path),
+        "relative_path": item.relative_path.as_posix(),
+        "stem": item.stem,
+        "extension": item.extension,
+        "size_bytes": item.size_bytes,
+    }

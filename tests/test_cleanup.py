@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,11 +21,32 @@ def test_cleanup_command_deletes_explicit_job_ids_with_yes(monkeypatch: pytest.M
 
     monkeypatch.setattr(cleanup_module, "configure_logging", lambda **kwargs: None)
 
-    async def fake_run_cleanup(**kwargs) -> str:  # type: ignore[no-untyped-def]
+    async def fake_run_cleanup(**kwargs) -> cleanup_module.CleanupResult:  # type: ignore[no-untyped-def]
         assert kwargs["job_ids"] == ("12345", "23456")
         assert kwargs["older_than"] is None
         assert kwargs["yes"] is True
-        return "Deleted 2 remote directories: /shared/sergey/tank_v3, /shared/sergey/beam_v7"
+        assert kwargs["json_output"] is False
+        return cleanup_module.CleanupResult(
+            requested_job_ids=("12345", "23456"),
+            older_than=None,
+            selected_targets=(
+                cleanup_module.CleanupTarget(
+                    label="12345",
+                    path="/shared/sergey/tank_v3",
+                    size_bytes=0,
+                    modified_epoch=None,
+                    source="job-id",
+                ),
+                cleanup_module.CleanupTarget(
+                    label="23456",
+                    path="/shared/sergey/beam_v7",
+                    size_bytes=0,
+                    modified_epoch=None,
+                    source="job-id",
+                ),
+            ),
+            deleted_paths=("/shared/sergey/tank_v3", "/shared/sergey/beam_v7"),
+        )
 
     monkeypatch.setattr(cleanup_module, "_run_cleanup", fake_run_cleanup)
 
@@ -32,6 +54,39 @@ def test_cleanup_command_deletes_explicit_job_ids_with_yes(monkeypatch: pytest.M
 
     assert result.exit_code == 0
     assert "Deleted 2 remote directories" in result.output
+
+
+def test_cleanup_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cleanup should emit a structured response for scripting."""
+
+    monkeypatch.setattr(cleanup_module, "configure_logging", lambda **kwargs: None)
+
+    async def fake_run_cleanup(**kwargs) -> cleanup_module.CleanupResult:  # type: ignore[no-untyped-def]
+        assert kwargs["json_output"] is True
+        return cleanup_module.CleanupResult(
+            requested_job_ids=("12345",),
+            older_than=None,
+            selected_targets=(
+                cleanup_module.CleanupTarget(
+                    label="12345",
+                    path="/shared/sergey/tank_v3",
+                    size_bytes=4096,
+                    modified_epoch=1710451200.0,
+                    source="job-id",
+                ),
+            ),
+            deleted_paths=("/shared/sergey/tank_v3",),
+        )
+
+    monkeypatch.setattr(cleanup_module, "_run_cleanup", fake_run_cleanup)
+
+    result = CliRunner().invoke(cli, ["--json", "cleanup", "12345", "--yes"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["requested_job_ids"] == ["12345"]
+    assert payload["deleted_paths"] == ["/shared/sergey/tank_v3"]
+    assert payload["deleted_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -84,17 +139,18 @@ async def test_run_cleanup_deletes_terminal_job_directory(
     monkeypatch.setattr(cleanup_module, "_load_cleanup_target", fake_load_cleanup_target)
     monkeypatch.setattr(cleanup_module, "delete_remote_path", fake_delete_remote_path)
 
-    message = await cleanup_module._run_cleanup(
+    result = await cleanup_module._run_cleanup(
         cwd=tmp_path,
         env={},
         console=cleanup_module.build_console(no_color=True),
         job_ids=("12345",),
         older_than=None,
         yes=True,
+        json_output=False,
     )
 
     assert deleted == ["/shared/sergey/tank_v3"]
-    assert message == "Deleted 1 remote directory: /shared/sergey/tank_v3"
+    assert result.message == "Deleted 1 remote directory: /shared/sergey/tank_v3"
 
 
 @pytest.mark.asyncio
@@ -149,17 +205,18 @@ async def test_run_cleanup_discovers_root_directories_with_age_filter_and_prompt
     monkeypatch.setattr(cleanup_module, "measure_remote_path", fake_measure_remote_path)
     monkeypatch.setattr(cleanup_module, "delete_remote_path", fake_delete_remote_path)
 
-    message = await cleanup_module._run_cleanup(
+    result = await cleanup_module._run_cleanup(
         cwd=tmp_path,
         env={},
         console=cleanup_module.build_console(no_color=True),
         job_ids=(),
         older_than="30d",
         yes=False,
+        json_output=False,
     )
 
     assert deleted == ["/shared/sergey/old_run"]
-    assert message == "Deleted 1 remote directory: /shared/sergey/old_run"
+    assert result.message == "Deleted 1 remote directory: /shared/sergey/old_run"
 
 
 @pytest.mark.asyncio
@@ -203,4 +260,5 @@ async def test_run_cleanup_rejects_non_terminal_jobs(
             job_ids=("12345",),
             older_than=None,
             yes=True,
+            json_output=False,
         )

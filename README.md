@@ -123,7 +123,11 @@ Phase 2 now includes reusable remote submission helpers beneath the future
 The `launchpad submit` command now orchestrates solver discovery, local
 archive creation, upload, remote extraction, SLURM script generation, and
 remote submission. `--dry-run` shows the resolved manifest, remote paths, and
-generated submit script without making remote changes.
+generated submit script without making remote changes. The command also
+supports structured `--json` output for dry runs and completed submissions,
+surfaces the accepted Phase 5 `--transfer-mode` / `--streams` controls, and
+fails clearly if a chosen run name would reuse an existing remote job
+directory.
 
 ## Monitoring Primitives
 
@@ -134,7 +138,9 @@ Phase 3 now extends the SLURM core layer with:
 - reusable remote query wrappers for scheduler metadata over SSH
 
 The command-facing `launchpad status`, `launchpad logs`, and `launchpad cancel`
-workflows now build on that scheduler data contract.
+workflows now build on that scheduler data contract. `launchpad logs` and
+`launchpad cancel` both support structured `--json` output for non-streaming
+flows, while `launchpad logs --follow` remains terminal-oriented.
 
 ## Download Groundwork
 
@@ -155,9 +161,17 @@ The command-facing `launchpad download` flow now builds on those helpers for:
 Phase 4 now also includes:
 
 - `launchpad ls [REMOTE_PATH]` with default remote-root handling, path or glob
-  selection, and optional long-format output
+  selection, optional long-format output, and structured `--json` responses
 - `launchpad cleanup [JOB_IDS...]` with job-aware cleanup, age-filtered root
-  discovery, and confirmation before deletion
+  discovery, confirmation before deletion, and structured `--json` responses
+
+Phase 5 polish now also adds:
+
+- typo suggestions for invalid root subcommands
+- warning-level operator feedback when download auto mode falls back from
+  `single-file` to `multi-file`
+- clearer handling for existing download destinations, cancelled or partial
+  result selections, and deprecated `download --remote-compress`
 
 ## Status Command
 

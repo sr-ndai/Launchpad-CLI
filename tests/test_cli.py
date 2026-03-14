@@ -32,3 +32,13 @@ def test_root_help_lists_global_flags() -> None:
     assert "--no-color" in result.output
     assert "--version" in result.output
 
+
+def test_root_command_suggests_nearby_subcommands_for_typos() -> None:
+    """Mistyped root subcommands should include a single close suggestion."""
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["statuz"])
+
+    assert result.exit_code == 2
+    assert "No such command 'statuz'. Did you mean 'status'?" in result.output

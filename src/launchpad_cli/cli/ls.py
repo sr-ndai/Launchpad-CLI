@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import json
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Mapping
 
 import asyncssh
 import click
+from loguru import logger
 from rich.panel import Panel
 from rich.table import Table
 
@@ -33,6 +35,17 @@ class ListingResult:
     long_format: bool
     pattern: str | None
     entries: tuple[RemotePathEntry, ...]
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the listing for `--json` output."""
+
+        return {
+            "requested_path": self.requested_path,
+            "base_path": self.base_path,
+            "long_format": self.long_format,
+            "pattern": self.pattern,
+            "entries": [asdict(entry) for entry in self.entries],
+        }
 
 
 @click.command(
@@ -56,12 +69,13 @@ def command(
 ) -> None:
     """List remote files beneath the configured user root or a selected path."""
 
+    json_output = _json_output(ctx)
     configure_logging(
         verbosity=_verbosity(ctx),
         colorize=_colorize_output(ctx),
     )
 
-    console = build_console(no_color=not _colorize_output(ctx))
+    console = build_console(stderr=json_output, no_color=not _colorize_output(ctx))
 
     try:
         result = asyncio.run(
@@ -75,7 +89,10 @@ def command(
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    console.print(_build_listing_renderable(result))
+    if json_output:
+        click.echo(json.dumps(result.as_dict(), indent=2))
+    else:
+        console.print(_build_listing_renderable(result))
 
 
 async def _run_ls(
@@ -92,6 +109,7 @@ async def _run_ls(
     requested_path = _normalize_remote_path(remote_path, remote_root=remote_root)
     pattern = requested_path if _contains_glob(requested_path) else None
     base_path = _glob_base_path(requested_path) if pattern is not None else requested_path
+    logger.trace("Listing remote path {} (base={}, pattern={})", requested_path, base_path, pattern)
 
     async with ssh_session(resolved.config.ssh) as conn:
         entries = await list_remote_directory(
@@ -219,6 +237,11 @@ def _format_bytes(size_bytes: int) -> str:
 def _verbosity(ctx: click.Context) -> int:
     options = getattr(ctx.find_root(), "obj", None)
     return int(getattr(options, "verbose", 0))
+
+
+def _json_output(ctx: click.Context) -> bool:
+    options = getattr(ctx.find_root(), "obj", None)
+    return bool(getattr(options, "json_output", False))
 
 
 def _colorize_output(ctx: click.Context) -> bool:
