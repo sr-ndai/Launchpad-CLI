@@ -38,7 +38,8 @@ launchpad --json config show
 
 Notes:
 
-- `config init` creates a starter user config
+- `config init` now guides you through the required SSH values and ends with a
+  config summary plus next steps
 - `config show` prints the resolved result
 - `config show --docs` prints the documented schema
 - `config edit` and `config validate` are scaffolded but not implemented yet
