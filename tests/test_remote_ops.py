@@ -1,4 +1,4 @@
-"""Tests for remote submit filesystem helpers."""
+"""Tests for remote filesystem helpers."""
 
 from __future__ import annotations
 
@@ -9,8 +9,12 @@ import pytest
 
 from launchpad_cli.core.remote_ops import (
     build_remote_job_layout,
+    compute_remote_sha256,
+    delete_remote_path,
     ensure_remote_directory,
     extract_remote_archive,
+    list_remote_directory,
+    measure_remote_path,
     prepare_remote_job_directory,
     write_remote_text,
 )
@@ -140,3 +144,134 @@ async def test_extract_remote_archive_raises_on_remote_failure() -> None:
             archive_path="/shared/sergey/run/inputs.tar.zst",
             destination_dir="/shared/sergey/run",
         )
+
+
+@pytest.mark.asyncio
+async def test_measure_remote_path_parses_byte_count() -> None:
+    """Remote size helpers should parse `du -sb` output into bytes."""
+
+    connection = FakeConnection()
+    connection.run_result = SimpleNamespace(
+        exit_status=0,
+        stdout="123456\t/shared/sergey/run\n",
+        stderr="",
+    )
+
+    size_bytes = await measure_remote_path(
+        connection,
+        "/shared/sergey/run",
+        du_binary="/usr/bin/du",
+    )
+
+    assert size_bytes == 123456
+    assert connection.commands == ["/usr/bin/du -sb -- /shared/sergey/run"]
+
+
+@pytest.mark.asyncio
+async def test_compute_remote_sha256_parses_remote_digest() -> None:
+    """Remote checksum helpers should extract the digest from `sha256sum` output."""
+
+    connection = FakeConnection()
+    connection.run_result = SimpleNamespace(
+        exit_status=0,
+        stdout="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  /shared/sergey/run/results.tar.zst\n",
+        stderr="",
+    )
+
+    digest = await compute_remote_sha256(
+        connection,
+        "/shared/sergey/run/results.tar.zst",
+        sha256_binary="/usr/bin/sha256sum",
+    )
+
+    assert digest == "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    assert connection.commands == ["/usr/bin/sha256sum -- /shared/sergey/run/results.tar.zst"]
+
+
+@pytest.mark.asyncio
+async def test_list_remote_directory_returns_typed_entries() -> None:
+    """Remote listings should parse GNU find output into stable entry metadata."""
+
+    connection = FakeConnection()
+    connection.run_result = SimpleNamespace(
+        exit_status=0,
+        stdout=(
+            "f\t12\t1710249601.5\t/shared/sergey/run/results_0/summary.txt\n"
+            "d\t4096\t1710249600.0\t/shared/sergey/run/results_0\n"
+        ),
+        stderr="",
+    )
+
+    entries = await list_remote_directory(
+        connection,
+        "/shared/sergey/run",
+        recursive=True,
+        find_binary="/usr/bin/find",
+    )
+
+    assert [entry.path for entry in entries] == [
+        "/shared/sergey/run/results_0",
+        "/shared/sergey/run/results_0/summary.txt",
+    ]
+    assert entries[0].is_dir is True
+    assert entries[0].name == "results_0"
+    assert entries[1].entry_type == "file"
+    assert connection.commands == [
+        "/usr/bin/find /shared/sergey/run -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n'"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_remote_directory_raises_when_find_fails() -> None:
+    """Remote listing failures should preserve the failing `find` exit status."""
+
+    connection = FakeConnection()
+    connection.run_result = SimpleNamespace(
+        exit_status=1,
+        stdout="",
+        stderr="find: /shared/sergey/missing: No such file or directory",
+    )
+
+    with pytest.raises(RuntimeError, match="No such file or directory"):
+        await list_remote_directory(connection, "/shared/sergey/missing")
+
+
+@pytest.mark.asyncio
+async def test_delete_remote_path_uses_recursive_rm_by_default() -> None:
+    """Remote deletion should use guarded recursive removal semantics."""
+
+    connection = FakeConnection()
+
+    deleted = await delete_remote_path(
+        connection,
+        "/shared/sergey/run",
+        rm_binary="/bin/rm",
+    )
+
+    assert deleted == "/shared/sergey/run"
+    assert connection.commands == ["/bin/rm -rf -- /shared/sergey/run"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["", ".", "/"])
+async def test_delete_remote_path_rejects_unsafe_targets(target: str) -> None:
+    """Remote deletion should reject unsafe normalized targets before shelling out."""
+
+    connection = FakeConnection()
+
+    with pytest.raises(ValueError, match="unsafe remote path"):
+        await delete_remote_path(connection, target)
+
+    assert connection.commands == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_remote_directory_normalizes_paths() -> None:
+    """Directory helpers should normalize POSIX paths before creating them."""
+
+    connection = FakeConnection()
+
+    normalized = await ensure_remote_directory(connection, "/shared/sergey/run/../run/results")
+
+    assert normalized == "/shared/sergey/run/../run/results"
+    assert connection.directories == ["/shared/sergey/run/../run/results"]
