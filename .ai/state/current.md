@@ -35,20 +35,21 @@ None.
   `phase/07-terminal-experience`, carrying forward the three-surface CLI shell,
   the polished secondary operator flows, and the Phase 7 docs refresh across
   the implemented command set.
-- Opened PR `#7` from `phase/07-terminal-experience` to `main`, added the
-  repo-side GitHub Actions workflow, and configured GitHub so `main` now
-  requires pull requests plus the `CI / verify` check before merge.
+- Added the repo-side GitHub Actions workflow, configured GitHub so `main` now
+  requires pull requests plus the `CI / verify` check before merge, and
+  replaced stale PR `#7` with PR `#8` so the active review branch points at
+  the current protected head.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human should review PR `#7`, wait for the new `CI / verify` workflow to pass,
+Human should review PR `#8`, wait for the new `CI / verify` workflow to pass,
 and then merge `phase/07-terminal-experience` into `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1200-coordinator-enable-main-protection.md`
+3. `.ai/sessions/2026-03-14-1223-coordinator-replace-phase-7-pr.md`
 4. `.ai/plans/07-terminal-experience.md`
 5. `.ai/plan.md`
