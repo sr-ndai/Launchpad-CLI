@@ -34,19 +34,20 @@ None.
 - Merged `task/5.3-cli-polish-and-logging` into
   `phase/05-performance-polish`, carrying forward typo suggestions, the
   remaining JSON surfaces, submit/download polish, and README updates.
-- Phase 5 is now complete locally on `phase/05-performance-polish`; the next
-  step is human review and merge of the phase PR into `main`.
+- Phase 5 is now complete locally on `phase/05-performance-polish`, and PR
+  `#5` is open from `phase/05-performance-polish` to `main` for human review.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Coordinator should ensure the Phase 5 branch is pushed, open the PR from
-`phase/05-performance-polish` to `main`, and leave the branch in an
-awaiting-human-review state.
+Human should review and merge PR `#5` from `phase/05-performance-polish` into
+`main`. After that, coordination can switch to refreshed `main` and open the
+next phase.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/plans/05-performance-polish.md`
-4. `.ai/plan.md`
+3. `.ai/sessions/2026-03-13-2255-coordinator-open-phase-5-pr.md`
+4. `.ai/plans/05-performance-polish.md`
+5. `.ai/plan.md`
