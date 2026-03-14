@@ -16,10 +16,11 @@ You need:
 
 ```powershell
 uv tool install git+https://github.com/sr-ndai/Launchpad-CLI.git
-launchpad --help
+launchpad
 ```
 
-If the second command prints the command list, Launchpad is installed.
+If the second command prints the welcome screen, Launchpad is installed. Use
+`launchpad --help` for the compact command reference.
 
 ## 2. Create Your User Config
 

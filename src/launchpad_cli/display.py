@@ -51,6 +51,21 @@ STATUS_TONES = {
     "CANCELLED": "danger",
     "TIMEOUT": "danger",
 }
+GET_STARTED_BREADCRUMB = "Get started: launchpad config init -> doctor -> submit --dry-run ."
+WELCOME_COMMANDS = (
+    ("submit", "Package a run and preview the SLURM handoff."),
+    ("status", "Watch the queue and inspect task state."),
+    ("download", "Pull completed results back to your machine."),
+    ("doctor", "Check config, SSH, and cluster readiness."),
+)
+_FULL_WORDMARK_LINES = (
+    "    __                           __    __               __",
+    "   / /   ____ ___  ______  _____/ /_  / /   ____ _____/ /",
+    "  / /   / __ `/ / / / __ \\/ ___/ __ \\/ /   / __ `/ __  /",
+    " / /___/ /_/ / /_/ / / / / /__/ / / / /___/ /_/ / /_/ /",
+    "/_____/\\__,_/\\__,_/_/ /_/\\___/_/ /_/_____/\\__,_/\\__,_/",
+)
+_COMPACT_WORDMARK = "Launchpad"
 
 
 def build_console(*, stderr: bool = False, no_color: bool = False) -> Console:
@@ -59,17 +74,56 @@ def build_console(*, stderr: bool = False, no_color: bool = False) -> Console:
     return Console(stderr=stderr, no_color=no_color, theme=LAUNCHPAD_THEME)
 
 
-def build_launchpad_wordmark() -> Text:
-    """Return the compact ASCII Launchpad mark used on branded help surfaces."""
+def build_launchpad_wordmark(*, width: int | None = None) -> Text | None:
+    """Return the welcome-screen wordmark or a compact fallback."""
+
+    if width is not None and width < len(_COMPACT_WORDMARK):
+        return None
 
     text = Text()
-    text.append(" _                           _                     _\n", style="lp.brand.primary")
-    text.append("| |    __ _ _   _ _ __   ___| |__   __ _  __| |\n", style="lp.brand.secondary")
-    text.append("| |   / _` | | | | '_ \\/ __| '_ \\ / _` |/ _` |\n", style="lp.brand.primary")
-    text.append("| |__| (_| | |_| | | | | (__| | | | (_| | (_| |\n", style="lp.brand.accent")
-    text.append("|_____\\__,_|\\__,_|_| |_|\\___|_| |_|\\__,_|\\__,_|\n", style="lp.brand.secondary")
-    text.append("Solver jobs, cluster UX, no shell-script drift.", style="lp.brand.subtle")
+    if width is None or width >= max(len(line) for line in _FULL_WORDMARK_LINES):
+        styles = (
+            "lp.brand.primary",
+            "lp.brand.secondary",
+            "lp.brand.primary",
+            "lp.brand.accent",
+            "lp.brand.secondary",
+        )
+        for line, style in zip(_FULL_WORDMARK_LINES, styles, strict=True):
+            text.append(f"{line}\n", style=style)
+        text.rstrip()
+        return text
+
+    text.append(_COMPACT_WORDMARK, style="lp.brand.primary")
     return text
+
+
+def build_get_started_text(*, subdued: bool = False) -> Text:
+    """Return the shared Phase 7 onboarding breadcrumb."""
+
+    style = "lp.brand.subtle" if subdued else "lp.brand.primary"
+    return Text(GET_STARTED_BREADCRUMB, style=style)
+
+
+def build_welcome_screen(*, show_wordmark: bool, width: int | None = None) -> Group:
+    """Build the non-interactive root welcome surface."""
+
+    commands = Table.grid(padding=(0, 2))
+    commands.add_column(style="lp.label", no_wrap=True)
+    commands.add_column(style="lp.value")
+    for name, detail in WELCOME_COMMANDS:
+        commands.add_row(name, detail)
+
+    renderables = []
+    if show_wordmark:
+        wordmark = build_launchpad_wordmark(width=width)
+        if wordmark is not None:
+            renderables.append(wordmark)
+    renderables.append(Text("From folder to cluster in one command.", style="lp.brand.secondary"))
+    renderables.append(Text("Use launchpad <command> --help for command-specific help.", style="lp.brand.subtle"))
+    renderables.append(build_detail_panel(commands, title="Key Commands"))
+    renderables.append(build_get_started_text())
+    return Group(*renderables)
 
 
 def build_badge(label: str, *, tone: str = "neutral") -> Text:
@@ -341,4 +395,3 @@ def _format_state_counts(counts: Mapping[str, int]) -> str:
     if not counts:
         return "no jobs"
     return ", ".join(f"{state.lower()}={count}" for state, count in counts.items())
-

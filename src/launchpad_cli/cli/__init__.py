@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -12,10 +13,11 @@ import click
 import rich_click
 import rich_click.rich_click as rich_config
 from rich_click.patch import patch as patch_rich_click
+from rich_click.rich_panel import RichCommandPanel, RichOptionPanel
 from rich.text import Text
 
 from launchpad_cli import __version__
-from launchpad_cli.display import PALETTE, build_launchpad_wordmark
+from launchpad_cli.display import PALETTE, build_console, build_get_started_text, build_welcome_screen
 
 patch_rich_click()
 
@@ -50,7 +52,7 @@ rich_config.STYLE_COMMANDS_PANEL_BORDER = PALETTE["cyan"]
 rich_config.STYLE_ERRORS_PANEL_BORDER = PALETTE["red"]
 rich_config.STYLE_DEPRECATED = PALETTE["amber"]
 rich_config.STYLE_ABORTED = f"bold {PALETTE['red']}"
-rich_config.OPTIONS_PANEL_TITLE = "Flags"
+rich_config.OPTIONS_PANEL_TITLE = "Options"
 rich_config.COMMANDS_PANEL_TITLE = "Commands"
 rich_config.ERRORS_SUGGESTION = "Try `[bold]launchpad -h[/]` for help."
 rich_config.FOOTER_TEXT = None
@@ -141,19 +143,19 @@ def cli(
         no_color=no_color,
     )
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        _render_welcome_screen(ctx.obj)
 
 
 cli.add_command(submit_command)
 cli.add_command(status_command)
-cli.add_command(logs_command)
 cli.add_command(download_command)
-cli.add_command(cancel_command)
+cli.add_command(logs_command)
 cli.add_command(ls_command)
-cli.add_command(config_command)
 cli.add_command(ssh_command)
-cli.add_command(cleanup_command)
+cli.add_command(config_command)
 cli.add_command(doctor_command)
+cli.add_command(cancel_command)
+cli.add_command(cleanup_command)
 
 
 def main() -> None:
@@ -179,7 +181,7 @@ def _configured_help_runtime(argv: list[str]):
     rich_config.COLOR_SYSTEM = None if _no_color_requested(argv) else "auto"
     if _is_root_help_request(argv):
         rich_config.HEADER_TEXT = None
-        rich_config.FOOTER_TEXT = _root_help_footer(show_wordmark=_show_wordmark(argv))
+        rich_config.FOOTER_TEXT = _root_help_footer()
     else:
         rich_config.HEADER_TEXT = None
         rich_config.FOOTER_TEXT = None
@@ -193,20 +195,6 @@ def _configured_help_runtime(argv: list[str]):
 def _apply_help_groups() -> None:
     """Register grouped command and option sections for rich-click help."""
 
-    command_groups = [
-        {
-            "name": "Primary Workflows",
-            "commands": ["submit", "status", "download"],
-        },
-        {
-            "name": "Operator Tools",
-            "commands": ["logs", "cancel", "ls", "cleanup", "ssh", "doctor"],
-        },
-        {
-            "name": "Setup",
-            "commands": ["config"],
-        },
-    ]
     config_groups = [
         {
             "name": "Inspect",
@@ -217,21 +205,16 @@ def _apply_help_groups() -> None:
             "commands": ["init", "edit"],
         },
     ]
-    for path in ("launchpad", "cli"):
-        rich_config.COMMAND_GROUPS[path] = command_groups
     for path in ("launchpad config", "cli config"):
         rich_config.COMMAND_GROUPS[path] = config_groups
 
-    root_option_groups = [
-        {
-            "name": "Display",
-            "options": ["verbose", "quiet", "json_output", "no_color"],
-        },
-        {
-            "name": "Help",
-            "options": ["version", "help"],
-        },
+    cli.panels = [
+        RichCommandPanel("Commands", commands=["submit", "status", "download", "logs", "ls", "ssh"]),
+        RichCommandPanel("Configuration", commands=["config", "doctor"]),
+        RichCommandPanel("Management", commands=["cancel", "cleanup"]),
+        RichOptionPanel("Options", options=["verbose", "quiet", "json_output", "no_color", "version", "help"]),
     ]
+
     submit_option_groups = [
         {
             "name": "Solver & Packaging",
@@ -307,8 +290,6 @@ def _apply_help_groups() -> None:
         },
     ]
     option_group_aliases = {
-        "launchpad": root_option_groups,
-        "cli": root_option_groups,
         "launchpad submit": submit_option_groups,
         "cli submit": submit_option_groups,
         "launchpad status": status_option_groups,
@@ -331,11 +312,6 @@ def _apply_help_examples() -> None:
     """Attach a shared examples block to implemented commands."""
 
     examples = {
-        cli: [
-            "launchpad config init",
-            "launchpad doctor",
-            "launchpad submit --dry-run .",
-        ],
         submit_command: [
             "launchpad submit --dry-run .",
             "launchpad submit --name wing-v2 --cpus 16",
@@ -385,23 +361,13 @@ def _examples_epilog(lines: list[str]) -> str:
     return f"Examples:\n{body}"
 
 
-def _root_help_footer(*, show_wordmark: bool) -> Text:
-    footer = Text()
-    if show_wordmark:
-        footer.append(build_launchpad_wordmark().plain)
-        footer.append("\n\n")
-    footer.append("Start here: ", style=f"bold {PALETTE['ice']}")
-    footer.append("launchpad config init", style=f"bold {PALETTE['cyan']}")
-    footer.append(" -> ", style=f"dim {PALETTE['mist']}")
-    footer.append("launchpad doctor", style=f"bold {PALETTE['cyan']}")
-    footer.append(" -> ", style=f"dim {PALETTE['mist']}")
-    footer.append("launchpad submit --dry-run .", style=f"bold {PALETTE['cyan']}")
-    return footer
+def _root_help_footer() -> Text:
+    return build_get_started_text(subdued=True)
 
 
 def _is_root_help_request(argv: list[str]) -> bool:
     if not argv:
-        return True
+        return False
     if "--help" not in argv and "-h" not in argv:
         return False
     return _first_command_token(argv) is None
@@ -416,14 +382,6 @@ def _first_command_token(argv: list[str]) -> str | None:
     return None
 
 
-def _show_wordmark(argv: list[str]) -> bool:
-    if _no_color_requested(argv):
-        return False
-    if "--json" in argv or "--quiet" in argv or "-q" in argv:
-        return False
-    return _stdout_supports_branding()
-
-
 def _no_color_requested(argv: list[str]) -> bool:
     if "--no-color" in argv or "NO_COLOR" in os.environ:
         return True
@@ -432,6 +390,37 @@ def _no_color_requested(argv: list[str]) -> bool:
 
 def _stdout_supports_branding() -> bool:
     return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+
+def _render_welcome_screen(options: GlobalOptions) -> None:
+    console = build_console(no_color=_console_should_disable_color(options))
+    console.print(
+        build_welcome_screen(
+            show_wordmark=_welcome_screen_supports_branding(options),
+            width=_detect_terminal_width(),
+        )
+    )
+
+
+def _welcome_screen_supports_branding(options: GlobalOptions) -> bool:
+    if options.quiet or options.json_output:
+        return False
+    if options.no_color or "NO_COLOR" in os.environ:
+        return False
+    return _stdout_supports_branding()
+
+
+def _console_should_disable_color(options: GlobalOptions) -> bool:
+    if options.no_color or "NO_COLOR" in os.environ:
+        return True
+    return not _stdout_supports_branding()
+
+
+def _detect_terminal_width() -> int | None:
+    try:
+        return shutil.get_terminal_size(fallback=(80, 24)).columns
+    except OSError:
+        return None
 
 
 _apply_help_groups()
