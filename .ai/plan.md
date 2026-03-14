@@ -1250,25 +1250,25 @@ design gate.
 - [ ] Walk each team member through first submit + download cycle
 - [ ] Collect rollout feedback and file follow-up issues
 
-### Phase 7: Terminal Experience (Week 12)
+### Phase 7: Terminal Experience (Completed on `main`)
 
-- [ ] Establish a shared CLI design system on top of the existing `click` +
+- [x] Establish a shared CLI design system on top of the existing `click` +
   `rich` + `rich-click` stack
-- [ ] Split the top-level UX into three surfaces: a branded no-argument welcome
+- [x] Split the top-level UX into three surfaces: a branded no-argument welcome
   screen, a dry root help reference, and focused command help surfaces
-- [ ] Redesign root help to stay intentionally restrained and easy to scan,
+- [x] Redesign root help to stay intentionally restrained and easy to scan,
   using no more than three command groups plus one merged options panel
-- [ ] Reserve the ASCII Launchpad wordmark and tagline for the welcome screen,
+- [x] Reserve the ASCII Launchpad wordmark and tagline for the welcome screen,
   onboarding, and selected success moments rather than `--help`
-- [ ] Upgrade `launchpad config init` and `launchpad doctor` into guided,
+- [x] Upgrade `launchpad config init` and `launchpad doctor` into guided,
   next-step-oriented operator experiences
-- [ ] Polish the primary workflows (`submit`, `status`, `download`) so dry
+- [x] Polish the primary workflows (`submit`, `status`, `download`) so dry
   runs, live status, confirmations, and success summaries carry most of the
   CLI personality
-- [ ] Bring the secondary operator commands (`logs`, `ls`, `cancel`,
+- [x] Bring the secondary operator commands (`logs`, `ls`, `cancel`,
   `cleanup`) into the same design system and update docs with current styled
   examples
-- [ ] Preserve `--json`, `--quiet`, `--no-color`, and non-TTY behavior so the
+- [x] Preserve `--json`, `--quiet`, `--no-color`, and non-TTY behavior so the
   new UX remains script-friendly and accessible
 
 **Design references for Phase 7 direction:**
@@ -1278,6 +1278,34 @@ design gate.
 - Charm Gum for tasteful choose/confirm/spinner/table primitives
 - Vercel CLI for discoverable onboarding and command affordances
 - uv for terse, confidence-building completion messaging
+
+### Phase 8: Task References & Solver-Aware Logs (Week 13)
+
+- [ ] Write a remote `launchpad-manifest.json` for each submitted job that
+  persists the solver key, the resolved solver-log catalog, and per-task
+  reference metadata
+- [ ] Make filename stem the default per-task display reference while always
+  generating a zero-padded alias such as `001`, `002`, and preserving raw
+  SLURM task IDs
+- [ ] Disambiguate duplicate stems deterministically and surface label, alias,
+  and numeric task ID together in multi-input submit/status UX
+- [ ] Add per-solver log configuration under `solvers.<solver>.logs`, with
+  Nastran defaulting to `solver=.f06` and `telemetry=.f04`
+- [ ] Make `launchpad logs` resolve solver-log paths from submitted solver
+  metadata instead of inferring only from `run_name`
+- [ ] Add `--log-kind KIND` while keeping `--solver-log` as the primary-log
+  alias and preserving `--err` as the SLURM stderr path
+- [ ] Expand task selectors across `logs`, `download --tasks`, and `cancel`
+  so users can address tasks by alias, stem, filename, relative path, or raw
+  task ID
+- [ ] Add a themed interactive picker for human multi-task `logs` invocations
+  when no task selector is supplied
+- [ ] Preserve backward compatibility for numeric task IDs, existing JSON
+  payloads, and legacy jobs that predate the manifest
+
+**Milestone:** Multi-file jobs remain one SLURM array submit, but every task is
+addressable by a human-friendly reference and every solver-log lookup is driven
+by explicit submitted metadata instead of naming heuristics.
 
 ---
 

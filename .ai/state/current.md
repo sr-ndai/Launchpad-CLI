@@ -9,45 +9,47 @@
 2026-03-14
 
 ## Active Phase
-Phase 7 — Terminal Experience
+Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-None.
+8.1 — Job manifest and task references.
 
 ## Queue Snapshot
-- pending: —
+- pending: 8.2, 8.3
 - ready: —
-- in-progress: —
+- in-progress: 8.1
 - needs-review: —
 - revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `phase/07-terminal-experience`
-- active task branch: `none`
-- last processed builder session: `2026-03-14-1124-builder-7.4.md`
+- coordination branch: `phase/08-task-references-and-solver-aware-logs`
+- active task branch: `task/8.1-job-manifest-and-task-refs`
+- last processed builder session: `none`
 
 ## What Changed Recently
-- Ingested Builder session `2026-03-14-1124-builder-7.4.md`, reviewed the
-  secondary command polish and docs refresh, and accepted task `7.4`.
-- Merged `task/7.4-secondary-command-polish-and-docs` into
-  `phase/07-terminal-experience`, carrying forward the three-surface CLI shell,
-  the polished secondary operator flows, and the Phase 7 docs refresh across
-  the implemented command set.
-- Opened PR `#7` from `phase/07-terminal-experience` to `main` and added the
-  final `.gitignore` update for `.vscode/`.
+- Refreshed local `main` after the Phase 7 merge landed and opened
+  `phase/08-task-references-and-solver-aware-logs` from the human-approved
+  baseline.
+- Added the detailed Phase 8 plan plus Builder prompts for tasks `8.1` to
+  `8.3`, centered on submitted task metadata, solver-aware log lookup, and the
+  interactive logs picker.
+- Assigned task `8.1` on `task/8.1-job-manifest-and-task-refs` so Builder work
+  can begin from a stable manifest-first contract.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human should review and merge PR `#7` from
-`phase/07-terminal-experience` into `main`.
+Builder should switch to `task/8.1-job-manifest-and-task-refs`, read the Phase
+8 task prompt, and implement the submitted job-manifest and task-reference
+groundwork.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1134-coordinator-open-phase-7-pr.md`
-4. `.ai/plans/07-terminal-experience.md`
+3. `.ai/tasks/prompts/8.1.md`
+4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
 5. `.ai/plan.md`
+6. `.ai/git-rules.md`
