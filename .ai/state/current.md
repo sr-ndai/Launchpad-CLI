@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-8.4 — Cluster access diagnostics and Windows SSH
+None.
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 8.4
+- in-progress: —
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,15 @@ Phase 8 — Task References and Solver-Aware Logs
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `task/8.4-cluster-access-diagnostics`
-- last processed builder session: `2026-03-14-1435-builder-8.3.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-14-1558-builder-8.4.md`
 
 ## What Changed Recently
+- Accepted task `8.4` after review and prompt verification, then merged
+  `task/8.4-cluster-access-diagnostics` into the phase branch.
+- Phase 8 now includes the doctor exec-environment fix, the Windows
+  `launchpad ssh` OpenSSH fallback, the related docs updates, and regression
+  coverage from `8.4`.
 - Reopened Phase 8 with follow-up task `8.4` after field debugging showed that
   `doctor` probes the wrong remote shell environment for binary checks and that
   `launchpad ssh` crashes on Windows during AsyncSSH stdio redirection.
@@ -47,14 +52,14 @@ Phase 8 — Task References and Solver-Aware Logs
 - None.
 
 ## Next Recommended Action
-Builder should switch to `task/8.4-cluster-access-diagnostics`, read the task
-prompt, and implement the doctor probe alignment plus the Windows
-`launchpad ssh` fallback.
+Human should review the updated PR `#9` from
+`phase/08-task-references-and-solver-aware-logs` to `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/8.4.md`
-4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/plan.md`
-6. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1602-coordinator-accept-8.4-update-pr.md`
+4. `.ai/reviews/8.4.md`
+5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+6. `.ai/plan.md`
+7. `.ai/git-rules.md`
