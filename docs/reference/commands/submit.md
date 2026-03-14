@@ -57,9 +57,12 @@ launchpad submit . --extra-files materials.txt --extra-files include.inc
 - `INPUT_DIR` defaults to the current directory.
 - Nastran is the only implemented solver workflow right now.
 - Asking for `ansys` results in a clear "not implemented" failure.
-- `--dry-run` is the safest way to confirm the manifest before uploading.
+- `--dry-run` now renders a submit preview with the manifest, payload summary,
+  generated script, and the next command to run.
 - `--transfer-mode multi-file` requires `--no-compress`.
 - Root `--json` is supported for dry runs and successful submissions.
+- successful submits highlight the job ID and point directly to the next status
+  and download commands
 
 ## Good Defaults
 

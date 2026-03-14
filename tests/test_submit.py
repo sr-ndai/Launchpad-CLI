@@ -41,11 +41,12 @@ def test_submit_dry_run_previews_detected_inputs(monkeypatch, tmp_path: Path) ->
     result = CliRunner().invoke(cli, ["submit", str(tmp_path), "--dry-run"])
 
     assert result.exit_code == 0
-    assert "Dry Run" in result.output
+    assert "Submit Preview" in result.output
     assert "wing.dat" in result.output
     assert "/shared/sergey/" in result.output
     assert "single-file" in result.output
     assert "Generated SLURM Script" in result.output
+    assert "If This Looks Right" in result.output
 
 
 def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_path: Path) -> None:
@@ -93,6 +94,7 @@ def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_pat
     assert "Submission Complete" in result.output
     assert "12345" in result.output
     assert "launchpad status 12345" in result.output
+    assert "launchpad download 12345" in result.output
 
 
 def test_submit_dry_run_emits_json_when_requested(monkeypatch, tmp_path: Path) -> None:
@@ -216,7 +218,7 @@ def test_submit_wraps_asyncssh_errors_as_click_exceptions(monkeypatch, tmp_path:
 
     assert result.exit_code == 1
     assert not isinstance(result.exception, asyncssh.Error)
-    assert "Error: boom" in result.output
+    assert "boom" in result.output
 
 
 def test_build_submit_plan_errors_when_no_supported_inputs(monkeypatch, tmp_path: Path) -> None:

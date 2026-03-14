@@ -36,10 +36,24 @@ Recommended install:
 
 ```powershell
 uv tool install git+https://github.com/sr-ndai/Launchpad-CLI.git
-launchpad --help
+launchpad
 ```
 
 If you prefer the short alias, `lp` works everywhere that `launchpad` works.
+
+Launchpad now has three help surfaces:
+
+- `launchpad` shows the human-facing welcome screen.
+- `launchpad --help` shows the compact root command reference.
+- `launchpad <command> --help` shows command-specific flags and examples.
+
+Human-readable command flows now follow the same Phase 7 terminal language
+across `submit`, `status`, `download`, `logs`, `ls`, `cancel`, `cleanup`, and
+`doctor`: summary panels up front, explicit empty-state copy, and concrete
+follow-up commands. Root `--json` still keeps the machine-readable payloads for
+the commands that support it.
+
+Use `--no-color` or `NO_COLOR=1` when you want plain output.
 
 Developer install from a source checkout:
 
@@ -92,5 +106,7 @@ Technical and contributor docs:
 - Examples in these docs assume Windows PowerShell.
 - The primary command spelling in the docs is `launchpad`; `lp` is just a
   shorter alias.
+- The Launchpad wordmark only appears on the bare `launchpad` welcome screen.
+  It is suppressed for `--json`, `--quiet`, `--no-color`, and non-TTY output.
 - The code is the source of truth. Where older plan text and current behavior
   disagree, these docs follow the current CLI.

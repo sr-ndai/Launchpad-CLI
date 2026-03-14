@@ -2,6 +2,14 @@
 
 This section documents the current Launchpad CLI surface.
 
+## Help Surfaces
+
+Launchpad intentionally splits operator guidance across three entry points:
+
+- `launchpad` opens the welcome screen
+- `launchpad --help` shows the compact root reference card
+- `launchpad <command> --help` shows flags and examples for one command
+
 ## Global Options
 
 These options are available on the root command:
@@ -16,6 +24,7 @@ These options are available on the root command:
 Notes:
 
 - `--json` only works when the selected command supports structured output
+- human-readable command flows use the shared Phase 7 panel layout
 - `launchpad` and `lp` are equivalent
 
 ## Commands

@@ -18,6 +18,9 @@ launchpad doctor
 - required remote binaries
 - remote writable path
 
+Human-readable output groups those checks into `Local Setup` and
+`Cluster Access`, then ends with the next useful command or fix.
+
 ## Common Uses
 
 Run the human-readable version:
@@ -36,5 +39,6 @@ launchpad --json doctor
 
 - a failing check exits non-zero
 - if local SSH config is incomplete, the remote checks are skipped
+- branding is reserved for the all-pass success path
 - this is the first command to run on a new machine and the first command to
   run when something breaks

@@ -82,6 +82,71 @@ def test_doctor_command_supports_json_output(monkeypatch: pytest.MonkeyPatch, tm
     ]
 
 
+def test_doctor_command_groups_results_and_points_to_next_steps(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Human-readable doctor output should group checks and suggest recovery steps."""
+
+    monkeypatch.setattr(
+        doctor_module,
+        "configure_logging",
+        lambda **kwargs: tmp_path / "launchpad.log",
+    )
+
+    async def fake_collect_diagnostics(*, cwd: Path, env: dict[str, str]) -> list[doctor_module.DiagnosticResult]:
+        return [
+            doctor_module.DiagnosticResult("python", "pass", "Python 3.12.13"),
+            doctor_module.DiagnosticResult(
+                "config",
+                "fail",
+                "Config resolved from defaults only; ssh.host is missing.",
+                "Run `launchpad config init`.",
+            ),
+            doctor_module.DiagnosticResult(
+                "ssh-connection",
+                "skip",
+                "Skipped remote checks because local SSH configuration is incomplete.",
+            ),
+        ]
+
+    monkeypatch.setattr(doctor_module, "_collect_diagnostics", fake_collect_diagnostics)
+
+    result = CliRunner().invoke(cli, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "Doctor Summary" in result.output
+    assert "Local Setup" in result.output
+    assert "Cluster Access" in result.output
+    assert "Config Resolution" in result.output
+    assert "Next Steps" in result.output
+    assert "launchpad config init" in result.output
+    assert "launchpad doctor" in result.output
+
+
+def test_doctor_render_results_shows_branded_success_when_all_checks_pass(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Doctor should reserve branding for the all-green success path."""
+
+    monkeypatch.setattr(doctor_module, "_stdout_supports_branding", lambda: True)
+    monkeypatch.setattr(doctor_module, "_detect_terminal_width", lambda: 120)
+    results = [
+        doctor_module.DiagnosticResult("python", "pass", "Python 3.12.13"),
+        doctor_module.DiagnosticResult("config", "pass", "Resolved config is complete."),
+        doctor_module.DiagnosticResult("ssh-key", "pass", "SSH key found."),
+        doctor_module.DiagnosticResult("shared-config", "pass", "Shared config readable."),
+        doctor_module.DiagnosticResult("ssh-connection", "pass", "Connected successfully."),
+        doctor_module.DiagnosticResult("remote-binaries", "pass", "All binaries resolved."),
+        doctor_module.DiagnosticResult("remote-root", "pass", "Remote root is writable."),
+    ]
+
+    doctor_module._render_results(results, no_color=False)
+    captured = capsys.readouterr()
+
+    assert "Doctor checks passed." in captured.out
+    assert "____ ___  ______" in captured.out
+
+
 def test_doctor_ssh_key_check_requires_existing_key(tmp_path: Path) -> None:
     """Local SSH key validation should fail for missing key files."""
 

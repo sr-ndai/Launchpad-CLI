@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import sys
 from pathlib import Path
 
 import click
+from rich.text import Text
 
 from launchpad_cli.core.config import (
     DEFAULT_CLUSTER_CONFIG_PATH,
@@ -17,6 +20,13 @@ from launchpad_cli.core.config import (
     write_toml_file,
 )
 from launchpad_cli.core.logging import configure_logging
+from launchpad_cli.display import (
+    build_console,
+    build_detail_panel,
+    build_launchpad_wordmark,
+    build_next_steps_panel,
+    build_summary_table,
+)
 
 from ._helpers import not_implemented
 
@@ -112,28 +122,42 @@ def init_command(
     resolved = resolve_config(cwd=Path.cwd(), env=os.environ)
     defaults = resolved.config.ssh
     user_config_path = default_user_config_path()
+    console = build_console(no_color=not _colorize_output(ctx))
 
     if user_config_path.exists() and not force:
         raise click.ClickException(
-            f"User config already exists at {user_config_path}. Re-run with --force to overwrite it."
+            "Launchpad user config already exists at "
+            f"{user_config_path}. Re-run `launchpad config init --force` to "
+            "overwrite it, or use `launchpad config show` to inspect the "
+            "current settings."
+        )
+
+    if not non_interactive:
+        _render_init_intro(
+            console,
+            user_config_path=user_config_path,
+            show_wordmark=_show_setup_branding(ctx),
         )
 
     resolved_host = _resolve_init_value(
         provided=host,
         fallback=defaults.host,
-        prompt_text="SSH host",
+        prompt_text="Cluster SSH host or IP",
+        option_hint="--host",
         non_interactive=non_interactive,
     )
     resolved_username = _resolve_init_value(
         provided=username,
         fallback=defaults.username,
-        prompt_text="SSH username",
+        prompt_text="Cluster username",
+        option_hint="--username",
         non_interactive=non_interactive,
     )
     resolved_key_path = _resolve_init_path(
         provided=key_path,
         fallback=defaults.key_path,
-        prompt_text="SSH key path",
+        prompt_text="Path to SSH private key",
+        option_hint="--key-path",
         non_interactive=non_interactive,
     )
     resolved_port = _resolve_init_port(
@@ -158,14 +182,13 @@ def init_command(
         payload["ssh"]["known_hosts_path"] = resolved_known_hosts
 
     write_toml_file(user_config_path, payload)
-    click.echo(f"Wrote user config to {user_config_path}")
-    if DEFAULT_CLUSTER_CONFIG_PATH.exists():
-        click.echo(f"Detected shared config at {DEFAULT_CLUSTER_CONFIG_PATH}")
-    else:
-        click.echo(
-            f"Shared config not found at {DEFAULT_CLUSTER_CONFIG_PATH}; Launchpad will rely on user, project, environment, and CLI overrides.",
-            err=True,
-        )
+    _render_init_success(
+        console,
+        user_config_path=user_config_path,
+        payload=payload,
+        shared_config_available=DEFAULT_CLUSTER_CONFIG_PATH.exists(),
+        show_wordmark=_show_setup_branding(ctx),
+    )
 
 
 @command.command("validate", short_help="Validate configuration inputs.")
@@ -196,17 +219,20 @@ def _resolve_init_value(
     provided: str | None,
     fallback: str | None,
     prompt_text: str,
+    option_hint: str,
     non_interactive: bool,
 ) -> str:
     if provided:
         return provided
-    if fallback:
+    if non_interactive and fallback:
         return fallback
     if non_interactive:
         raise click.ClickException(
-            f"Missing required value for {prompt_text.lower()}. Provide the flag explicitly in non-interactive mode."
+            f"Non-interactive setup still needs {prompt_text.lower()}. "
+            f"Re-run with `{option_hint}` or drop `--non-interactive` to "
+            "answer the prompt."
         )
-    return click.prompt(prompt_text, type=str)
+    return click.prompt(prompt_text, type=str, default=fallback, show_default=bool(fallback))
 
 
 def _resolve_init_path(
@@ -214,19 +240,24 @@ def _resolve_init_path(
     provided: Path | None,
     fallback: str | None,
     prompt_text: str,
+    option_hint: str,
     non_interactive: bool,
 ) -> str:
     if provided is not None:
         return str(provided)
-    if fallback:
+    if non_interactive and fallback:
         return fallback
     if non_interactive:
         raise click.ClickException(
-            f"Missing required value for {prompt_text.lower()}. Provide the flag explicitly in non-interactive mode."
+            f"Non-interactive setup still needs {prompt_text.lower()}. "
+            f"Re-run with `{option_hint}` or drop `--non-interactive` to "
+            "answer the prompt."
         )
     prompted_path = click.prompt(
         prompt_text,
         type=click.Path(path_type=Path, dir_okay=False),
+        default=fallback,
+        show_default=bool(fallback),
     )
     return str(prompted_path)
 
@@ -247,4 +278,83 @@ def _resolve_init_port(
         return provided
     if non_interactive:
         return fallback
-    return click.prompt("SSH port", default=fallback, type=int)
+    return click.prompt("SSH port", default=fallback, type=click.IntRange(1, 65535))
+
+
+def _render_init_intro(
+    console,
+    *,
+    user_config_path: Path,
+    show_wordmark: bool,
+) -> None:
+    if show_wordmark:
+        wordmark = build_launchpad_wordmark(width=_detect_terminal_width())
+        if wordmark is not None:
+            console.print(wordmark)
+    console.print(Text("Set up Launchpad for your cluster.", style="lp.brand.secondary"))
+    summary = build_summary_table()
+    summary.add_row("Config file", str(user_config_path))
+    summary.add_row("Prompts", "host, username, key path, port")
+    summary.add_row("Optional", "known_hosts_path stays inherited unless you pass a flag")
+    console.print(build_detail_panel(summary, title="Guided Setup"))
+
+
+def _render_init_success(
+    console,
+    *,
+    user_config_path: Path,
+    payload: dict[str, object],
+    shared_config_available: bool,
+    show_wordmark: bool,
+) -> None:
+    if show_wordmark:
+        wordmark = build_launchpad_wordmark(width=_detect_terminal_width())
+        if wordmark is not None:
+            console.print(wordmark)
+
+    ssh_payload = payload["ssh"]
+    assert isinstance(ssh_payload, dict)
+    summary = build_summary_table()
+    summary.add_row("User config", str(user_config_path))
+    summary.add_row("Host", str(ssh_payload["host"]))
+    summary.add_row("Port", str(ssh_payload["port"]))
+    summary.add_row("Username", str(ssh_payload["username"]))
+    summary.add_row("SSH key", str(ssh_payload["key_path"]))
+    summary.add_row(
+        "Known hosts",
+        str(ssh_payload.get("known_hosts_path") or "system default / inherited"),
+    )
+    summary.add_row(
+        "Shared config",
+        (
+            f"detected at {DEFAULT_CLUSTER_CONFIG_PATH}"
+            if shared_config_available
+            else "not detected; user, project, env, and CLI overrides still work"
+        ),
+    )
+    console.print(build_detail_panel(summary, title="Config Ready", tone="success"))
+    console.print(
+        build_next_steps_panel(
+            [
+                "launchpad config show",
+                "launchpad doctor",
+                "launchpad submit --dry-run .",
+            ]
+        )
+    )
+
+
+def _show_setup_branding(ctx: click.Context) -> bool:
+    options = getattr(ctx.find_root(), "obj", None)
+    if bool(getattr(options, "quiet", False)) or bool(getattr(options, "json_output", False)):
+        return False
+    if bool(getattr(options, "no_color", False)) or "NO_COLOR" in os.environ:
+        return False
+    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+
+def _detect_terminal_width() -> int | None:
+    try:
+        return shutil.get_terminal_size(fallback=(80, 24)).columns
+    except OSError:
+        return None

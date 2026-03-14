@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import shlex
 import sys
 from dataclasses import asdict, dataclass
@@ -13,11 +14,20 @@ from typing import Mapping
 
 import asyncssh
 import click
+from rich.table import Table
+from rich.text import Text
 
 from launchpad_cli.core.config import DEFAULT_CLUSTER_CONFIG_PATH, LaunchpadConfig, SSHConfig, resolve_config
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.ssh import ssh_session
-from launchpad_cli.display import build_console
+from launchpad_cli.display import (
+    build_badge,
+    build_console,
+    build_detail_panel,
+    build_launchpad_wordmark,
+    build_next_steps_panel,
+    build_summary_table,
+)
 
 
 @dataclass(slots=True)
@@ -76,8 +86,8 @@ async def _collect_diagnostics(
             DiagnosticResult(
                 name="config",
                 status="fail",
-                detail=f"Failed to resolve config: {exc}",
-                suggestion="Run `launchpad config show --docs` and fix invalid values before retrying.",
+                detail=f"Launchpad could not resolve the active configuration: {exc}",
+                suggestion="Run `launchpad config show --docs`, fix the invalid value, then retry `launchpad doctor`.",
             )
         )
         return results
@@ -334,15 +344,142 @@ def _render_results(results: list[DiagnosticResult], *, no_color: bool) -> None:
     """Render diagnostics in a human-readable form."""
 
     console = build_console(no_color=no_color)
-    styles = {"pass": "green", "fail": "red", "skip": "yellow"}
-    labels = {"pass": "PASS", "fail": "FAIL", "skip": "SKIP"}
+    passed = sum(result.status == "pass" for result in results)
+    failed = sum(result.status == "fail" for result in results)
+    skipped = sum(result.status == "skip" for result in results)
+    all_passed = failed == 0 and skipped == 0
 
+    if all_passed:
+        wordmark = build_launchpad_wordmark(width=_detect_terminal_width())
+        if wordmark is not None and not no_color and _stdout_supports_branding():
+            console.print(wordmark)
+        console.print(Text("Doctor checks passed. Launchpad is ready for the next run.", style="lp.brand.secondary"))
+
+    summary = build_summary_table()
+    summary.add_row("Checks", str(len(results)))
+    summary.add_row("Passed", str(passed))
+    summary.add_row("Failed", str(failed))
+    summary.add_row("Skipped", str(skipped))
+    summary.add_row("Overall", "ready" if all_passed else "needs attention")
+    console.print(
+        build_detail_panel(
+            summary,
+            title="Doctor Summary",
+            tone="success" if all_passed else ("danger" if failed else "warn"),
+        )
+    )
+
+    local_results, remote_results = _partition_results(results)
+    if local_results:
+        console.print(_build_diagnostic_panel("Local Setup", local_results))
+    if remote_results:
+        console.print(_build_diagnostic_panel("Cluster Access", remote_results))
+
+    console.print(build_next_steps_panel(_doctor_next_steps(results)))
+
+
+def _build_diagnostic_panel(title: str, results: list[DiagnosticResult]):
+    table = Table.grid(expand=True, padding=(0, 1))
+    table.add_column(width=10)
+    table.add_column()
     for result in results:
-        style = styles.get(result.status, "white")
-        label = labels.get(result.status, result.status.upper())
-        console.print(f"[{style}]{label}[/{style}] {result.detail}")
+        body = Text(_diagnostic_title(result.name), style="lp.label")
+        body.append(f"\n{result.detail}", style="lp.value")
         if result.suggestion:
-            console.print(f"  fix: {result.suggestion}")
+            body.append("\nNext: ", style="lp.brand.subtle")
+            body.append(result.suggestion, style="lp.brand.subtle")
+        table.add_row(_diagnostic_badge(result.status), body)
+    return build_detail_panel(table, title=title, tone=_panel_tone(results))
+
+
+def _diagnostic_badge(status: str) -> Text:
+    mapping = {
+        "pass": ("pass", "success"),
+        "fail": ("fail", "danger"),
+        "skip": ("skip", "warn"),
+    }
+    label, tone = mapping.get(status, (status, "neutral"))
+    return build_badge(label, tone=tone)
+
+
+def _diagnostic_title(name: str) -> str:
+    titles = {
+        "python": "Python Runtime",
+        "config": "Config Resolution",
+        "ssh-key": "SSH Key",
+        "shared-config": "Shared Config",
+        "ssh-connection": "SSH Connection",
+        "remote-binaries": "Remote Binaries",
+        "remote-root": "Remote Writable Root",
+    }
+    return titles.get(name, name.replace("-", " ").title())
+
+
+def _panel_tone(results: list[DiagnosticResult]) -> str:
+    if any(result.status == "fail" for result in results):
+        return "danger"
+    if any(result.status == "skip" for result in results):
+        return "warn"
+    return "success"
+
+
+def _partition_results(results: list[DiagnosticResult]) -> tuple[list[DiagnosticResult], list[DiagnosticResult]]:
+    local_names = {"python", "config", "ssh-key", "shared-config"}
+    local_results = [result for result in results if result.name in local_names]
+    remote_results = [result for result in results if result.name not in local_names]
+    return local_results, remote_results
+
+
+def _doctor_next_steps(results: list[DiagnosticResult]) -> list[str]:
+    statuses = {result.name: result.status for result in results}
+
+    if all(result.status == "pass" for result in results):
+        return [
+            "launchpad submit --dry-run .",
+            "launchpad submit .",
+            "launchpad status <JOB_ID>",
+        ]
+
+    if statuses.get("config") == "fail" or statuses.get("ssh-key") == "fail":
+        return [
+            "launchpad config init",
+            "launchpad config show",
+            "launchpad doctor",
+        ]
+
+    if statuses.get("ssh-connection") == "fail":
+        return [
+            "launchpad config show",
+            "Fix the SSH host, username, key, or network issue listed above.",
+            "launchpad doctor",
+        ]
+
+    if statuses.get("remote-binaries") == "fail" or statuses.get("remote-root") == "fail":
+        return [
+            "Fix the cluster-side prerequisite listed above.",
+            "launchpad doctor",
+            "launchpad submit --dry-run .",
+        ]
+
+    if any(result.status == "skip" for result in results):
+        return [
+            "Resolve the blocking local setup issue above.",
+            "launchpad config init",
+            "launchpad doctor",
+        ]
+
+    return ["launchpad doctor"]
+
+
+def _stdout_supports_branding() -> bool:
+    return "NO_COLOR" not in os.environ and hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+
+def _detect_terminal_width() -> int | None:
+    try:
+        return shutil.get_terminal_size(fallback=(80, 24)).columns
+    except OSError:
+        return None
 
 
 def _verbosity(ctx: click.Context) -> int:

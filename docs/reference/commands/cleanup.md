@@ -36,6 +36,10 @@ launchpad cleanup --older-than 30d --yes
 
 ## Behavior Notes
 
+- Launchpad shows numbered cleanup candidates for root scans and asks for one
+  final confirmation before deletion
+- human-readable mode renders empty states and cleanup summaries in the shared
+  panel layout
 - with `JOB_IDS`, Launchpad resolves the remote job directory from scheduler
   metadata
 - without `JOB_IDS`, Launchpad discovers cleanup candidates under your remote

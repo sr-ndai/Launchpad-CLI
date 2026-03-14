@@ -16,10 +16,11 @@ You need:
 
 ```powershell
 uv tool install git+https://github.com/sr-ndai/Launchpad-CLI.git
-launchpad --help
+launchpad
 ```
 
-If the second command prints the command list, Launchpad is installed.
+If the second command prints the welcome screen, Launchpad is installed. Use
+`launchpad --help` for the compact command reference.
 
 ## 2. Create Your User Config
 
@@ -28,6 +29,9 @@ Interactive setup:
 ```powershell
 launchpad config init
 ```
+
+Launchpad now walks you through the SSH host, username, key path, and port,
+then prints a summary plus the next commands to run.
 
 Non-interactive setup:
 
@@ -47,8 +51,9 @@ launchpad doctor
 What to expect:
 
 - `config show` prints the resolved settings Launchpad will use
-- `doctor` checks Python, config resolution, SSH key presence, SSH access,
-  remote binaries, and the remote writable path
+- `doctor` groups local setup and cluster-access checks into one guided report
+- failing or skipped checks include the next useful command or fix
+- a clean all-pass run ends with the ready-to-submit path
 
 If `doctor` fails, go to [Troubleshooting](troubleshooting.md).
 

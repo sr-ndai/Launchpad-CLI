@@ -82,6 +82,8 @@ def test_download_command_passes_documented_options_to_async_runner(
     assert captured["exclude_patterns"] == ("*.tmp",)
     assert captured["local_dir"] == tmp_path / "custom-output"
     assert captured["json_output"] is False
+    assert "Download Complete" in result.output
+    assert "launchpad status 12345" in result.output
 
 
 def test_download_command_emits_json_when_global_flag_is_set(

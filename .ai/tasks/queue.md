@@ -42,3 +42,7 @@
 | 5.1 | 5 | Transfer architecture and precedent review | done | — | task/5.1-transfer-benchmark-direction | — |
 | 5.2 | 5 | Hybrid transfer engine and CLI surfaces | done | 5.1 | task/5.2-transfer-implementation-hardening | — |
 | 5.3 | 5 | UX, logging, and fallback polish | done | 5.2 | task/5.3-cli-polish-and-logging | — |
+| 7.1 | 7 | Design system and branded help | done | — | task/7.1-design-system-and-help | — |
+| 7.2 | 7 | Guided setup and diagnostics UX | done | 7.1 | task/7.2-guided-setup-and-diagnostics | — |
+| 7.3 | 7 | Primary workflow terminal experience | done | 7.1 | task/7.3-primary-workflow-experience | — |
+| 7.4 | 7 | Secondary command polish and docs | done | 7.2, 7.3 | task/7.4-secondary-command-polish-and-docs | — |

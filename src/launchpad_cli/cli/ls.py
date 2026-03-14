@@ -14,14 +14,21 @@ from typing import Mapping
 import asyncssh
 import click
 from loguru import logger
-from rich.panel import Panel
+from rich.console import Group
 from rich.table import Table
+from rich.text import Text
 
 from launchpad_cli.core.config import resolve_config
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.remote_ops import RemotePathEntry, list_remote_directory
 from launchpad_cli.core.ssh import ssh_session
-from launchpad_cli.display import build_console
+from launchpad_cli.display import (
+    build_badge,
+    build_console,
+    build_detail_panel,
+    build_next_steps_panel,
+    build_summary_table,
+)
 
 GLOB_CHARS = "*?[]"
 
@@ -167,36 +174,62 @@ def _glob_base_path(pattern: str) -> str:
 def _build_listing_renderable(result: ListingResult):
     """Render either a short or long listing view."""
 
+    intro = Text()
+    intro.append("Remote directory view", style="lp.brand.secondary")
+    intro.append(
+        " for the configured cluster workspace.",
+        style="lp.brand.subtle",
+    )
+
+    renderables = [
+        build_detail_panel(
+            Group(intro, _build_listing_summary(result)),
+            title="Remote Listing",
+        )
+    ]
     if not result.entries:
-        return Panel(f"No remote entries matched `{result.requested_path}`.", title="Remote Listing", expand=False)
+        renderables.append(
+            build_detail_panel(
+                f"No remote entries matched `{result.requested_path}`.",
+                title="Nothing To Show",
+                tone="warn",
+            )
+        )
+        renderables.append(build_next_steps_panel(_listing_next_steps(result), title="Try Next"))
+        return Group(*renderables)
 
     if result.long_format:
-        return _build_long_listing(result)
-    return _build_short_listing(result)
+        listing = _build_long_listing(result)
+    else:
+        listing = _build_short_listing(result)
+    renderables.append(build_detail_panel(listing, title="Entries"))
+    renderables.append(build_next_steps_panel(_listing_next_steps(result), title="Next Commands"))
+    return Group(*renderables)
 
 
 def _build_short_listing(result: ListingResult) -> Table:
-    table = Table(title=f"Remote Listing: {result.requested_path}", show_header=False)
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Kind", no_wrap=True)
     table.add_column("Entry")
 
     for entry in result.entries:
         path_text = _display_path(entry, result=result)
         suffix = "/" if entry.is_dir else ""
-        table.add_row(f"{path_text}{suffix}")
+        table.add_row(_entry_badge(entry), f"{path_text}{suffix}")
 
     return table
 
 
 def _build_long_listing(result: ListingResult) -> Table:
-    table = Table(title=f"Remote Listing: {result.requested_path}", show_header=True, header_style="bold")
-    table.add_column("Type")
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Kind", no_wrap=True)
     table.add_column("Size", justify="right")
     table.add_column("Modified")
     table.add_column("Path")
 
     for entry in result.entries:
         table.add_row(
-            entry.entry_type,
+            _entry_badge(entry),
             _format_bytes(entry.size_bytes),
             _format_timestamp(entry.modified_epoch),
             _display_path(entry, result=result),
@@ -248,3 +281,32 @@ def _colorize_output(ctx: click.Context) -> bool:
     options = getattr(ctx.find_root(), "obj", None)
     no_color = bool(getattr(options, "no_color", False))
     return not no_color and "NO_COLOR" not in os.environ
+
+
+def _build_listing_summary(result: ListingResult):
+    summary = build_summary_table()
+    summary.add_row("Requested path", result.requested_path)
+    summary.add_row("Base path", result.base_path)
+    summary.add_row("Mode", "long listing" if result.long_format else "names only")
+    summary.add_row("Filter", result.pattern or "direct path")
+    summary.add_row("Entries", str(len(result.entries)))
+    return summary
+
+
+def _entry_badge(entry: RemotePathEntry):
+    if entry.is_dir:
+        return build_badge("dir", tone="info")
+    if entry.entry_type.lower() == "symlink":
+        return build_badge("link", tone="warn")
+    return build_badge("file", tone="neutral")
+
+
+def _listing_next_steps(result: ListingResult) -> list[str]:
+    commands: list[str] = []
+    if not result.long_format:
+        commands.append(f"launchpad ls -l {result.requested_path}")
+    if result.pattern is not None:
+        commands.append(f"launchpad ls {result.base_path}")
+    else:
+        commands.append(f"launchpad ls {result.requested_path}/*")
+    return commands

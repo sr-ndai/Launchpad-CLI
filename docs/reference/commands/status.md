@@ -44,6 +44,9 @@ launchpad status --all
 
 - with no `JOB_ID`, Launchpad shows the current user's jobs
 - with a `JOB_ID`, Launchpad shows detail for that job
-- `--watch` refreshes until you stop it
+- `--watch` refreshes until you stop it and keeps a live status header instead
+  of redrawing extra branding
 - root `--json` is supported for non-watch usage only
 - `launchpad status --watch` does not support `--json`
+- empty states now point you toward `--all` or `doctor` instead of stopping at
+  "no jobs found"

@@ -6,10 +6,10 @@
 > repair this snapshot before ending the session.
 
 ## Last Updated
-2026-03-13
+2026-03-14
 
 ## Active Phase
-Phase 5 — Performance & Polish
+Phase 7 — Terminal Experience
 
 ## Active Task
 None.
@@ -24,30 +24,30 @@ None.
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `phase/05-performance-polish`
+- coordination branch: `phase/07-terminal-experience`
 - active task branch: `none`
-- last processed builder session: `2026-03-13-2232-builder-5.3.md`
+- last processed builder session: `2026-03-14-1124-builder-7.4.md`
 
 ## What Changed Recently
-- Ingested Builder session `2026-03-13-2232-builder-5.3.md`, reviewed the
-  Phase 5 polish work, and accepted task `5.3`.
-- Merged `task/5.3-cli-polish-and-logging` into
-  `phase/05-performance-polish`, carrying forward typo suggestions, the
-  remaining JSON surfaces, submit/download polish, and README updates.
-- Phase 5 is now complete locally on `phase/05-performance-polish`, and PR
-  `#5` is open from `phase/05-performance-polish` to `main` for human review.
+- Ingested Builder session `2026-03-14-1124-builder-7.4.md`, reviewed the
+  secondary command polish and docs refresh, and accepted task `7.4`.
+- Merged `task/7.4-secondary-command-polish-and-docs` into
+  `phase/07-terminal-experience`, carrying forward the three-surface CLI shell,
+  the polished secondary operator flows, and the Phase 7 docs refresh across
+  the implemented command set.
+- Opened PR `#7` from `phase/07-terminal-experience` to `main` and added the
+  final `.gitignore` update for `.vscode/`.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human should review and merge PR `#5` from `phase/05-performance-polish` into
-`main`. After that, coordination can switch to refreshed `main` and open the
-next phase.
+Human should review and merge PR `#7` from
+`phase/07-terminal-experience` into `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-13-2255-coordinator-open-phase-5-pr.md`
-4. `.ai/plans/05-performance-polish.md`
+3. `.ai/sessions/2026-03-14-1134-coordinator-open-phase-7-pr.md`
+4. `.ai/plans/07-terminal-experience.md`
 5. `.ai/plan.md`
