@@ -250,7 +250,7 @@ def _apply_help_groups() -> None:
         },
         {
             "name": "Source",
-            "options": ["solver_log", "err", "help"],
+            "options": ["solver_log", "log_kind", "err", "help"],
         },
     ]
     download_option_groups = [
@@ -323,14 +323,15 @@ def _apply_help_examples() -> None:
         logs_command: [
             "launchpad logs 12345 0 --follow",
             "launchpad logs 12345 2 --solver-log --lines 100",
+            "launchpad logs 12345 001 --log-kind telemetry",
         ],
         download_command: [
             "launchpad download 12345 .\\results",
-            "launchpad download 12345 --tasks 0,2 --transfer-mode multi-file",
+            "launchpad download 12345 --tasks 001,wing.dat --transfer-mode multi-file",
         ],
         cancel_command: [
             "launchpad cancel 12345",
-            "launchpad cancel 12345 2 4 --yes",
+            "launchpad cancel 12345 002 wing.dat --yes",
         ],
         ls_command: [
             "launchpad ls",

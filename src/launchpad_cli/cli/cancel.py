@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import asyncssh
@@ -15,15 +15,27 @@ from loguru import logger
 from rich.console import Group
 from rich.text import Text
 
-from launchpad_cli.core.config import resolve_config
+from launchpad_cli.core.config import LaunchpadConfig, resolve_config
 from launchpad_cli.core.logging import configure_logging
+from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.core.task_selectors import load_job_manifest, resolve_task_ids
 from launchpad_cli.display import (
     build_console,
     build_detail_panel,
     build_next_steps_panel,
     build_summary_table,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class CancelJobRow:
+    """Minimal scheduler metadata needed to resolve task selectors."""
+
+    job_id: str
+    task_id: str | None
+    remote_job_dir: str | None = None
+    source: str = "squeue"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,13 +69,13 @@ class CancelResult:
     help="Cancel an entire SLURM job or selected array tasks.",
 )
 @click.argument("job_id")
-@click.argument("task_ids", nargs=-1)
+@click.argument("task_refs", nargs=-1)
 @click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
 @click.pass_context
 def command(
     ctx: click.Context,
     job_id: str,
-    task_ids: tuple[str, ...],
+    task_refs: tuple[str, ...],
     yes: bool,
 ) -> None:
     """Cancel the requested SLURM job or selected array tasks."""
@@ -75,23 +87,33 @@ def command(
     )
     console = build_console(stderr=json_output, no_color=not _colorize_output(ctx))
 
-    normalized_task_ids = _normalize_task_ids(task_ids)
-    if not yes and not json_output:
-        console.print(_build_cancel_preview(job_id, normalized_task_ids))
-    if not yes and not click.confirm(
-        _confirmation_text(job_id, normalized_task_ids),
-        default=True,
-        err=json_output,
-    ):
-        raise click.ClickException("Cancellation aborted.")
-
     try:
+        normalized_task_refs = _normalize_task_refs(task_refs)
+        resolved_task_ids = _resolve_local_task_ids(normalized_task_refs)
+        if resolved_task_ids is None:
+            resolved_task_ids = asyncio.run(
+                _resolve_cancel_task_ids(
+                    cwd=Path.cwd(),
+                    env=os.environ,
+                    job_id=job_id,
+                    task_refs=normalized_task_refs,
+                )
+            )
+        if not yes and not json_output:
+            console.print(_build_cancel_preview(job_id, resolved_task_ids))
+        if not yes and not click.confirm(
+            _confirmation_text(job_id, resolved_task_ids),
+            default=True,
+            err=json_output,
+        ):
+            raise click.ClickException("Cancellation aborted.")
+
         result = asyncio.run(
             _run_cancel(
                 cwd=Path.cwd(),
                 env=os.environ,
                 job_id=job_id,
-                task_ids=normalized_task_ids,
+                task_ids=resolved_task_ids,
             )
         )
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
@@ -128,14 +150,85 @@ async def _run_cancel(
     return CancelResult(job_id=job_id, task_ids=task_ids, target=target)
 
 
-def _normalize_task_ids(task_ids: tuple[str, ...]) -> tuple[str, ...]:
+async def _resolve_cancel_task_ids(
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    job_id: str,
+    task_refs: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Resolve manifest-backed task refs into concrete SLURM task IDs."""
+
+    if not task_refs:
+        return ()
+
+    resolved = resolve_config(cwd=cwd, env=env)
+
+    async with ssh_session(resolved.config.ssh) as conn:
+        rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
+        manifest = await load_job_manifest(conn, _remote_job_dir(rows))
+        return resolve_task_ids(
+            task_refs,
+            manifest=manifest,
+            available_task_ids=tuple(row.task_id for row in rows if row.task_id is not None),
+            job_id=job_id,
+        )
+
+
+async def _query_job_rows(
+    conn: asyncssh.SSHClientConnection,
+    config: LaunchpadConfig,
+    *,
+    job_id: str,
+) -> tuple[CancelJobRow, ...]:
+    """Fetch enough scheduler state to validate cancel selectors."""
+
+    active_jobs: tuple[JobStatus, ...] = ()
+    accounting_jobs: tuple[JobAccounting, ...] = ()
+    errors: list[str] = []
+
+    try:
+        active_jobs = await query_squeue(conn, config=config, job_id=job_id)
+    except RuntimeError as exc:
+        errors.append(str(exc))
+
+    try:
+        accounting_jobs = await query_sacct(conn, config=config, job_id=job_id, duplicates=True)
+    except RuntimeError as exc:
+        errors.append(str(exc))
+
+    merged: dict[str, CancelJobRow] = {
+        _row_identity(row): row for row in (_row_from_accounting(item) for item in accounting_jobs)
+    }
+    for active_job in active_jobs:
+        row = _row_from_status(active_job)
+        merged[_row_identity(row)] = _merge_rows(merged.get(_row_identity(row)), row)
+
+    if merged:
+        return tuple(sorted(merged.values(), key=_row_sort_key))
+    if errors:
+        raise RuntimeError(" ; ".join(errors))
+    raise RuntimeError(f"No SLURM job data found for {job_id}.")
+
+
+def _normalize_task_refs(task_refs: tuple[str, ...]) -> tuple[str, ...]:
     normalized: list[str] = []
-    for task_id in task_ids:
-        cleaned = task_id.strip()
-        if not cleaned or not cleaned.isdigit():
-            raise click.ClickException(f"Task IDs must be numeric. Received `{task_id}`.")
+    for task_ref in task_refs:
+        cleaned = task_ref.strip()
+        if not cleaned:
+            raise click.ClickException("Task references must not be empty.")
         normalized.append(cleaned)
-    return tuple(normalized)
+    return tuple(dict.fromkeys(normalized))
+
+
+def _resolve_local_task_ids(task_refs: tuple[str, ...]) -> tuple[str, ...] | None:
+    if not task_refs:
+        return ()
+    if not all(task_ref.isdigit() for task_ref in task_refs):
+        return None
+    if any(task_ref != str(int(task_ref)) for task_ref in task_refs):
+        return None
+    return tuple(task_refs)
 
 
 def _cancel_target(job_id: str, task_ids: tuple[str, ...]) -> str:
@@ -241,3 +334,55 @@ def _task_scope_label(task_ids: tuple[str, ...]) -> str:
     if not task_ids:
         return "whole job"
     return f"{len(task_ids)} selected task(s)"
+
+
+def _row_from_status(job: JobStatus) -> CancelJobRow:
+    return CancelJobRow(
+        job_id=job.array_job_id or job.job_id,
+        task_id=job.array_task_id,
+        remote_job_dir=job.remote_job_dir,
+        source="squeue",
+    )
+
+
+def _row_from_accounting(job: JobAccounting) -> CancelJobRow:
+    return CancelJobRow(
+        job_id=job.array_job_id or job.job_id,
+        task_id=job.array_task_id,
+        remote_job_dir=job.remote_job_dir,
+        source="sacct",
+    )
+
+
+def _merge_rows(existing: CancelJobRow | None, incoming: CancelJobRow) -> CancelJobRow:
+    if existing is None:
+        return incoming
+    return replace(
+        existing,
+        remote_job_dir=incoming.remote_job_dir or existing.remote_job_dir,
+        source=incoming.source,
+    )
+
+
+def _row_identity(row: CancelJobRow) -> str:
+    return f"{row.job_id}:{row.task_id or ''}"
+
+
+def _row_sort_key(row: CancelJobRow) -> tuple[int, int]:
+    return (_sort_int(row.job_id), _sort_int(row.task_id))
+
+
+def _sort_int(value: str | None) -> int:
+    if value is None:
+        return -1
+    try:
+        return int(value)
+    except ValueError:
+        return 10**9
+
+
+def _remote_job_dir(rows: tuple[CancelJobRow, ...]) -> str | None:
+    for row in rows:
+        if row.remote_job_dir:
+            return row.remote_job_dir
+    return None
