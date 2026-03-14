@@ -29,6 +29,8 @@ None.
 - last processed builder session: `2026-03-14-1617-builder-8.5.md`
 
 ## What Changed Recently
+- Opened PR `#10` from `phase/08-task-references-and-solver-aware-logs` to
+  `main` after confirming GitHub no longer had the older Phase 8 PR open.
 - Accepted task `8.5` after review and prompt verification, then merged
   `task/8.5-slurm-login-shell` into the phase branch.
 - Phase 8 now also includes the shared SLURM login-shell execution path, the
@@ -62,14 +64,14 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review the updated PR `#9` from
+Human should review PR `#10` from
 `phase/08-task-references-and-solver-aware-logs` to `main`, including the
 cluster-access follow-ups from tasks `8.4` and `8.5`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1619-coordinator-accept-8.5-update-pr.md`
+3. `.ai/sessions/2026-03-14-1623-coordinator-open-phase-8-pr-10.md`
 4. `.ai/reviews/8.5.md`
 5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
 6. `.ai/plan.md`
