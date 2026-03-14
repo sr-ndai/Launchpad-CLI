@@ -17,39 +17,41 @@ Phase 5 — Performance & Polish
 ## Queue Snapshot
 - pending: 5.3
 - ready: —
-- in-progress: 5.2
+- in-progress: —
 - needs-review: —
-- revision-needed: —
+- revision-needed: 5.2
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/05-performance-polish`
 - active task branch: `task/5.2-transfer-implementation-hardening`
-- last processed builder session: `2026-03-13-2110-builder-5.1.md`
+- last processed builder session: `2026-03-13-2133-builder-5.2.md`
 
 ## What Changed Recently
-- Ingested Builder session `2026-03-13-2110-builder-5.1.md`, reviewed task
-  `5.1`, and accepted the transfer architecture decision in
-  `docs/transfer-benchmark.md`.
-- Merged `task/5.1-transfer-benchmark-direction` into
-  `phase/05-performance-polish`, carrying forward the accepted review and the
-  new Phase 5 transfer design document.
-- Advanced the queue to task `5.2`, which now owns implementation of the
-  hybrid transfer engine and the submit/download transfer-mode surfaces.
+- Ingested Builder session `2026-03-13-2133-builder-5.2.md` and reviewed the
+  Phase 5 hybrid transfer implementation on
+  `task/5.2-transfer-implementation-hardening`.
+- Reran the task verification commands successfully, including the focused
+  transfer/submit/download/config suite and the full test suite.
+- Marked task `5.2` as `revision-needed` because striped submit assembly
+  currently re-streams uploaded parts through the local client instead of using
+  a true remote-side concatenate step.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
 Builder should switch to `task/5.2-transfer-implementation-hardening`, read
-`.ai/tasks/prompts/5.2.md`, and implement the accepted transfer architecture
-from `docs/transfer-benchmark.md`.
+`.ai/reviews/5.2.md`, and replace the client-mediated remote-part assembly in
+`src/launchpad_cli/core/transfer.py` with a true remote-side concatenate and
+verification flow.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
 3. `.ai/tasks/prompts/5.2.md`
-4. `docs/transfer-benchmark.md`
-5. `.ai/plans/05-performance-polish.md`
-6. `.ai/plan.md`
+4. `.ai/reviews/5.2.md`
+5. `.ai/sessions/2026-03-13-2133-builder-5.2.md`
+6. `docs/transfer-benchmark.md`
+7. `.ai/plans/05-performance-polish.md`

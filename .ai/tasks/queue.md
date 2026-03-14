@@ -40,5 +40,5 @@
 | 4.2 | 4 | Download command orchestration | done | 4.1 | task/4.2-download-command-orchestration | — |
 | 4.3 | 4 | Remote listing and cleanup commands | done | 4.2 | task/4.3-remote-ls-and-cleanup | — |
 | 5.1 | 5 | Transfer architecture and precedent review | done | — | task/5.1-transfer-benchmark-direction | — |
-| 5.2 | 5 | Hybrid transfer engine and CLI surfaces | in-progress | 5.1 | task/5.2-transfer-implementation-hardening | Builder |
+| 5.2 | 5 | Hybrid transfer engine and CLI surfaces | revision-needed | 5.1 | task/5.2-transfer-implementation-hardening | Builder |
 | 5.3 | 5 | UX, logging, and fallback polish | pending | 5.2 | task/5.3-cli-polish-and-logging | — |
