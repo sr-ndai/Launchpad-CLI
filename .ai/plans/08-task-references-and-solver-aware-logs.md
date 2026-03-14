@@ -74,3 +74,31 @@ lookup and an interactive multi-task log selection flow.
   only for the primary solver log; secondary log kinds should fail clearly.
 - The interactive picker should reuse the Phase 7 design language and the
   chosen lightweight dependency rather than introducing a full TUI framework.
+
+## Revision 2026-03-14
+
+### Follow-up Scope
+
+- Reopen Phase 8 with task `8.4` to fix field-reported cluster-access
+  regressions before PR `#9` is merged.
+- Make `launchpad doctor` probe remote binaries and writable paths through the
+  same remote exec environment Launchpad uses elsewhere, avoiding false
+  negatives caused by the current forced `sh -lc` wrapper.
+- Replace Windows `launchpad ssh` interactive shell startup with the local
+  OpenSSH client while continuing to honor existing `ssh.*` config values.
+- Add docs and regression coverage for the doctor probe alignment and the
+  Windows SSH behavior.
+
+### Task Breakdown Addendum
+
+| Task ID | Title | Why It Exists | Depends On |
+|---------|-------|---------------|------------|
+| 8.4 | Cluster access diagnostics and Windows SSH | Field debugging found that `doctor` can report missing remote binaries under the wrong shell environment and that `launchpad ssh` crashes on Windows when AsyncSSH redirects stdio through the Proactor loop. | 8.3 |
+
+### Additional Risks
+
+- If `doctor` validates an interactive shell instead of Launchpad's normal
+  remote exec model, it can hide real failures in submit/status/download flows.
+- Windows interactive SSH should not introduce a new config surface or depend
+  on unsupported console behavior; the local OpenSSH client must be treated as
+  the supported transport for that one command.

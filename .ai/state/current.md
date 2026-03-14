@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-None.
+8.4 — Cluster access diagnostics and Windows SSH
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: —
+- in-progress: 8.4
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,16 @@ None.
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `none`
+- active task branch: `task/8.4-cluster-access-diagnostics`
 - last processed builder session: `2026-03-14-1435-builder-8.3.md`
 
 ## What Changed Recently
+- Reopened Phase 8 with follow-up task `8.4` after field debugging showed that
+  `doctor` probes the wrong remote shell environment for binary checks and that
+  `launchpad ssh` crashes on Windows during AsyncSSH stdio redirection.
+- Assigned task `8.4` on branch `task/8.4-cluster-access-diagnostics` to fix
+  the doctor probe alignment, the Windows SSH path, and the related docs/tests
+  before PR `#9` is merged.
 - Accepted task `8.3` after the interactive picker, retry-by-name follow mode,
   and final docs/help updates passed review and prompt verification.
 - Merged `task/8.3-interactive-log-picker` into
@@ -41,14 +47,14 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review PR `#9` from
-`phase/08-task-references-and-solver-aware-logs` to `main`.
+Builder should switch to `task/8.4-cluster-access-diagnostics`, read the task
+prompt, and implement the doctor probe alignment plus the Windows
+`launchpad ssh` fallback.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1447-coordinator-open-phase-8-pr.md`
+3. `.ai/tasks/prompts/8.4.md`
 4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/reviews/8.3.md`
-6. `.ai/plan.md`
-7. `.ai/git-rules.md`
+5. `.ai/plan.md`
+6. `.ai/git-rules.md`
