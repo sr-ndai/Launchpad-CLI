@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shlex
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -17,7 +16,14 @@ from rich.text import Text
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
 from launchpad_cli.core.logging import configure_logging
-from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
+from launchpad_cli.core.slurm import (
+    JobAccounting,
+    JobStatus,
+    build_scancel_command,
+    query_sacct,
+    query_squeue,
+    run_slurm_command,
+)
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.task_selectors import load_job_manifest, resolve_task_ids
 from launchpad_cli.display import (
@@ -139,13 +145,13 @@ async def _run_cancel(
     async with ssh_session(resolved.config.ssh) as conn:
         target = _cancel_target(job_id, task_ids)
         logger.trace("Cancelling SLURM target {}", target)
-        command = _build_scancel_command(target)
-        result = await conn.run(command, check=False)
-        if result.exit_status != 0:
-            raise RuntimeError(
-                f"SLURM cancellation failed for {target}: "
-                f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
-            )
+        command = build_scancel_command(target=target)
+        await run_slurm_command(
+            conn,
+            command,
+            failure_prefix=f"SLURM cancellation failed for {target}",
+            executable="scancel",
+        )
 
     return CancelResult(job_id=job_id, task_ids=task_ids, target=target)
 
@@ -235,10 +241,6 @@ def _cancel_target(job_id: str, task_ids: tuple[str, ...]) -> str:
     if not task_ids:
         return job_id
     return ",".join(f"{job_id}_{task_id}" for task_id in task_ids)
-
-
-def _build_scancel_command(target: str) -> str:
-    return " ".join([shlex.quote("scancel"), shlex.quote(target)])
 
 
 def _confirmation_text(job_id: str, task_ids: tuple[str, ...]) -> str:

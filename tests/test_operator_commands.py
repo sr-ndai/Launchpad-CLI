@@ -193,12 +193,17 @@ def test_doctor_config_check_passes_for_complete_ssh_configuration() -> None:
 
 @pytest.mark.asyncio
 async def test_doctor_remote_binary_check_reports_missing_tools() -> None:
-    """Remote binary validation should fail when a configured tool is absent."""
+    """Doctor should probe scheduler binaries through the login shell only."""
+
+    commands: list[str] = []
 
     class FakeConnection:
         async def run(self, command: str, check: bool = False) -> SimpleNamespace:
-            if "command -v sbatch" in command:
+            commands.append(command)
+            if "candidate=sbatch" in command or "candidate=sacct" in command:
                 return SimpleNamespace(exit_status=0, stdout="/usr/bin/sbatch")
+            if "candidate=tar" in command:
+                return SimpleNamespace(exit_status=0, stdout="/usr/bin/tar")
             return SimpleNamespace(exit_status=1, stdout="")
 
     config = LaunchpadConfig(
@@ -208,4 +213,39 @@ async def test_doctor_remote_binary_check_reports_missing_tools() -> None:
     result = await doctor_module._remote_binaries_check(FakeConnection(), config)
 
     assert result.status == "fail"
+    assert "scheduler login-shell environment" in result.detail
     assert "squeue" in result.detail
+    assert "zstd" in result.detail
+    assert "head-node login-shell initialization" in (result.suggestion or "")
+    assert "non-interactive SSH exec sessions" in (result.suggestion or "")
+    scheduler_commands = [
+        command
+        for command in commands
+        if "candidate=sbatch" in command or "candidate=squeue" in command or "candidate=sacct" in command
+    ]
+    nonscheduler_commands = [command for command in commands if "candidate=tar" in command or "candidate=zstd" in command]
+    assert scheduler_commands
+    assert all("bash -lc" in command for command in scheduler_commands)
+    assert nonscheduler_commands
+    assert all("bash -lc" not in command for command in nonscheduler_commands)
+
+
+@pytest.mark.asyncio
+async def test_doctor_remote_root_check_uses_launchpad_exec_environment() -> None:
+    """Writable-root checks should use the same remote exec shell as Launchpad commands."""
+
+    commands: list[str] = []
+
+    class FakeConnection:
+        async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            commands.append(command)
+            return SimpleNamespace(exit_status=0, stdout="", stderr="")
+
+    config = LaunchpadConfig(
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+
+    result = await doctor_module._remote_root_check(FakeConnection(), config)
+
+    assert result.status == "pass"
+    assert commands == ["test -d /shared/sergey && test -w /shared/sergey"]

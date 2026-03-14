@@ -44,6 +44,54 @@ Fix the path in `~/.launchpad/config.toml` or rerun:
 launchpad config init --force
 ```
 
+## `doctor` says scheduler binaries are missing but manual SSH works
+
+Launchpad checks `sbatch`, `squeue`, and `sacct` through the same login-shell
+environment it uses for scheduler commands. If those commands work in a manual
+SSH session but fail in Launchpad, the head node is probably loading SLURM
+only during login-shell initialization.
+
+Fixes:
+
+- update the cluster's login-shell initialization so SLURM is on PATH
+- or set `remote_binaries.sbatch`, `remote_binaries.squeue`, and
+  `remote_binaries.sacct` to absolute paths in config
+
+Then rerun:
+
+```powershell
+launchpad doctor
+```
+
+## `doctor` says `tar` or `zstd` is missing but manual SSH works
+
+Launchpad still checks non-scheduler remote tools through its normal
+non-interactive SSH exec environment. That PATH can differ from a manual login
+shell.
+
+Fixes:
+
+- set `remote_binaries.tar` or `remote_binaries.zstd` to absolute paths
+- or update the non-interactive SSH exec PATH on the cluster
+
+Then rerun:
+
+```powershell
+launchpad doctor
+```
+
+## `status`, `logs`, or `cancel` says a SLURM command was not found
+
+Launchpad runs `squeue`, `sacct`, and `scancel` through the cluster login
+shell. If those commands are missing there, operator commands fail even when
+raw SSH connectivity works.
+
+Fixes:
+
+- update the head-node login-shell initialization so SLURM is loaded
+- or set `remote_binaries.squeue`, `remote_binaries.sacct`, and
+  `remote_binaries.sbatch` to absolute paths where applicable
+
 ## `submit` says no supported solver inputs were found
 
 Launchpad did not find a supported input file in the directory you submitted.
@@ -102,6 +150,25 @@ Safer fixes:
 - download only selected tasks with `--tasks`
 
 If you really want to continue anyway, use `--force`.
+
+## `launchpad ssh` fails on Windows before opening a shell
+
+On Windows, Launchpad uses the local OpenSSH client for interactive shell
+access instead of AsyncSSH stdio redirection.
+
+Check:
+
+- `ssh.exe` is installed
+- `ssh.exe` is on PATH
+- the resolved `ssh.host`, `ssh.username`, `ssh.key_path`, and optional
+  `ssh.known_hosts_path` values are correct
+
+If you are unsure about the config first, run:
+
+```powershell
+launchpad doctor
+launchpad config show
+```
 
 ## `ls` or `cleanup` cannot resolve a default remote path
 

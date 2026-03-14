@@ -26,9 +26,36 @@ None.
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
 - active task branch: `none`
-- last processed builder session: `2026-03-14-1435-builder-8.3.md`
+- last processed builder session: `2026-03-14-1617-builder-8.5.md`
 
 ## What Changed Recently
+- Merged the latest `main` into
+  `phase/08-task-references-and-solver-aware-logs` to resolve the PR conflict
+  set, keeping the Phase 8 follow-up state and the `8.5` scheduler-shell
+  implementation intact.
+- Opened PR `#10` from `phase/08-task-references-and-solver-aware-logs` to
+  `main` after confirming GitHub no longer had the older Phase 8 PR open.
+- Accepted task `8.5` after review and prompt verification, then merged
+  `task/8.5-slurm-login-shell` into the phase branch.
+- Phase 8 now also includes the shared SLURM login-shell execution path, the
+  aligned doctor scheduler-binary checks, and the related docs/tests from
+  `8.5`.
+- Reopened Phase 8 again with task `8.5` after field debugging showed that
+  `status` and `logs` still fail when `squeue` and `sacct` are only available
+  through the head node's login-shell initialization.
+- Committed the repository-level `.gitignore` follow-up to ignore `*.pem`
+  private-key files without mixing that housekeeping into product task work.
+- Accepted task `8.4` after review and prompt verification, then merged
+  `task/8.4-cluster-access-diagnostics` into the phase branch.
+- Phase 8 now includes the doctor exec-environment fix, the Windows
+  `launchpad ssh` OpenSSH fallback, the related docs updates, and regression
+  coverage from `8.4`.
+- Reopened Phase 8 with follow-up task `8.4` after field debugging showed that
+  `doctor` probes the wrong remote shell environment for binary checks and that
+  `launchpad ssh` crashes on Windows during AsyncSSH stdio redirection.
+- Assigned task `8.4` on branch `task/8.4-cluster-access-diagnostics` to fix
+  the doctor probe alignment, the Windows SSH path, and the related docs/tests
+  before PR `#9` is merged.
 - Accepted task `8.3` after the interactive picker, retry-by-name follow mode,
   and final docs/help updates passed review and prompt verification.
 - Merged `task/8.3-interactive-log-picker` into
@@ -41,14 +68,15 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review PR `#9` from
-`phase/08-task-references-and-solver-aware-logs` to `main`.
+Human should review PR `#10` from
+`phase/08-task-references-and-solver-aware-logs` to `main`, including the
+cluster-access follow-ups from tasks `8.4` and `8.5`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1447-coordinator-open-phase-8-pr.md`
-4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/reviews/8.3.md`
+3. `.ai/sessions/2026-03-14-1626-coordinator-resolve-phase-8-main-conflicts.md`
+4. `.ai/reviews/8.5.md`
+5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
 6. `.ai/plan.md`
 7. `.ai/git-rules.md`

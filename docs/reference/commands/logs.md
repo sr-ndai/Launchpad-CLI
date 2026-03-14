@@ -53,6 +53,8 @@ launchpad logs 12345 001 --log-kind telemetry
 
 - human-readable mode renders a summary panel, the selected tail output, and
   suggested follow-up commands
+- Launchpad resolves the scheduler metadata behind `logs` through the cluster
+  login shell because some head nodes expose `squeue` and `sacct` only there
 - `--follow` starts with a live-tail banner and then streams the remote log
   until you interrupt it; follow mode uses retry-by-name semantics so a newly
   created log file can appear shortly after you start following
