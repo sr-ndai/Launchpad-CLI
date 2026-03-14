@@ -29,6 +29,10 @@ None.
 - last processed builder session: `2026-03-14-1617-builder-8.5.md`
 
 ## What Changed Recently
+- Merged the latest `main` into
+  `phase/08-task-references-and-solver-aware-logs` to resolve the PR conflict
+  set, keeping the Phase 8 follow-up state and the `8.5` scheduler-shell
+  implementation intact.
 - Opened PR `#10` from `phase/08-task-references-and-solver-aware-logs` to
   `main` after confirming GitHub no longer had the older Phase 8 PR open.
 - Accepted task `8.5` after review and prompt verification, then merged
@@ -71,7 +75,7 @@ cluster-access follow-ups from tasks `8.4` and `8.5`.
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1623-coordinator-open-phase-8-pr-10.md`
+3. `.ai/sessions/2026-03-14-1626-coordinator-resolve-phase-8-main-conflicts.md`
 4. `.ai/reviews/8.5.md`
 5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
 6. `.ai/plan.md`
