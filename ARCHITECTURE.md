@@ -95,10 +95,9 @@ Rich dry-run and confirmation output, and the reusable SLURM status/accounting
 query layer needed by the Phase 3 monitoring commands. `launchpad status`,
 `launchpad logs`, and `launchpad cancel` now build on that layer with the full
 Phase 3 operator command surface. Phase 4 now includes the reusable download
-and remote-filesystem groundwork plus the command-level `launchpad download`
-flow for job lookup, disk checks, transfer orchestration, verification, and
-optional remote cleanup. Remote listing and cleanup command wiring are still
-pending.
+and remote-filesystem groundwork plus the command-level `launchpad download`,
+`launchpad ls`, and `launchpad cleanup` flows for job lookup, remote listing,
+transfer orchestration, verification, and guarded remote cleanup.
 
 ## Common Changes
 
@@ -113,6 +112,5 @@ pending.
 
 ## Current Limits
 
-- Remote listing and cleanup command orchestration are not active yet.
 - The ANSYS adapter remains intentionally unimplemented until the team defines
   the supported runtime contract.

@@ -152,7 +152,12 @@ The command-facing `launchpad download` flow now builds on those helpers for:
 - remote archive-or-raw transfer policy with checksum verification
 - optional remote cleanup after a successful download
 
-The `launchpad ls` and `launchpad cleanup` command workflows are still pending.
+Phase 4 now also includes:
+
+- `launchpad ls [REMOTE_PATH]` with default remote-root handling, path or glob
+  selection, and optional long-format output
+- `launchpad cleanup [JOB_IDS...]` with job-aware cleanup, age-filtered root
+  discovery, and confirmation before deletion
 
 ## Status Command
 
