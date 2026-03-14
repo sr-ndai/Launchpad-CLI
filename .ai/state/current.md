@@ -6,13 +6,13 @@
 > repair this snapshot before ending the session.
 
 ## Last Updated
-2026-03-12
+2026-03-13
 
 ## Active Phase
-Phase 3 — Monitoring & Logs
+Phase 4 — Download & Cleanup
 
 ## Active Task
-None — Phase 3 complete locally
+None — Phase 4 awaiting human PR review
 
 ## Queue Snapshot
 - pending: —
@@ -24,28 +24,29 @@ None — Phase 3 complete locally
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `phase/03-monitoring-logs`
+- coordination branch: `phase/04-download-cleanup`
 - active task branch: `none`
-- last processed builder session: `2026-03-13-0741-builder-3.3.md`
+- last processed builder session: `2026-03-13-1920-builder-4.3.md`
 
 ## What Changed Recently
-- Ingested Builder handoff `2026-03-13-0741-builder-3.3.md`, reviewed the
-  revision, and reran the task `3.3` prompt verification successfully.
-- Accepted and merged `task/3.3-logs-and-cancel` into
-  `phase/03-monitoring-logs`.
-- Pushed `phase/03-monitoring-logs` and opened PR `#3` to `main`:
-  `https://github.com/sr-ndai/Launchpad-CLI/pull/3`.
+- Ingested Builder handoff `2026-03-13-1920-builder-4.3.md`, reviewed task
+  `4.3`, and reran the prompt verification successfully.
+- Accepted `.ai/reviews/4.3.md` and merged
+  `task/4.3-remote-ls-and-cleanup` into `phase/04-download-cleanup`.
+- Marked task `4.3` done and updated Phase 4 to complete locally.
+- Pushed `phase/04-download-cleanup` and opened PR `#4` to `main`:
+  `https://github.com/sr-ndai/Launchpad-CLI/pull/4`.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human owner should review and merge PR `#3` from
-`phase/03-monitoring-logs` to `main`.
+Human owner should review and merge PR `#4` from
+`phase/04-download-cleanup` to `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-13-0750-coordinator-open-phase-3-pr.md`
-4. `.ai/sessions/2026-03-13-0745-coordinator-accept-3.3-complete-phase-3.md`
+3. `.ai/sessions/2026-03-13-1935-coordinator-open-phase-4-pr.md`
+4. `.ai/sessions/2026-03-13-1926-coordinator-accept-4.3-complete-phase-4.md`
 5. `.ai/plan.md`

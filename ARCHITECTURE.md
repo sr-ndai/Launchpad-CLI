@@ -19,7 +19,9 @@ contracts.
   path and dry-run preview, while `status.py` now provides the first Phase 3
   monitoring flow for current-user, specific-job, and watch-mode status
   queries. `logs.py` and `cancel.py` now cover the remaining Phase 3 operator
-  workflows for remote log access and SLURM cancellation.
+  workflows for remote log access and SLURM cancellation. `download.py` now
+  owns the Phase 4 result-retrieval orchestration on top of the shared
+  download primitives.
 - `src/launchpad_cli/display.py` centralizes Rich console creation plus the
   submit-focused dry-run/confirmation formatting and the status overview/detail
   renderables used by watch mode.
@@ -31,15 +33,19 @@ contracts.
 - `src/launchpad_cli/core/logging.py` will configure structured application
   logging.
 - `src/launchpad_cli/core/ssh.py`, `transfer.py`, and `compress.py` define the
-  transport and archive contracts used by submit/download flows.
+  transport and archive contracts used by submit/download flows. `compress.py`
+  now also exposes archive inspection, local checksum helpers, and remote
+  archive creation for Phase 4 retrieval workflows.
 - `src/launchpad_cli/core/slurm.py` now builds submit scripts, wraps remote
   `sbatch` submission, parses `squeue --json` / `sacct --json` payloads into
   typed records, and exposes reusable remote scheduler query wrappers for later
   monitoring commands.
 - `src/launchpad_cli/core/remote_ops.py` and `local_ops.py` hold filesystem
   helpers that should stay outside command modules. `remote_ops.py` now covers
-  remote job-directory setup, remote text writes, and archive extraction used by
-  submit flows.
+  remote job-directory setup, remote text writes, archive extraction, size
+  queries, listings, checksums, and deletions. `local_ops.py` now handles
+  download-destination resolution plus disk-space checks for Windows-first
+  retrieval flows.
 
 ### Solver Layer
 
@@ -59,8 +65,11 @@ contracts.
 - `tests/test_solver_adapters.py` covers solver discovery, command building,
   scratch environment setup, and the ANSYS stub behavior.
 - `tests/test_remote_ops.py` and `tests/test_slurm.py` cover the reusable
-  remote-submit and scheduler-query primitives with fakes instead of a live
-  cluster.
+  remote-submit, download-groundwork, and scheduler-query primitives with fakes
+  instead of a live cluster.
+- `tests/test_compress.py` and `tests/test_local_ops.py` cover archive
+  inspection, checksums, remote archive creation, and local download path/disk
+  semantics.
 - `tests/test_submit.py` covers the submit command’s dry-run preview and mocked
   execution wiring.
 - `tests/test_status.py` covers the status command's overview/json/watch
@@ -85,7 +94,10 @@ primitives, the first functional `launchpad submit` orchestration path with
 Rich dry-run and confirmation output, and the reusable SLURM status/accounting
 query layer needed by the Phase 3 monitoring commands. `launchpad status`,
 `launchpad logs`, and `launchpad cancel` now build on that layer with the full
-Phase 3 operator command surface.
+Phase 3 operator command surface. Phase 4 now includes the reusable download
+and remote-filesystem groundwork plus the command-level `launchpad download`,
+`launchpad ls`, and `launchpad cleanup` flows for job lookup, remote listing,
+transfer orchestration, verification, and guarded remote cleanup.
 
 ## Common Changes
 
@@ -100,6 +112,5 @@ Phase 3 operator command surface.
 
 ## Current Limits
 
-- Download and cleanup command orchestration are not active yet.
 - The ANSYS adapter remains intentionally unimplemented until the team defines
   the supported runtime contract.

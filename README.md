@@ -26,8 +26,10 @@ the first functional `launchpad submit` command, and the reusable Phase 3
 SLURM status/accounting query layer are present. `launchpad status` now
 supports current-user and specific-job queries plus `--watch` polling.
 `launchpad logs` and `launchpad cancel` now provide the remaining Phase 3
-operator workflows for remote log inspection and job cancellation. Download and
-cleanup workflows remain future work.
+operator workflows for remote log inspection and job cancellation. Phase 4 now
+adds the underlying local disk-space, archive inspection, remote archive, and
+remote filesystem primitives needed by the upcoming download and cleanup
+commands, but those command orchestrations remain future work.
 
 ## Quickstart
 
@@ -90,7 +92,7 @@ remote writable root path when a cluster connection is available.
 ```text
 src/launchpad_cli/
   cli/        Root Click application and command modules
-  core/       Config, logging, SSH, transfer, compression, and SLURM services
+  core/       Config, logging, SSH, transfer, archive, and remote filesystem services
   solvers/    Solver adapters and shared protocol definitions
 tests/        CLI smoke tests and scaffold verification
 ```
@@ -133,6 +135,29 @@ Phase 3 now extends the SLURM core layer with:
 
 The command-facing `launchpad status`, `launchpad logs`, and `launchpad cancel`
 workflows now build on that scheduler data contract.
+
+## Download Groundwork
+
+Phase 4 extends the reusable core layer with:
+
+- local download-destination resolution and disk-space inspection helpers
+- archive inspection and SHA-256 helpers for later integrity checks
+- remote archive creation, byte-size measurement, filesystem listing, and
+  deletion primitives
+
+The command-facing `launchpad download` flow now builds on those helpers for:
+
+- job lookup and task-aware result selection from SLURM metadata
+- local destination resolution plus free-space checks before transfer
+- remote archive-or-raw transfer policy with checksum verification
+- optional remote cleanup after a successful download
+
+Phase 4 now also includes:
+
+- `launchpad ls [REMOTE_PATH]` with default remote-root handling, path or glob
+  selection, and optional long-format output
+- `launchpad cleanup [JOB_IDS...]` with job-aware cleanup, age-filtered root
+  discovery, and confirmation before deletion
 
 ## Status Command
 
