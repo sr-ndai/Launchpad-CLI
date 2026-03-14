@@ -41,4 +41,4 @@
 | 4.3 | 4 | Remote listing and cleanup commands | done | 4.2 | task/4.3-remote-ls-and-cleanup | — |
 | 5.1 | 5 | Transfer architecture and precedent review | done | — | task/5.1-transfer-benchmark-direction | — |
 | 5.2 | 5 | Hybrid transfer engine and CLI surfaces | done | 5.1 | task/5.2-transfer-implementation-hardening | — |
-| 5.3 | 5 | UX, logging, and fallback polish | in-progress | 5.2 | task/5.3-cli-polish-and-logging | Builder |
+| 5.3 | 5 | UX, logging, and fallback polish | done | 5.2 | task/5.3-cli-polish-and-logging | — |
