@@ -8,7 +8,7 @@ import secrets
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
 import asyncssh
@@ -25,7 +25,11 @@ from launchpad_cli.core.remote_ops import (
 )
 from launchpad_cli.core.slurm import SubmitRequest, SubmittedJob, build_submit_script, submit_job
 from launchpad_cli.core.ssh import ssh_session
-from launchpad_cli.core.transfer import upload
+from launchpad_cli.core.transfer import (
+    UploadItem,
+    striped_upload,
+    upload_many,
+)
 from launchpad_cli.display import build_console, render_submit_confirmation, render_submit_dry_run
 from launchpad_cli.solvers import AnsysAdapter, DiscoveredInput, NastranAdapter, SolverAdapter, SubmitOverrides
 
@@ -43,17 +47,43 @@ class SubmitPlan:
     package_files: tuple[Path, ...]
     manifest_entries: tuple[str, ...]
     archive_root_name: str
-    archive_name: str
+    archive_name: str | None
+    transfer_mode: str
+    requested_streams: int
     remote_layout: RemoteJobLayout
     submit_request: SubmitRequest
+
+    @property
+    def remote_payload_path(self) -> str:
+        """Return the primary remote transfer target for user-facing summaries."""
+
+        if self.transfer_mode == "single-file":
+            return self.remote_layout.archive_path
+        return str(PurePosixPath(self.remote_layout.job_dir) / self.archive_root_name)
+
+    @property
+    def payload_label(self) -> str:
+        """Return the local payload label shown in dry-run and confirmation output."""
+
+        if self.archive_name is not None:
+            return self.archive_name
+        return f"{self.archive_root_name}/"
+
+
+@dataclass(frozen=True, slots=True)
+class SubmitExecution:
+    """Structured result from a completed submit transfer plus `sbatch` call."""
+
+    submitted_job: SubmittedJob
+    effective_streams: int
 
 
 @click.command(
     name="submit",
     short_help="Package inputs and submit a SLURM job.",
     help=(
-        "Discover solver inputs, package them into a `.tar.zst` archive, upload "
-        "the payload, generate a remote SLURM script, and submit the job."
+        "Discover solver inputs, stage the payload, transfer it with the selected "
+        "Phase 5 transfer mode, generate a remote SLURM script, and submit the job."
     ),
 )
 @click.argument(
@@ -73,9 +103,24 @@ class SubmitPlan:
 @click.option("--time", "time_limit", help="Override the SLURM wall time.")
 @click.option("--begin", help="Schedule the SLURM job to begin later.")
 @click.option(
+    "--transfer-mode",
+    type=click.Choice(["auto", "single-file", "multi-file"], case_sensitive=False),
+    help="Transfer mode. Defaults to auto selection from the accepted Phase 5 rules.",
+)
+@click.option(
+    "--streams",
+    type=click.IntRange(1),
+    help="Transfer stream budget. Defaults to the resolved `transfer.parallel_streams` config value.",
+)
+@click.option(
     "--compression-level",
     type=click.IntRange(1, 19),
     help="Override the zstd compression level for the packaged archive.",
+)
+@click.option(
+    "--no-compress",
+    is_flag=True,
+    help="Skip archive creation and transfer the selected files directly.",
 )
 @click.option(
     "--extra-files",
@@ -91,7 +136,7 @@ class SubmitPlan:
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Preview the resolved manifest, remote paths, and generated SLURM script without executing.",
+    help="Preview the resolved manifest, transfer plan, remote paths, and generated SLURM script without executing.",
 )
 @click.pass_context
 def command(
@@ -104,12 +149,15 @@ def command(
     partition: str | None,
     time_limit: str | None,
     begin: str | None,
+    transfer_mode: str | None,
+    streams: int | None,
     compression_level: int | None,
+    no_compress: bool,
     extra_files: tuple[Path, ...],
     include_all: bool,
     dry_run: bool,
 ) -> None:
-    """Build the first functional Nastran submit workflow."""
+    """Build the Phase 5 submit workflow."""
 
     configure_logging(
         verbosity=_verbosity(ctx),
@@ -125,7 +173,10 @@ def command(
         partition=partition,
         time_limit=time_limit,
         begin=begin,
+        transfer_mode=transfer_mode.lower() if transfer_mode else None,
+        streams=streams,
         compression_level=compression_level,
+        no_compress=no_compress,
         extra_files=extra_files,
         include_all=include_all,
     )
@@ -146,7 +197,9 @@ def command(
             primary_inputs=plan.primary_inputs,
             package_files=plan.package_files,
             remote_job_dir=plan.remote_layout.job_dir,
-            archive_name=plan.archive_name,
+            payload_label=plan.payload_label,
+            transfer_mode=plan.transfer_mode,
+            requested_streams=plan.requested_streams,
             partition=plan.submit_request.partition
             or plan.resolved_config.config.submit.partition
             or plan.resolved_config.config.cluster.default_partition,
@@ -157,48 +210,75 @@ def command(
         return
 
     try:
-        submitted_job = asyncio.run(_execute_submit(plan))
+        execution = asyncio.run(_execute_submit(plan))
     except (asyncssh.Error, RuntimeError, OSError, ValueError, NotImplementedError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     render_submit_confirmation(
         console,
         run_name=plan.run_name,
-        job_id=submitted_job.job_id,
+        job_id=execution.submitted_job.job_id,
         remote_job_dir=plan.remote_layout.job_dir,
-        archive_path=plan.remote_layout.archive_path,
+        payload_label=plan.payload_label,
+        remote_payload_path=plan.remote_payload_path,
+        transfer_mode=plan.transfer_mode,
+        requested_streams=plan.requested_streams,
+        effective_streams=execution.effective_streams,
     )
 
 
-async def _execute_submit(plan: SubmitPlan) -> SubmittedJob:
+async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
     """Execute the end-to-end submit flow once planning is complete."""
 
-    compression_level = plan.resolved_config.config.transfer.compression_level
+    config = plan.resolved_config.config
 
     with TemporaryDirectory(prefix="launchpad-submit-") as temp_dir:
         temp_root = Path(temp_dir)
-        archive_path = _materialize_archive(plan, temp_root, compression_level=compression_level)
 
-        async with ssh_session(plan.resolved_config.config.ssh) as conn:
+        async with ssh_session(config.ssh) as conn:
             await prepare_remote_job_directory(conn, plan.remote_layout)
-            await upload(
-                conn,
-                archive_path,
-                plan.remote_layout.archive_path,
-                resume=plan.resolved_config.config.transfer.resume_enabled,
-            )
-            await extract_remote_archive(
-                conn,
-                archive_path=plan.remote_layout.archive_path,
-                destination_dir=plan.remote_layout.job_dir,
-                tar_binary=plan.resolved_config.config.remote_binaries.tar,
-                zstd_binary=plan.resolved_config.config.remote_binaries.zstd,
-            )
-            return await submit_job(
+
+            if plan.transfer_mode == "single-file":
+                archive_path = _materialize_archive(
+                    plan,
+                    temp_root,
+                    compression_level=config.transfer.compression_level,
+                )
+                transfer_execution = await striped_upload(
+                    conn,
+                    config.ssh,
+                    archive_path,
+                    plan.remote_layout.archive_path,
+                    streams=plan.requested_streams,
+                    chunk_size=config.transfer.chunk_size_bytes,
+                    resume=config.transfer.resume_enabled,
+                )
+                await extract_remote_archive(
+                    conn,
+                    archive_path=plan.remote_layout.archive_path,
+                    destination_dir=plan.remote_layout.job_dir,
+                    tar_binary=config.remote_binaries.tar,
+                    zstd_binary=config.remote_binaries.zstd,
+                )
+            else:
+                payload_root = _materialize_payload_root(plan, temp_root)
+                upload_items = _build_multi_file_upload_items(plan, payload_root)
+                transfer_execution = await upload_many(
+                    config.ssh,
+                    upload_items,
+                    streams=plan.requested_streams,
+                    resume=config.transfer.resume_enabled,
+                )
+
+            submitted_job = await submit_job(
                 conn,
                 solver=plan.solver_adapter,
                 request=plan.submit_request,
-                config=plan.resolved_config.config,
+                config=config,
+            )
+            return SubmitExecution(
+                submitted_job=submitted_job,
+                effective_streams=transfer_execution.effective_streams,
             )
 
 
@@ -212,11 +292,14 @@ def _build_submit_plan(
     partition: str | None,
     time_limit: str | None,
     begin: str | None,
+    transfer_mode: str | None,
+    streams: int | None,
     compression_level: int | None,
+    no_compress: bool,
     extra_files: tuple[Path, ...],
     include_all: bool,
 ) -> SubmitPlan:
-    """Resolve config, inputs, packaging, and remote paths for submit work."""
+    """Resolve config, inputs, packaging, transfer mode, and remote paths for submit work."""
 
     resolved_input_dir = input_dir.expanduser().resolve()
     if not resolved_input_dir.exists():
@@ -231,8 +314,14 @@ def _build_submit_plan(
             "submit.solver": explicit_solver,
             "submit.cpus": cpus,
             "submit.partition": partition,
+            "transfer.parallel_streams": streams,
             "transfer.compression_level": compression_level,
         },
+    )
+
+    resolved_transfer_mode = _resolve_submit_transfer_mode(
+        requested_mode=transfer_mode,
+        no_compress=no_compress,
     )
 
     solver_key, solver_adapter = _resolve_solver(
@@ -295,10 +384,29 @@ def _build_submit_plan(
         package_files=package_files,
         manifest_entries=manifest_entries,
         archive_root_name=archive_root_name,
-        archive_name=f"{resolved_run_name}.tar.zst",
+        archive_name=f"{resolved_run_name}.tar.zst" if resolved_transfer_mode == "single-file" else None,
+        transfer_mode=resolved_transfer_mode,
+        requested_streams=resolved_config.config.transfer.parallel_streams,
         remote_layout=remote_layout,
         submit_request=submit_request,
     )
+
+
+def _resolve_submit_transfer_mode(*, requested_mode: str | None, no_compress: bool) -> str:
+    """Resolve the Phase 5 submit transfer mode and validate explicit overrides."""
+
+    mode = requested_mode or "auto"
+    if mode == "auto":
+        return "multi-file" if no_compress else "single-file"
+    if mode == "single-file" and no_compress:
+        raise click.ClickException(
+            "`--transfer-mode single-file` requires archive creation and cannot be combined with `--no-compress`."
+        )
+    if mode == "multi-file" and not no_compress:
+        raise click.ClickException(
+            "`--transfer-mode multi-file` requires `--no-compress` for the Phase 5 submit workflow."
+        )
+    return mode
 
 
 def _resolve_solver(
@@ -330,7 +438,7 @@ def _collect_package_files(
     extra_files: tuple[Path, ...],
     include_all: bool,
 ) -> list[Path]:
-    """Resolve the local files which should be packaged into the archive."""
+    """Resolve the local files which should be staged for transfer."""
 
     selected: list[Path] = []
     seen: set[Path] = set()
@@ -354,7 +462,7 @@ def _collect_package_files(
             resolved.relative_to(input_dir)
         except ValueError as exc:
             raise click.ClickException(
-                f"Extra files must live under the input directory for this Phase 2 workflow: {resolved}"
+                f"Extra files must live under the input directory for this submit workflow: {resolved}"
             ) from exc
         if resolved not in seen:
             seen.add(resolved)
@@ -381,8 +489,8 @@ def _build_remote_layout(config: LaunchpadConfig, *, run_name: str) -> RemoteJob
     )
 
 
-def _materialize_archive(plan: SubmitPlan, temp_root: Path, *, compression_level: int) -> Path:
-    """Stage the selected package files and compress them into a local archive."""
+def _materialize_payload_root(plan: SubmitPlan, temp_root: Path) -> Path:
+    """Stage the selected package files into a deterministic local payload tree."""
 
     payload_root = temp_root / plan.archive_root_name
     payload_root.mkdir(parents=True, exist_ok=True)
@@ -393,8 +501,28 @@ def _materialize_archive(plan: SubmitPlan, temp_root: Path, *, compression_level
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
 
-    archive_path = temp_root / plan.archive_name
+    return payload_root
+
+
+def _materialize_archive(plan: SubmitPlan, temp_root: Path, *, compression_level: int) -> Path:
+    """Stage the selected package files and compress them into a local archive."""
+
+    payload_root = _materialize_payload_root(plan, temp_root)
+    archive_path = temp_root / (plan.archive_name or f"{plan.run_name}.tar.zst")
     return compress_path(payload_root, archive_path, level=compression_level)
+
+
+def _build_multi_file_upload_items(plan: SubmitPlan, payload_root: Path) -> tuple[UploadItem, ...]:
+    """Build remote upload targets for the Phase 5 multi-file submit path."""
+
+    upload_items: list[UploadItem] = []
+    for source in sorted(payload_root.rglob("*")):
+        if not source.is_file():
+            continue
+        relative = source.relative_to(payload_root)
+        remote_path = str(PurePosixPath(plan.remote_layout.job_dir) / plan.archive_root_name / relative.as_posix())
+        upload_items.append(UploadItem(local_path=source, remote_path=remote_path))
+    return tuple(upload_items)
 
 
 def _generate_run_name(solver_key: str, *, name_prefix: str | None) -> str:

@@ -27,7 +27,9 @@ def render_submit_dry_run(
     primary_inputs: Sequence[DiscoveredInput],
     package_files: Sequence[Path],
     remote_job_dir: str,
-    archive_name: str,
+    payload_label: str,
+    transfer_mode: str,
+    requested_streams: int,
     partition: str,
     time_limit: str,
     begin: str | None,
@@ -39,7 +41,9 @@ def render_submit_dry_run(
     summary.add_row("Run name", run_name)
     summary.add_row("Solver", solver_name)
     summary.add_row("Input dir", str(input_dir))
-    summary.add_row("Archive", archive_name)
+    summary.add_row("Transfer mode", transfer_mode)
+    summary.add_row("Streams", str(requested_streams))
+    summary.add_row("Payload", payload_label)
     summary.add_row("Remote job dir", remote_job_dir)
     summary.add_row("Partition", partition)
     summary.add_row("Time", time_limit)
@@ -68,7 +72,11 @@ def render_submit_confirmation(
     run_name: str,
     job_id: str,
     remote_job_dir: str,
-    archive_path: str,
+    payload_label: str,
+    remote_payload_path: str,
+    transfer_mode: str,
+    requested_streams: int,
+    effective_streams: int,
 ) -> None:
     """Render the Rich submit confirmation panel."""
 
@@ -76,7 +84,10 @@ def render_submit_confirmation(
     summary.add_row("Run name", run_name)
     summary.add_row("Job ID", job_id)
     summary.add_row("Remote job dir", remote_job_dir)
-    summary.add_row("Remote archive", archive_path)
+    summary.add_row("Transfer mode", transfer_mode)
+    summary.add_row("Streams", f"requested {requested_streams}, effective {effective_streams}")
+    summary.add_row("Payload", payload_label)
+    summary.add_row("Remote payload", remote_payload_path)
     summary.add_row("Monitor", f"launchpad status {job_id}")
 
     console.print(Panel(summary, title="Submission Complete", expand=False))

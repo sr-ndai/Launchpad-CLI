@@ -36,7 +36,11 @@ from launchpad_cli.core.remote_ops import (
 )
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
-from launchpad_cli.core.transfer import download as transfer_download
+from launchpad_cli.core.transfer import (
+    DownloadItem,
+    download_many,
+    striped_download,
+)
 from launchpad_cli.display import build_console
 
 TERMINAL_STATES = {
@@ -87,12 +91,14 @@ class DownloadPlan:
     source_roots: tuple[RemoteSource, ...]
     raw_size_bytes: int
     transfer_mode: str
+    requested_streams: int
     transfer_size_estimate_bytes: int
     cleanup: bool
     force: bool
     exclude_patterns: tuple[str, ...]
     compression_level: int
     verify_checksums: bool
+    effective_streams: int | None = None
     local_archive_path: Path | None = None
     remote_archive_path: str | None = None
 
@@ -106,7 +112,7 @@ class DownloadPlan:
     def required_local_bytes(self) -> int:
         """Return the local-space requirement for this transfer mode."""
 
-        if self.transfer_mode == "archive":
+        if self.transfer_mode == "single-file":
             return self.raw_size_bytes + self.transfer_size_estimate_bytes
         return self.raw_size_bytes
 
@@ -127,6 +133,8 @@ class DownloadResult:
     destination_dir: Path
     remote_job_dir: str
     transfer_mode: str
+    requested_streams: int
+    effective_streams: int
     downloaded_bytes: int
     file_count: int
     cleaned_up: bool
@@ -142,6 +150,8 @@ class DownloadResult:
             "destination_dir": str(self.destination_dir),
             "remote_job_dir": self.remote_job_dir,
             "transfer_mode": self.transfer_mode,
+            "requested_streams": self.requested_streams,
+            "effective_streams": self.effective_streams,
             "downloaded_bytes": self.downloaded_bytes,
             "file_count": self.file_count,
             "cleaned_up": self.cleaned_up,
@@ -185,11 +195,14 @@ class DownloadResult:
     help="Include task scratch directories alongside task result folders.",
 )
 @click.option(
+    "--transfer-mode",
+    type=click.Choice(["auto", "single-file", "multi-file"], case_sensitive=False),
+    help="Transfer mode. Defaults to the accepted Phase 5 auto-selection rules.",
+)
+@click.option(
     "--remote-compress",
     type=click.Choice(["auto", "always", "never"], case_sensitive=False),
-    default="auto",
-    show_default=True,
-    help="Remote compression policy before transfer.",
+    help="Deprecated compatibility alias for `--transfer-mode`.",
 )
 @click.option(
     "--tasks",
@@ -198,9 +211,7 @@ class DownloadResult:
 @click.option(
     "--streams",
     type=click.IntRange(1),
-    default=1,
-    show_default=True,
-    help="Transfer stream count. Phase 4 currently supports single-stream downloads only.",
+    help="Transfer stream budget. Defaults to the resolved `transfer.parallel_streams` config value.",
 )
 @click.option(
     "--compression-level",
@@ -217,9 +228,10 @@ def command(
     force: bool,
     exclude_patterns: tuple[str, ...],
     include_scratch: bool,
-    remote_compress: str,
+    transfer_mode: str | None,
+    remote_compress: str | None,
     tasks: str | None,
-    streams: int,
+    streams: int | None,
     compression_level: int | None,
 ) -> None:
     """Download task result directories for a previously submitted SLURM job."""
@@ -246,7 +258,8 @@ def command(
                 force=force,
                 exclude_patterns=exclude_patterns,
                 include_scratch=include_scratch,
-                remote_compress=remote_compress.lower(),
+                transfer_mode=transfer_mode.lower() if transfer_mode else None,
+                remote_compress=remote_compress.lower() if remote_compress else None,
                 tasks=tasks,
                 streams=streams,
                 compression_level=compression_level,
@@ -277,27 +290,31 @@ async def _run_download(
     force: bool,
     exclude_patterns: tuple[str, ...],
     include_scratch: bool,
-    remote_compress: str,
+    transfer_mode: str | None,
+    remote_compress: str | None,
     tasks: str | None,
-    streams: int,
+    streams: int | None,
     compression_level: int | None,
 ) -> DownloadResult:
     """Resolve job metadata, confirm the plan, and execute the download flow."""
 
     if output is not None and local_dir is not None:
         raise click.ClickException("Use either `LOCAL_DIR` or `--output`, not both.")
-    if streams != 1:
-        raise click.ClickException(
-            "Phase 4 download currently supports only `--streams 1`; parallel download work remains out of scope."
-        )
 
     resolved = resolve_config(
         cwd=cwd,
         env=env,
-        cli_overrides={"transfer.compression_level": compression_level},
+        cli_overrides={
+            "transfer.parallel_streams": streams,
+            "transfer.compression_level": compression_level,
+        },
     )
     destination = output or local_dir
     requested_tasks = _parse_task_selection(tasks)
+    requested_transfer_mode = _resolve_requested_download_transfer_mode(
+        transfer_mode=transfer_mode,
+        remote_compress=remote_compress,
+    )
 
     async with ssh_session(resolved.config.ssh) as conn:
         rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
@@ -312,8 +329,9 @@ async def _run_download(
             force=force,
             exclude_patterns=exclude_patterns,
             include_scratch=include_scratch,
-            remote_compress=remote_compress,
-            compression_level=compression_level or resolved.config.transfer.compression_level,
+            transfer_mode=requested_transfer_mode,
+            compression_level=resolved.config.transfer.compression_level,
+            requested_streams=resolved.config.transfer.parallel_streams,
         )
 
         _validate_cleanup_request(
@@ -325,13 +343,13 @@ async def _run_download(
         if not click.confirm("Proceed with download?", default=True, err=json_output):
             raise click.Abort()
 
-        if plan.transfer_mode == "archive":
-            return await _execute_archive_download(
+        if plan.transfer_mode == "single-file":
+            return await _execute_single_file_download(
                 conn=conn,
                 config=resolved.config,
                 plan=plan,
             )
-        return await _execute_raw_download(
+        return await _execute_multi_file_download(
             conn=conn,
             config=resolved.config,
             plan=plan,
@@ -350,8 +368,9 @@ async def _build_download_plan(
     force: bool,
     exclude_patterns: tuple[str, ...],
     include_scratch: bool,
-    remote_compress: str,
+    transfer_mode: str,
     compression_level: int,
+    requested_streams: int,
 ) -> DownloadPlan:
     """Resolve the selected remote paths, transfer mode, and local requirements."""
 
@@ -378,18 +397,22 @@ async def _build_download_plan(
     for source in source_roots:
         raw_size_bytes += await measure_remote_path(conn, source.absolute_path)
 
-    transfer_mode = await _select_transfer_mode(
+    resolved_transfer_mode = await _select_transfer_mode(
         conn,
         config=config,
-        remote_compress=remote_compress,
+        transfer_mode=transfer_mode,
     )
     transfer_size_estimate_bytes = (
         _estimate_compressed_bytes(raw_size_bytes)
-        if transfer_mode == "archive"
+        if resolved_transfer_mode == "single-file"
         else raw_size_bytes
     )
 
-    required_bytes = raw_size_bytes + transfer_size_estimate_bytes if transfer_mode == "archive" else raw_size_bytes
+    required_bytes = (
+        raw_size_bytes + transfer_size_estimate_bytes
+        if resolved_transfer_mode == "single-file"
+        else raw_size_bytes
+    )
     space_report = inspect_disk_space(destination_dir, required_bytes=required_bytes)
     if not space_report.sufficient and not force:
         raise RuntimeError(
@@ -400,7 +423,7 @@ async def _build_download_plan(
 
     remote_archive_path = None
     local_archive_path = None
-    if transfer_mode == "archive":
+    if resolved_transfer_mode == "single-file":
         remote_archive_path = str(
             PurePosixPath(remote_job_dir) / f".launchpad-download-{job_id}.tar.zst"
         )
@@ -416,7 +439,8 @@ async def _build_download_plan(
         destination_dir=destination_dir,
         source_roots=source_roots,
         raw_size_bytes=raw_size_bytes,
-        transfer_mode=transfer_mode,
+        transfer_mode=resolved_transfer_mode,
+        requested_streams=requested_streams,
         transfer_size_estimate_bytes=transfer_size_estimate_bytes,
         cleanup=cleanup,
         force=force,
@@ -428,13 +452,13 @@ async def _build_download_plan(
     )
 
 
-async def _execute_archive_download(
+async def _execute_single_file_download(
     *,
     conn: asyncssh.SSHClientConnection,
     config: LaunchpadConfig,
     plan: DownloadPlan,
 ) -> DownloadResult:
-    """Create a remote archive, download it, verify it, and unpack locally."""
+    """Create a remote archive, striped-download it, verify it, and unpack locally."""
 
     if plan.remote_archive_path is None or plan.local_archive_path is None:
         raise RuntimeError("Archive download requires local and remote archive paths.")
@@ -468,10 +492,13 @@ async def _execute_archive_download(
                 f"available {_format_bytes(report.bytes_available)}."
             )
 
-    await transfer_download(
+    transfer_execution = await striped_download(
         conn,
+        config.ssh,
         plan.remote_archive_path,
         plan.local_archive_path,
+        streams=plan.requested_streams,
+        chunk_size=config.transfer.chunk_size_bytes,
         resume=config.transfer.resume_enabled,
     )
     archive_downloaded = True
@@ -509,6 +536,8 @@ async def _execute_archive_download(
         destination_dir=plan.destination_dir,
         remote_job_dir=plan.remote_job_dir,
         transfer_mode=plan.transfer_mode,
+        requested_streams=plan.requested_streams,
+        effective_streams=transfer_execution.effective_streams,
         downloaded_bytes=actual_archive_size,
         file_count=inspection.file_count,
         cleaned_up=plan.cleanup,
@@ -517,16 +546,18 @@ async def _execute_archive_download(
     )
 
 
-async def _execute_raw_download(
+async def _execute_multi_file_download(
     *,
     conn: asyncssh.SSHClientConnection,
     config: LaunchpadConfig,
     plan: DownloadPlan,
 ) -> DownloadResult:
-    """Transfer the selected remote files directly without a remote archive."""
+    """Transfer the selected remote files directly through a worker pool."""
 
     ensure_directory(plan.destination_dir)
     expected_file_count = 0
+    download_items: list[DownloadItem] = []
+    checksum_pairs: list[tuple[str, Path]] = []
 
     for source in plan.source_roots:
         target_root = plan.destination_dir / Path(source.relative_path)
@@ -546,22 +577,25 @@ async def _execute_raw_download(
                 continue
 
             ensure_directory(local_path.parent)
-            await transfer_download(
-                conn,
-                entry.path,
-                local_path,
-                resume=config.transfer.resume_enabled,
-            )
-
-            if plan.verify_checksums:
-                remote_digest = await compute_remote_sha256(conn, entry.path)
-                local_digest = compute_sha256(local_path)
-                if remote_digest != local_digest:
-                    raise RuntimeError(
-                        f"Checksum mismatch for {entry.path}: remote {remote_digest}, local {local_digest}."
-                    )
-
+            download_items.append(DownloadItem(remote_path=entry.path, local_path=local_path))
+            checksum_pairs.append((entry.path, local_path))
             expected_file_count += 1
+
+    transfer_execution = await download_many(
+        config.ssh,
+        download_items,
+        streams=plan.requested_streams,
+        resume=config.transfer.resume_enabled,
+    )
+
+    if plan.verify_checksums:
+        for remote_path, local_path in checksum_pairs:
+            remote_digest = await compute_remote_sha256(conn, remote_path)
+            local_digest = compute_sha256(local_path)
+            if remote_digest != local_digest:
+                raise RuntimeError(
+                    f"Checksum mismatch for {remote_path}: remote {remote_digest}, local {local_digest}."
+                )
 
     actual_files = _count_local_files(plan.destination_dir)
     if actual_files != expected_file_count:
@@ -579,6 +613,8 @@ async def _execute_raw_download(
         destination_dir=plan.destination_dir,
         remote_job_dir=plan.remote_job_dir,
         transfer_mode=plan.transfer_mode,
+        requested_streams=plan.requested_streams,
+        effective_streams=transfer_execution.effective_streams,
         downloaded_bytes=plan.raw_size_bytes,
         file_count=expected_file_count,
         cleaned_up=plan.cleanup,
@@ -591,17 +627,40 @@ async def _select_transfer_mode(
     conn: asyncssh.SSHClientConnection,
     *,
     config: LaunchpadConfig,
-    remote_compress: str,
+    transfer_mode: str,
 ) -> str:
-    """Resolve the transfer mode from the requested remote-compression policy."""
+    """Resolve the transfer mode from the Phase 5 public mode surface."""
 
-    if remote_compress == "never":
-        return "raw"
-    if remote_compress == "always":
-        return "archive"
+    if transfer_mode == "single-file":
+        return "single-file"
+    if transfer_mode == "multi-file":
+        return "multi-file"
     if await _remote_compression_available(conn, config=config):
-        return "archive"
-    return "raw"
+        return "single-file"
+    return "multi-file"
+
+
+def _resolve_requested_download_transfer_mode(
+    *,
+    transfer_mode: str | None,
+    remote_compress: str | None,
+) -> str:
+    """Resolve `--transfer-mode` plus the deprecated `--remote-compress` alias."""
+
+    alias_mode = None
+    if remote_compress is not None:
+        alias_mode = {
+            "auto": "auto",
+            "always": "single-file",
+            "never": "multi-file",
+        }[remote_compress]
+
+    if transfer_mode is not None and alias_mode is not None and transfer_mode != alias_mode:
+        raise click.ClickException(
+            "`--remote-compress` is deprecated and conflicts with `--transfer-mode`."
+        )
+
+    return transfer_mode or alias_mode or "auto"
 
 
 async def _remote_compression_available(
@@ -883,9 +942,10 @@ def _build_summary_panel(plan: DownloadPlan) -> Panel:
     summary.add_row("States", _format_state_counts(plan.state_counts))
     summary.add_row("Destination", str(plan.destination_dir))
     summary.add_row("Remote job dir", plan.remote_job_dir)
-    summary.add_row("Transfer mode", "remote archive" if plan.transfer_mode == "archive" else "raw files")
+    summary.add_row("Transfer mode", plan.transfer_mode)
+    summary.add_row("Streams", f"requested {plan.requested_streams}")
     summary.add_row("Remote results", _format_bytes(plan.raw_size_bytes))
-    if plan.transfer_mode == "archive":
+    if plan.transfer_mode == "single-file":
         summary.add_row("Compressed estimate", f"~{_format_bytes(plan.transfer_size_estimate_bytes)}")
     summary.add_row("Local required", _format_bytes(plan.required_local_bytes))
     if plan.cleanup:
@@ -905,6 +965,7 @@ def _build_completion_panel(result: DownloadResult) -> Panel:
     summary.add_row("Job", f"{result.job_id} ({result.run_name})")
     summary.add_row("Destination", str(result.destination_dir))
     summary.add_row("Transfer mode", result.transfer_mode)
+    summary.add_row("Streams", f"requested {result.requested_streams}, effective {result.effective_streams}")
     summary.add_row("Files", str(result.file_count))
     summary.add_row("Transferred", _format_bytes(result.downloaded_bytes))
     summary.add_row("Tasks", _format_selected_tasks(result.selected_tasks))
