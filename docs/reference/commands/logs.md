@@ -37,6 +37,10 @@ launchpad logs 12345 0 --solver-log
 
 ## Behavior Notes
 
+- human-readable mode renders a summary panel, the selected tail output, and
+  suggested follow-up commands
+- `--follow` starts with a live-tail banner and then streams the remote log
+  until you interrupt it
 - `TASK_ID` is optional
 - `--solver-log` and `--err` cannot be used together
 - root `--json` is supported for non-follow usage

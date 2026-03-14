@@ -58,7 +58,10 @@ def test_logs_command_reads_slurm_stdout_for_specific_task(monkeypatch: pytest.M
     result = CliRunner().invoke(cli, ["logs", "12345", "2"])
 
     assert result.exit_code == 0
+    assert "Log Snapshot" in result.output
+    assert "Tail Output" in result.output
     assert "solver line 1" in result.output
+    assert "launchpad status 12345" in result.output
 
 
 def test_logs_command_resolves_solver_log_with_follow(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,8 +110,35 @@ def test_logs_command_resolves_solver_log_with_follow(monkeypatch: pytest.Monkey
     result = CliRunner().invoke(cli, ["logs", "12345", "2", "--solver-log", "--follow", "--lines", "100"])
 
     assert result.exit_code == 0
-    assert result.output == ""
+    assert "Live Log Tail" in result.output
+    assert "/shared/sergey/nastran-20260312-2148-abcd/results_wing_2/wing.f06" in result.output
     assert emitted == ["F06\n"]
+
+
+def test_logs_command_renders_empty_state_for_blank_log_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Blank log content should use the shared empty-state panel instead of silent output."""
+
+    monkeypatch.setattr(logs_module, "configure_logging", lambda **kwargs: None)
+
+    async def fake_run_logs(**kwargs) -> logs_module.LogsResult:  # type: ignore[no-untyped-def]
+        return logs_module.LogsResult(
+            job_id="12345",
+            task_id="2",
+            run_name="tank_v3",
+            state="RUNNING",
+            log_kind="stdout",
+            remote_path="/shared/sergey/tank_v3/logs/slurm_12345_2.out",
+            lines=50,
+            content="",
+        )
+
+    monkeypatch.setattr(logs_module, "_run_logs", fake_run_logs)
+
+    result = CliRunner().invoke(cli, ["logs", "12345", "2"])
+
+    assert result.exit_code == 0
+    assert "No Log Output Yet" in result.output
+    assert "slurm_12345_2.out" in result.output
 
 
 def test_logs_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:

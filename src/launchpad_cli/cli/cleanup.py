@@ -14,14 +14,21 @@ from typing import Mapping
 import asyncssh
 import click
 from loguru import logger
+from rich.console import Group
 from rich.table import Table
+from rich.text import Text
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.remote_ops import delete_remote_path, list_remote_directory, measure_remote_path
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
-from launchpad_cli.display import build_console
+from launchpad_cli.display import (
+    build_console,
+    build_detail_panel,
+    build_next_steps_panel,
+    build_summary_table,
+)
 
 TERMINAL_STATES = {
     "BOOT_FAIL",
@@ -140,8 +147,8 @@ def command(
 
     if json_output:
         click.echo(json.dumps(result.as_dict(), indent=2))
-    elif result.message:
-        click.echo(result.message)
+    else:
+        console.print(_build_cleanup_result_renderable(result))
 
 
 async def _run_cleanup(
@@ -185,7 +192,7 @@ async def _run_cleanup(
             )
 
         if not job_ids:
-            console.print(_build_target_table(targets, title="Cleanup Candidates"))
+            console.print(_build_cleanup_candidates_renderable(targets, older_than=older_than))
             selected_targets = _select_targets_from_prompt(targets, yes=yes, err=json_output)
         else:
             selected_targets = targets
@@ -193,6 +200,14 @@ async def _run_cleanup(
         if not selected_targets:
             raise click.ClickException("Cleanup aborted.")
 
+        if not yes and not json_output:
+            console.print(
+                _build_cleanup_preview_renderable(
+                    selected_targets,
+                    older_than=older_than,
+                    requested_job_ids=job_ids,
+                )
+            )
         if not yes and not click.confirm(_confirmation_text(selected_targets), default=False, err=json_output):
             raise click.ClickException("Cleanup aborted.")
 
@@ -454,7 +469,7 @@ def _sort_int(value: str | None) -> int:
         return 10**9
 
 
-def _build_target_table(targets: tuple[CleanupTarget, ...], *, title: str) -> Table:
+def _build_target_table(targets: tuple[CleanupTarget, ...], *, title: str | None = None) -> Table:
     table = Table(title=title, show_header=True, header_style="bold")
     table.add_column("#", justify="right")
     table.add_column("Label")
@@ -517,3 +532,117 @@ def _colorize_output(ctx: click.Context) -> bool:
     options = getattr(ctx.find_root(), "obj", None)
     no_color = bool(getattr(options, "no_color", False))
     return not no_color and "NO_COLOR" not in os.environ
+
+
+def _build_cleanup_candidates_renderable(
+    targets: tuple[CleanupTarget, ...],
+    *,
+    older_than: str | None,
+) -> Group:
+    """Render the root-scan candidate list before prompting for a selection."""
+
+    intro = Text()
+    intro.append("Review the numbered directories", style="lp.brand.secondary")
+    intro.append(
+        " before selecting what to delete.",
+        style="lp.brand.subtle",
+    )
+    return Group(
+        build_detail_panel(
+            Group(intro, _build_cleanup_summary(targets, older_than=older_than, requested_job_ids=())),
+            title="Cleanup Candidates",
+            tone="warn",
+        ),
+        build_detail_panel(_build_target_table(targets), title="Candidate Directories"),
+        build_next_steps_panel(
+            [
+                "Enter comma-separated numbers, `all`, or `none` at the prompt.",
+                "Launchpad will ask for one final confirmation before deletion.",
+            ],
+            title="Selection Guide",
+        ),
+    )
+
+
+def _build_cleanup_preview_renderable(
+    targets: tuple[CleanupTarget, ...],
+    *,
+    older_than: str | None,
+    requested_job_ids: tuple[str, ...],
+) -> Group:
+    """Render the final destructive-action preview for cleanup."""
+
+    intro = Text()
+    intro.append("These remote directories will be deleted", style="lp.brand.secondary")
+    intro.append(
+        " if you confirm.",
+        style="lp.brand.subtle",
+    )
+    return Group(
+        build_detail_panel(
+            Group(intro, _build_cleanup_summary(targets, older_than=older_than, requested_job_ids=requested_job_ids)),
+            title="Cleanup Preview",
+            tone="warn",
+        ),
+        build_detail_panel(_build_target_table(targets), title="Selected Directories"),
+    )
+
+
+def _build_cleanup_result_renderable(result: CleanupResult) -> Group:
+    """Render cleanup outcomes in the shared Phase 7 layout."""
+
+    title = "Cleanup Complete" if result.deleted_paths else "Nothing To Clean"
+    tone = "success" if result.deleted_paths else "warn"
+    intro = Text()
+    intro.append(result.message, style="lp.brand.secondary" if result.deleted_paths else "lp.brand.subtle")
+
+    renderables = [
+        build_detail_panel(
+            Group(
+                intro,
+                _build_cleanup_summary(
+                    result.selected_targets,
+                    older_than=result.older_than,
+                    requested_job_ids=result.requested_job_ids,
+                ),
+            ),
+            title=title,
+            tone=tone,
+        )
+    ]
+    if result.selected_targets:
+        renderables.append(
+            build_detail_panel(
+                _build_target_table(result.selected_targets),
+                title="Affected Directories",
+            )
+        )
+    renderables.append(build_next_steps_panel(_cleanup_next_steps(result)))
+    return Group(*renderables)
+
+
+def _build_cleanup_summary(
+    targets: tuple[CleanupTarget, ...],
+    *,
+    older_than: str | None,
+    requested_job_ids: tuple[str, ...],
+):
+    summary = build_summary_table()
+    summary.add_row("Requested jobs", ", ".join(requested_job_ids) if requested_job_ids else "root scan")
+    summary.add_row("Age filter", older_than or "none")
+    summary.add_row("Directories", str(len(targets)))
+    summary.add_row("Labels", ", ".join(target.label for target in targets) if targets else "—")
+    return summary
+
+
+def _cleanup_next_steps(result: CleanupResult) -> list[str]:
+    if result.requested_job_ids:
+        first_job = result.requested_job_ids[0]
+        return [
+            f"launchpad status {first_job}",
+            "launchpad ls",
+        ]
+    return [
+        "launchpad ls",
+        "launchpad cleanup --older-than 30d",
+    ]

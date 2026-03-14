@@ -34,6 +34,9 @@ launchpad cancel 12345 --yes
 
 ## Behavior Notes
 
+- without `--yes`, Launchpad shows a cancellation preview before the final
+  confirmation prompt
+- human-readable mode finishes with a cancellation summary and next-step hints
 - if you pass no task IDs, Launchpad cancels the whole job
 - if you pass task IDs, they must be numeric
 - root `--json` is supported

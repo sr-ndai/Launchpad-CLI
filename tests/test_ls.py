@@ -47,6 +47,8 @@ def test_ls_command_renders_short_listing(monkeypatch: pytest.MonkeyPatch) -> No
     result = CliRunner().invoke(cli, ["ls"])
 
     assert result.exit_code == 0
+    assert "Remote Listing" in result.output
+    assert "Entries" in result.output
     assert "tank_v3/" in result.output
     assert "notes.txt" in result.output
 
@@ -135,3 +137,26 @@ async def test_run_ls_uses_remote_root_for_relative_glob_patterns(
     assert recorded == {"path": "/shared/sergey/tank_v3", "recursive": True}
     assert result.pattern == "/shared/sergey/tank_v3/*.txt"
     assert [entry.path for entry in result.entries] == ["/shared/sergey/tank_v3/summary.txt"]
+
+
+def test_ls_command_renders_empty_state_when_no_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty remote listings should produce a visible empty-state panel."""
+
+    monkeypatch.setattr(ls_module, "configure_logging", lambda **kwargs: None)
+
+    async def fake_run_ls(**kwargs) -> ls_module.ListingResult:  # type: ignore[no-untyped-def]
+        return ls_module.ListingResult(
+            requested_path="/shared/sergey/missing*",
+            base_path="/shared/sergey",
+            long_format=False,
+            pattern="/shared/sergey/missing*",
+            entries=(),
+        )
+
+    monkeypatch.setattr(ls_module, "_run_ls", fake_run_ls)
+
+    result = CliRunner().invoke(cli, ["ls", "missing*"])
+
+    assert result.exit_code == 0
+    assert "Nothing To Show" in result.output
+    assert "/shared/sergey/missing*" in result.output
