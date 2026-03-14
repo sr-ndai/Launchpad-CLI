@@ -47,5 +47,5 @@
 | 7.3 | 7 | Primary workflow terminal experience | done | 7.1 | task/7.3-primary-workflow-experience | — |
 | 7.4 | 7 | Secondary command polish and docs | done | 7.2, 7.3 | task/7.4-secondary-command-polish-and-docs | — |
 | 8.1 | 8 | Job manifest and task references | done | — | task/8.1-job-manifest-and-task-refs | — |
-| 8.2 | 8 | Solver-aware log resolution and selector support | in-progress | 8.1 | task/8.2-solver-aware-log-resolution | Builder |
-| 8.3 | 8 | Interactive log picker and docs | pending | 8.2 | task/8.3-interactive-log-picker | — |
+| 8.2 | 8 | Solver-aware log resolution and selector support | done | 8.1 | task/8.2-solver-aware-log-resolution | — |
+| 8.3 | 8 | Interactive log picker and docs | in-progress | 8.2 | task/8.3-interactive-log-picker | Builder |

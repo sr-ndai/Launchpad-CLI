@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-8.2 — Solver-aware log resolution and selector support.
+8.3 — Interactive log picker and docs.
 
 ## Queue Snapshot
-- pending: 8.3
+- pending: —
 - ready: —
-- in-progress: 8.2
+- in-progress: 8.3
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,34 +25,32 @@ Phase 8 — Task References and Solver-Aware Logs
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `task/8.2-solver-aware-log-resolution`
-- last processed builder session: `2026-03-14-1404-builder-8.1-revision.md`
+- active task branch: `task/8.3-interactive-log-picker`
+- last processed builder session: `2026-03-14-1422-builder-8.2.md`
 
 ## What Changed Recently
-- Accepted the `8.1` revision after the alias contract was corrected to the
-  approved plain zero-padded numeric format and both prompt verification
-  commands passed again.
-- Merged `task/8.1-job-manifest-and-task-refs` into
-  `phase/08-task-references-and-solver-aware-logs`, bringing in the submitted
-  manifest contract, solver-log catalog capture, and manifest-backed submit and
-  status task references.
-- Opened `task/8.2-solver-aware-log-resolution` from the updated phase branch
-  so Builder can continue with manifest-backed selector resolution and
-  solver-aware `logs` behavior.
+- Accepted task `8.2` after the manifest-backed selector layer, solver-aware
+  `logs --log-kind`, and legacy fallback boundaries passed review and prompt
+  verification.
+- Merged `task/8.2-solver-aware-log-resolution` into
+  `phase/08-task-references-and-solver-aware-logs`, carrying the shared task
+  selector helper into `logs`, `download`, and `cancel`.
+- Opened `task/8.3-interactive-log-picker` so Builder can finish Phase 8 with
+  the human TTY picker, final docs/help updates, and regression coverage.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should switch to `task/8.2-solver-aware-log-resolution`, read the task
-prompt, and implement manifest-backed selector resolution plus solver-aware
-`launchpad logs` behavior.
+Builder should switch to `task/8.3-interactive-log-picker`, read the task
+prompt, and implement the interactive multi-task `logs` picker plus the final
+docs/help updates for Phase 8.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/8.2.md`
+3. `.ai/tasks/prompts/8.3.md`
 4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/reviews/8.1.md`
-6. `.ai/sessions/2026-03-14-1404-builder-8.1-revision.md`
+5. `.ai/reviews/8.2.md`
+6. `.ai/sessions/2026-03-14-1422-builder-8.2.md`
 7. `.ai/git-rules.md`
