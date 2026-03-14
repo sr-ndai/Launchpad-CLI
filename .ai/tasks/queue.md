@@ -50,3 +50,4 @@
 | 8.2 | 8 | Solver-aware log resolution and selector support | done | 8.1 | task/8.2-solver-aware-log-resolution | — |
 | 8.3 | 8 | Interactive log picker and docs | done | 8.2 | task/8.3-interactive-log-picker | — |
 | 8.4 | 8 | Cluster access diagnostics and Windows SSH | done | 8.3 | task/8.4-cluster-access-diagnostics | — |
+| 8.5 | 8 | SLURM login-shell execution and diagnostics | in-progress | 8.4 | task/8.5-slurm-login-shell | Builder |

@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-None.
+8.5 — SLURM login-shell execution and diagnostics
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: —
+- in-progress: 8.5
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,15 @@ None.
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `none`
+- active task branch: `task/8.5-slurm-login-shell`
 - last processed builder session: `2026-03-14-1558-builder-8.4.md`
 
 ## What Changed Recently
+- Reopened Phase 8 again with task `8.5` after field debugging showed that
+  `status` and `logs` still fail when `squeue` and `sacct` are only available
+  through the head node's login-shell initialization.
+- Committed the repository-level `.gitignore` follow-up to ignore `*.pem`
+  private-key files without mixing that housekeeping into product task work.
 - Accepted task `8.4` after review and prompt verification, then merged
   `task/8.4-cluster-access-diagnostics` into the phase branch.
 - Phase 8 now includes the doctor exec-environment fix, the Windows
@@ -52,14 +57,14 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review the updated PR `#9` from
-`phase/08-task-references-and-solver-aware-logs` to `main`.
+Builder should switch to `task/8.5-slurm-login-shell`, read the task prompt,
+and implement the shared SLURM login-shell execution fix plus aligned doctor
+diagnostics.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1602-coordinator-accept-8.4-update-pr.md`
-4. `.ai/reviews/8.4.md`
-5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-6. `.ai/plan.md`
-7. `.ai/git-rules.md`
+3. `.ai/tasks/prompts/8.5.md`
+4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+5. `.ai/plan.md`
+6. `.ai/git-rules.md`

@@ -1305,6 +1305,9 @@ design gate.
 - [ ] Reopen Phase 8 with a cluster-access follow-up which makes `doctor`
   validate the same remote exec environment used by Launchpad commands and
   moves Windows `launchpad ssh` onto the local OpenSSH client
+- [ ] Reopen Phase 8 again with a scheduler-shell follow-up which makes
+  Launchpad execute SLURM commands through the same login-shell environment
+  operators rely on manually
 
 **Milestone:** Multi-file jobs remain one SLURM array submit, but every task is
 addressable by a human-friendly reference and every solver-log lookup is driven
