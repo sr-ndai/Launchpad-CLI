@@ -49,8 +49,8 @@ def test_submit_dry_run_previews_detected_inputs(monkeypatch, tmp_path: Path) ->
     assert "fuselage.dat" in result.output
     assert "/shared/sergey/" in result.output
     assert "single-file" in result.output
-    assert "t01" in result.output
-    assert "t02" in result.output
+    assert "001" in result.output
+    assert "002" in result.output
     assert "fuselage" in result.output
     assert "wing" in result.output
     assert "Generated SLURM Script" in result.output
@@ -107,8 +107,8 @@ def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_pat
     assert "Submission Complete" in result.output
     assert "Task References" in result.output
     assert "12345" in result.output
-    assert "t01" in result.output
-    assert "t02" in result.output
+    assert "001" in result.output
+    assert "002" in result.output
     assert "launchpad status 12345" in result.output
     assert "launchpad download 12345" in result.output
 
@@ -142,7 +142,7 @@ def test_submit_dry_run_emits_json_when_requested(monkeypatch, tmp_path: Path) -
     assert payload["run_name"].startswith("nastran-")
     assert payload["transfer_mode"] == "single-file"
     assert payload["logs"] == {"solver": ".f06", "telemetry": ".f04"}
-    assert payload["tasks"][0]["alias"] == "t01"
+    assert payload["tasks"][0]["alias"] == "001"
     assert payload["tasks"][1]["task_id"] == "1"
     assert payload["primary_inputs"][0]["relative_path"] == "fuselage.dat"
     assert "Generated SLURM Script" not in result.output
@@ -209,7 +209,7 @@ def test_submit_emits_json_after_successful_execution(monkeypatch, tmp_path: Pat
         "tasks": [
             {
                 "task_id": "0",
-                "alias": "t01",
+                "alias": "001",
                 "input_relative_path": "wing.dat",
                 "input_filename": "wing.dat",
                 "input_stem": "wing",
@@ -341,7 +341,7 @@ def test_build_task_references_disambiguates_duplicate_stems_from_relative_paths
 
     references = build_task_references(inputs)
 
-    assert [item.alias for item in references] == ["t01", "t02"]
+    assert [item.alias for item in references] == ["001", "002"]
     assert [item.display_label for item in references] == ["left/wing", "right/wing"]
     assert [item.result_dir for item in references] == ["results_wing_0", "results_wing_1"]
 
@@ -430,7 +430,7 @@ async def test_execute_submit_writes_launchpad_manifest(
     assert execution.submitted_job.job_id == "12345"
     assert plan.remote_layout.manifest_path in written
     assert '"solver": "nastran"' in written[plan.remote_layout.manifest_path]
-    assert '"alias": "t01"' in written[plan.remote_layout.manifest_path]
+    assert '"alias": "001"' in written[plan.remote_layout.manifest_path]
 
 
 @pytest.mark.asyncio

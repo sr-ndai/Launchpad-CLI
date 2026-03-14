@@ -72,7 +72,7 @@ def build_task_references(inputs: Sequence[DiscoveredInput]) -> tuple[TaskRefere
         return ()
 
     stem_counts = Counter(item.stem for item in inputs)
-    alias_width = max(2, len(str(len(inputs))))
+    alias_width = max(3, len(str(len(inputs))))
     references: list[TaskReference] = []
 
     for index, item in enumerate(inputs):
@@ -85,7 +85,7 @@ def build_task_references(inputs: Sequence[DiscoveredInput]) -> tuple[TaskRefere
         references.append(
             TaskReference(
                 task_id=task_id,
-                alias=f"t{index + 1:0{alias_width}d}",
+                alias=f"{index + 1:0{alias_width}d}",
                 input_relative_path=input_relative_path,
                 input_filename=item.basename,
                 input_stem=item.stem,

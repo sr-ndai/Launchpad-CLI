@@ -322,7 +322,7 @@ def test_status_command_renders_manifest_backed_task_references(
                 tasks=(
                     TaskReference(
                         task_id="0",
-                        alias="t01",
+                        alias="001",
                         input_relative_path="wing.dat",
                         input_filename="wing.dat",
                         input_stem="wing",
@@ -331,7 +331,7 @@ def test_status_command_renders_manifest_backed_task_references(
                     ),
                     TaskReference(
                         task_id="1",
-                        alias="t02",
+                        alias="002",
                         input_relative_path="fuselage.dat",
                         input_filename="fuselage.dat",
                         input_stem="fuselage",
@@ -352,8 +352,8 @@ def test_status_command_renders_manifest_backed_task_references(
     assert result.exit_code == 0
     assert "wing" in result.output
     assert "fuselage" in result.output
-    assert "t01" in result.output
-    assert "t02" in result.output
+    assert "001" in result.output
+    assert "002" in result.output
 
 
 @pytest.mark.asyncio
