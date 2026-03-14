@@ -25,6 +25,7 @@ from launchpad_cli.core.compress import (
     inspect_archive,
 )
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
+from launchpad_cli.core.job_manifest import JobManifest
 from launchpad_cli.core.local_ops import ensure_directory, inspect_disk_space, resolve_download_destination
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.remote_ops import (
@@ -36,6 +37,7 @@ from launchpad_cli.core.remote_ops import (
 )
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.core.task_selectors import load_job_manifest, resolve_task_ids
 from launchpad_cli.core.transfer import (
     DownloadItem,
     download_many,
@@ -331,11 +333,13 @@ async def _run_download(
 
     async with ssh_session(resolved.config.ssh) as conn:
         rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
+        manifest = await load_job_manifest(conn, _remote_job_dir(rows))
         plan = await _build_download_plan(
             conn=conn,
             config=resolved.config,
             job_id=job_id,
             rows=rows,
+            manifest=manifest,
             destination=destination,
             requested_tasks=requested_tasks,
             cleanup=cleanup,
@@ -375,6 +379,7 @@ async def _build_download_plan(
     config: LaunchpadConfig,
     job_id: str,
     rows: tuple[DownloadJobRow, ...],
+    manifest: JobManifest | None,
     destination: Path | None,
     requested_tasks: tuple[str, ...],
     cleanup: bool,
@@ -387,7 +392,15 @@ async def _build_download_plan(
 ) -> DownloadPlan:
     """Resolve the selected remote paths, transfer mode, and local requirements."""
 
-    selected_rows = _select_download_rows(rows, requested_tasks=requested_tasks)
+    selected_rows = _select_download_rows(
+        rows,
+        requested_tasks=resolve_task_ids(
+            requested_tasks,
+            manifest=manifest,
+            available_task_ids=tuple(row.task_id for row in rows if row.task_id is not None),
+            job_id=job_id,
+        ),
+    )
     primary_row = selected_rows[0]
     run_name = primary_row.run_name or f"job-{job_id}"
     remote_job_dir = primary_row.remote_job_dir
@@ -867,11 +880,9 @@ def _parse_task_selection(raw: str | None) -> tuple[str, ...]:
     parts = [part.strip() for part in raw.split(",")]
     selected = [part for part in parts if part]
     if not selected:
-        raise click.ClickException("`--tasks` requires at least one task id.")
+        raise click.ClickException("`--tasks` requires at least one task reference.")
 
     deduplicated = list(dict.fromkeys(selected))
-    if all(item.isdigit() for item in deduplicated):
-        return tuple(str(item) for item in sorted((int(item) for item in deduplicated)))
     return tuple(deduplicated)
 
 
@@ -948,6 +959,13 @@ def _row_sort_key(row: DownloadJobRow) -> tuple[int, int, int, str]:
         _sort_int(row.task_id),
         row.run_name or "",
     )
+
+
+def _remote_job_dir(rows: tuple[DownloadJobRow, ...]) -> str | None:
+    for row in rows:
+        if row.remote_job_dir:
+            return row.remote_job_dir
+    return None
 
 
 def _sort_int(value: str | None) -> int:

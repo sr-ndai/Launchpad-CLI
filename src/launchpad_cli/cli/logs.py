@@ -17,9 +17,11 @@ from rich.console import Group
 from rich.text import Text
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
+from launchpad_cli.core.job_manifest import JobManifest, TaskReference
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.core.task_selectors import load_job_manifest, resolve_manifest_task_reference
 from launchpad_cli.display import (
     build_console,
     build_detail_panel,
@@ -73,13 +75,21 @@ class LogsResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class LogSelection:
+    """Resolved task selection used to locate a remote log file."""
+
+    row: JobLogRow
+    task_ref: TaskReference | None = None
+
+
 @click.command(
     name="logs",
     short_help="Inspect remote log output.",
     help="View or follow SLURM and solver logs for a submitted job.",
 )
 @click.argument("job_id")
-@click.argument("task_id", required=False)
+@click.argument("task_ref", required=False)
 @click.option("--follow", "-f", is_flag=True, help="Continuously follow the remote log output.")
 @click.option(
     "--lines",
@@ -90,22 +100,29 @@ class LogsResult:
     help="Number of lines to show from the end of the log.",
 )
 @click.option("--solver-log", is_flag=True, help="View the solver log instead of the SLURM stdout log.")
+@click.option(
+    "--log-kind",
+    help="View a named solver log kind from the submitted manifest, for example `telemetry`.",
+)
 @click.option("--err", is_flag=True, help="View the SLURM stderr log instead of stdout.")
 @click.pass_context
 def command(
     ctx: click.Context,
     job_id: str,
-    task_id: str | None,
+    task_ref: str | None,
     follow: bool,
     lines: int,
     solver_log: bool,
+    log_kind: str | None,
     err: bool,
 ) -> None:
     """Resolve the requested remote log path and print or follow its content."""
 
     json_output = _json_output(ctx)
-    if solver_log and err:
-        raise click.ClickException("`launchpad logs` accepts either `--solver-log` or `--err`, not both.")
+    if sum(bool(item) for item in (solver_log, log_kind, err)) > 1:
+        raise click.ClickException(
+            "`launchpad logs` accepts only one of `--solver-log`, `--log-kind`, or `--err`."
+        )
     if follow and json_output:
         raise click.ClickException("`launchpad logs --follow` does not support `--json` output.")
 
@@ -121,10 +138,11 @@ def command(
                 cwd=Path.cwd(),
                 env=os.environ,
                 job_id=job_id,
-                task_id=task_id,
+                task_ref=task_ref,
                 follow=follow,
                 lines=lines,
                 solver_log=solver_log,
+                log_kind=log_kind,
                 err=err,
                 on_ready=(
                     lambda item: console.print(_build_live_logs_renderable(item))
@@ -152,10 +170,11 @@ async def _run_logs(
     cwd: Path,
     env: dict[str, str],
     job_id: str,
-    task_id: str | None,
+    task_ref: str | None,
     follow: bool,
     lines: int,
     solver_log: bool,
+    log_kind: str | None,
     err: bool,
     on_ready: Callable[[LogsResult], None] | None = None,
 ) -> LogsResult:
@@ -165,27 +184,36 @@ async def _run_logs(
 
     async with ssh_session(resolved.config.ssh) as conn:
         rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
-        row = _select_row(rows, job_id=job_id, requested_task_id=task_id)
-        log_kind = _log_kind(solver_log=solver_log, err=err)
+        remote_job_dir = _remote_job_dir(rows)
+        manifest = await load_job_manifest(conn, remote_job_dir)
+        selection = _select_row(
+            rows,
+            job_id=job_id,
+            requested_task_ref=task_ref,
+            manifest=manifest,
+        )
+        effective_log_kind = _log_kind(solver_log=solver_log, log_kind=log_kind, err=err)
         remote_path = _resolve_remote_log_path(
-            row,
-            requested_task_id=task_id,
-            solver_log=solver_log,
+            selection.row,
+            remote_job_dir=remote_job_dir,
+            manifest=manifest,
+            selected_task_ref=selection.task_ref,
+            log_kind=effective_log_kind,
             err=err,
         )
         preview = LogsResult(
-            job_id=row.job_id,
-            task_id=row.task_id,
-            run_name=row.run_name,
-            state=row.state,
-            log_kind=log_kind,
+            job_id=selection.row.job_id,
+            task_id=selection.row.task_id,
+            run_name=selection.row.run_name,
+            state=selection.row.state,
+            log_kind=effective_log_kind,
             remote_path=remote_path,
             lines=lines,
             content="",
         )
         if on_ready is not None:
             on_ready(preview)
-        logger.trace("Reading {} log for job {} from {}", log_kind, job_id, remote_path)
+        logger.trace("Reading {} log for job {} from {}", effective_log_kind, job_id, remote_path)
         content = await _read_remote_log(
             conn,
             remote_path=remote_path,
@@ -231,54 +259,139 @@ async def _query_job_rows(
     raise RuntimeError(f"No SLURM job data found for {job_id}.")
 
 
-def _select_row(rows: tuple[JobLogRow, ...], *, job_id: str, requested_task_id: str | None) -> JobLogRow:
+def _select_row(
+    rows: tuple[JobLogRow, ...],
+    *,
+    job_id: str,
+    requested_task_ref: str | None,
+    manifest: JobManifest | None,
+) -> LogSelection:
     """Select the requested task row or fail clearly if the choice is ambiguous."""
 
-    if requested_task_id is not None:
-        for row in rows:
-            if row.task_id == requested_task_id:
-                return row
-        raise click.ClickException(f"No task `{requested_task_id}` was found for job {job_id}.")
-
     task_rows = tuple(row for row in rows if row.task_id is not None)
+    if requested_task_ref is not None:
+        resolved_task_id, task_ref = _resolve_requested_task_id(
+            requested_task_ref,
+            job_id=job_id,
+            task_rows=task_rows,
+            manifest=manifest,
+        )
+        for row in rows:
+            if row.task_id == resolved_task_id:
+                return LogSelection(row=row, task_ref=task_ref)
+        raise ValueError(f"No task `{resolved_task_id}` was found for job {job_id}.")
+
     if len(task_rows) == 1:
-        return task_rows[0]
+        return LogSelection(row=task_rows[0], task_ref=_task_ref_for_row(task_rows[0], manifest))
     if len(task_rows) > 1:
         raise click.ClickException(
-            f"Job {job_id} has multiple task logs. Specify a TASK_ID explicitly."
+            f"Job {job_id} has multiple task logs. Specify a TASK_REF explicitly."
         )
-    return rows[0]
+    return LogSelection(row=rows[0])
+
+
+def _resolve_requested_task_id(
+    requested_task_ref: str,
+    *,
+    job_id: str,
+    task_rows: tuple[JobLogRow, ...],
+    manifest: JobManifest | None,
+) -> tuple[str, TaskReference | None]:
+    if manifest is not None:
+        task_ref = resolve_manifest_task_reference(manifest, requested_task_ref, job_id=job_id)
+        available = {row.task_id for row in task_rows if row.task_id is not None}
+        if available and task_ref.task_id not in available:
+            raise ValueError(
+                f"Task selection did not match job rows for {job_id}: {task_ref.task_id}"
+            )
+        return task_ref.task_id, task_ref
+
+    cleaned = requested_task_ref.strip()
+    if not cleaned.isdigit():
+        raise ValueError(
+            f"Job {job_id} has no launchpad-manifest.json. "
+            "Use a raw numeric task ID or resubmit the job to use aliases and file-based selectors."
+        )
+    return cleaned, None
+
+
+def _task_ref_for_row(row: JobLogRow, manifest: JobManifest | None) -> TaskReference | None:
+    if manifest is None or row.task_id is None:
+        return None
+    for item in manifest.tasks:
+        if item.task_id == row.task_id:
+            return item
+    return None
 
 
 def _resolve_remote_log_path(
     row: JobLogRow,
     *,
-    requested_task_id: str | None,
-    solver_log: bool,
+    remote_job_dir: str | None,
+    manifest: JobManifest | None,
+    selected_task_ref: TaskReference | None,
+    log_kind: str,
     err: bool,
 ) -> str:
     """Resolve the requested remote log path from the selected scheduler row."""
 
-    if solver_log:
-        return _solver_log_path(row, requested_task_id=requested_task_id)
+    if log_kind not in {"stdout", "stderr"}:
+        return _solver_log_path(
+            row,
+            remote_job_dir=remote_job_dir,
+            manifest=manifest,
+            selected_task_ref=selected_task_ref,
+            log_kind=log_kind,
+        )
 
     raw_path = row.stderr_path if err else row.stdout_path
     if not raw_path:
         kind = "stderr" if err else "stdout"
         raise RuntimeError(f"No SLURM {kind} path is available for job {row.job_id}.")
 
-    return _substitute_slurm_tokens(raw_path, job_id=row.job_id, task_id=row.task_id or requested_task_id)
+    return _substitute_slurm_tokens(raw_path, job_id=row.job_id, task_id=row.task_id)
 
 
-def _solver_log_path(row: JobLogRow, *, requested_task_id: str | None) -> str:
-    """Build the conventional solver-log path within the task work directory."""
+def _solver_log_path(
+    row: JobLogRow,
+    *,
+    remote_job_dir: str | None,
+    manifest: JobManifest | None,
+    selected_task_ref: TaskReference | None,
+    log_kind: str,
+) -> str:
+    """Resolve solver-log paths from the submitted manifest when available."""
+
+    if manifest is not None:
+        if selected_task_ref is None:
+            raise RuntimeError(f"No submitted task metadata is available for job {row.job_id}.")
+        if not remote_job_dir:
+            raise RuntimeError(f"No remote job directory metadata is available for job {row.job_id}.")
+
+        extension = manifest.logs.get(log_kind)
+        if not extension:
+            available = ", ".join(sorted(manifest.logs))
+            raise RuntimeError(
+                f"Job {row.job_id} does not define log kind `{log_kind}` in launchpad-manifest.json. "
+                f"Available kinds: {available}."
+            )
+        return str(
+            PurePosixPath(remote_job_dir)
+            / selected_task_ref.result_dir
+            / f"{selected_task_ref.input_stem}{extension}"
+        )
+
+    if log_kind != "solver":
+        raise RuntimeError(
+            f"Job {row.job_id} has no launchpad-manifest.json. "
+            f"`--log-kind {log_kind}` is unavailable for legacy jobs; use `--solver-log` instead."
+        )
 
     if not row.work_dir:
         raise RuntimeError(f"No task work directory is available for job {row.job_id}.")
 
     work_dir = PurePosixPath(row.work_dir)
-    effective_task_id = row.task_id or requested_task_id
-    stem = _derive_input_stem(work_dir.name, task_id=effective_task_id)
+    stem = _derive_input_stem(work_dir.name, task_id=row.task_id)
     extension = _solver_output_extension(row.run_name)
     return str(work_dir / f"{stem}{extension}")
 
@@ -437,6 +550,13 @@ def _row_sort_key(row: JobLogRow) -> tuple[int, int]:
     return (int(row.job_id) if row.job_id.isdigit() else 10**9, task_value)
 
 
+def _remote_job_dir(rows: tuple[JobLogRow, ...]) -> str | None:
+    for row in rows:
+        if row.remote_job_dir:
+            return row.remote_job_dir
+    return None
+
+
 def _verbosity(ctx: click.Context) -> int:
     options = getattr(ctx.find_root(), "obj", None)
     return int(getattr(options, "verbose", 0))
@@ -453,9 +573,14 @@ def _colorize_output(ctx: click.Context) -> bool:
     return not no_color and "NO_COLOR" not in os.environ
 
 
-def _log_kind(*, solver_log: bool, err: bool) -> str:
+def _log_kind(*, solver_log: bool, log_kind: str | None, err: bool) -> str:
     if solver_log:
         return "solver"
+    if log_kind:
+        cleaned = log_kind.strip().lower()
+        if not cleaned:
+            raise ValueError("`--log-kind` requires a non-empty value.")
+        return cleaned
     if err:
         return "stderr"
     return "stdout"
@@ -530,7 +655,7 @@ def _logs_next_steps(result: LogsResult) -> list[str]:
     steps = [f"launchpad status {result.job_id}"]
     if result.log_kind != "stderr":
         steps.append(f"{_logs_command(result)} --err")
-    elif result.log_kind != "solver":
+    if result.log_kind != "solver":
         steps.append(f"{_logs_command(result)} --solver-log")
     else:
         steps.append(f"{_logs_command(result)} --follow")
