@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from launchpad_cli.core.config import LaunchpadConfig
@@ -23,6 +23,9 @@ class NastranAdapter:
     name: str = "Nastran"
     input_extensions: tuple[str, ...] = (".dat",)
     output_extensions: tuple[str, ...] = (".f06", ".op2", ".log")
+    log_catalog: dict[str, str] = field(
+        default_factory=lambda: {"solver": ".f06", "telemetry": ".f04"}
+    )
 
     def discover_inputs(self, input_dir: Path) -> list[DiscoveredInput]:
         """Discover Nastran inputs using the configured extension rules."""
@@ -73,4 +76,7 @@ class NastranAdapter:
         """Build an adapter instance using the configured discovery extension."""
 
         extension = normalize_extension(config.solvers.nastran.input_extension)
-        return cls(input_extensions=(extension,))
+        return cls(
+            input_extensions=(extension,),
+            log_catalog=config.solvers.nastran.logs.model_dump(mode="python", exclude_none=True),
+        )

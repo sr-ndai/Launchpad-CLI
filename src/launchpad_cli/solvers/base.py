@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Mapping, Protocol, runtime_checkable
 
 from launchpad_cli.core.config import LaunchpadConfig
 
@@ -50,6 +50,10 @@ class SolverAdapter(Protocol):
     @property
     def output_extensions(self) -> tuple[str, ...]:
         """Output file extensions relevant to later log/result workflows."""
+
+    @property
+    def log_catalog(self) -> Mapping[str, str]:
+        """Named solver-log kinds captured in the submitted manifest."""
 
     def discover_inputs(self, input_dir: Path) -> list[DiscoveredInput]:
         """Discover supported input files beneath the given input directory."""

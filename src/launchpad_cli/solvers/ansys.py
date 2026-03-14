@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from launchpad_cli.core.config import LaunchpadConfig
@@ -17,6 +17,7 @@ class AnsysAdapter:
     name: str = "ANSYS"
     input_extensions: tuple[str, ...] = (".dat",)
     output_extensions: tuple[str, ...] = (".out", ".err")
+    log_catalog: dict[str, str] = field(default_factory=lambda: {"solver": ".out"})
 
     def discover_inputs(self, input_dir: Path) -> list[DiscoveredInput]:
         """Fail clearly until an ANSYS workflow is defined by the team."""
@@ -54,4 +55,7 @@ class AnsysAdapter:
         """Build an adapter instance using the configured discovery extension."""
 
         extension = normalize_extension(config.solvers.ansys.input_extension)
-        return cls(input_extensions=(extension,))
+        return cls(
+            input_extensions=(extension,),
+            log_catalog=config.solvers.ansys.logs.model_dump(mode="python", exclude_none=True),
+        )

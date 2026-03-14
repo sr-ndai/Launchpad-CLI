@@ -11,6 +11,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
+from launchpad_cli.core.job_manifest import TaskReference
 from launchpad_cli.solvers import DiscoveredInput
 
 PALETTE = {
@@ -209,6 +210,7 @@ def render_submit_dry_run(
     solver_name: str,
     input_dir: Path,
     primary_inputs: Sequence[DiscoveredInput],
+    task_references: Sequence[TaskReference],
     package_files: Sequence[Path],
     remote_job_dir: str,
     payload_label: str,
@@ -241,10 +243,19 @@ def render_submit_dry_run(
     summary.add_row("Begin", begin or "immediate")
 
     manifest = Table(title="Detected Inputs", show_header=True, header_style="bold")
+    manifest.add_column("Label")
+    manifest.add_column("Alias")
+    manifest.add_column("Task", justify="right")
     manifest.add_column("Primary input")
     manifest.add_column("Size (bytes)", justify="right")
-    for item in primary_inputs:
-        manifest.add_row(item.relative_path.as_posix(), str(item.size_bytes))
+    for task_ref, item in zip(task_references, primary_inputs, strict=True):
+        manifest.add_row(
+            task_ref.display_label,
+            task_ref.alias,
+            task_ref.task_id,
+            item.relative_path.as_posix(),
+            str(item.size_bytes),
+        )
 
     package_table = Table(title="Payload Contents", show_header=True, header_style="bold")
     package_table.add_column("Path")
@@ -271,6 +282,7 @@ def render_submit_confirmation(
     *,
     run_name: str,
     job_id: str,
+    task_references: Sequence[TaskReference],
     remote_job_dir: str,
     payload_label: str,
     remote_payload_path: str,
@@ -298,6 +310,20 @@ def render_submit_confirmation(
     console.print(
         build_detail_panel(Group(intro, summary), title="Submission Complete", tone="success")
     )
+    if len(task_references) > 1:
+        references = Table(show_header=True, header_style="bold")
+        references.add_column("Label")
+        references.add_column("Alias")
+        references.add_column("Task", justify="right")
+        references.add_column("Input")
+        for task_ref in task_references:
+            references.add_row(
+                task_ref.display_label,
+                task_ref.alias,
+                task_ref.task_id,
+                task_ref.input_relative_path,
+            )
+        console.print(build_detail_panel(references, title="Task References"))
     console.print(
         build_next_steps_panel(
             [
@@ -454,6 +480,8 @@ def _build_job_detail_renderable(
     summary.add_row("Summary", _format_state_counts(state_counts))
 
     table = Table(title="Tasks", show_header=True, header_style="bold")
+    table.add_column("Label")
+    table.add_column("Alias")
     table.add_column("Task", justify="right")
     table.add_column("State")
     table.add_column("Node")
@@ -468,6 +496,8 @@ def _build_job_detail_renderable(
 
     for row in rows:
         columns = [
+            str(row.get("display_label") or row.get("task_id") or "—"),
+            str(row.get("alias") or "—"),
             str(row.get("task_id") or "—"),
             build_status_badge(row.get("state")),
             str(row.get("node") or "—"),

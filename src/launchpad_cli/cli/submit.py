@@ -18,12 +18,20 @@ from loguru import logger
 
 from launchpad_cli.core.compress import compress_path
 from launchpad_cli.core.config import LaunchpadConfig, ResolvedConfig, resolve_config
+from launchpad_cli.core.job_manifest import (
+    JobManifest,
+    TaskReference,
+    build_job_manifest,
+    build_task_references,
+    render_job_manifest,
+)
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.remote_ops import (
     RemoteJobLayout,
     build_remote_job_layout,
     extract_remote_archive,
     prepare_remote_job_directory,
+    write_remote_text,
 )
 from launchpad_cli.core.slurm import SubmitRequest, SubmittedJob, build_submit_script, submit_job
 from launchpad_cli.core.ssh import ssh_session
@@ -46,6 +54,7 @@ class SubmitPlan:
     input_dir: Path
     run_name: str
     primary_inputs: tuple[DiscoveredInput, ...]
+    task_references: tuple[TaskReference, ...]
     package_files: tuple[Path, ...]
     manifest_entries: tuple[str, ...]
     archive_root_name: str
@@ -54,6 +63,7 @@ class SubmitPlan:
     requested_streams: int
     remote_layout: RemoteJobLayout
     submit_request: SubmitRequest
+    job_manifest: JobManifest
 
     @property
     def remote_payload_path(self) -> str:
@@ -99,6 +109,8 @@ class SubmitResult:
     primary_inputs: tuple[dict[str, object], ...] = ()
     package_files: tuple[str, ...] = ()
     manifest_entries: tuple[str, ...] = ()
+    logs: dict[str, str] | None = None
+    tasks: tuple[dict[str, object], ...] = ()
     partition: str | None = None
     time_limit: str | None = None
     begin: str | None = None
@@ -126,6 +138,8 @@ class SubmitResult:
             "primary_inputs": list(self.primary_inputs),
             "package_files": list(self.package_files),
             "manifest_entries": list(self.manifest_entries),
+            "logs": self.logs or {},
+            "tasks": list(self.tasks),
             "script_preview": self.script_preview,
         }
 
@@ -257,6 +271,7 @@ def command(
             solver_name=plan.solver_key,
             input_dir=plan.input_dir,
             primary_inputs=plan.primary_inputs,
+            task_references=plan.task_references,
             package_files=plan.package_files,
             remote_job_dir=plan.remote_layout.job_dir,
             payload_label=plan.payload_label,
@@ -290,6 +305,7 @@ def command(
         console,
         run_name=plan.run_name,
         job_id=execution.submitted_job.job_id,
+        task_references=plan.task_references,
         remote_job_dir=plan.remote_layout.job_dir,
         payload_label=plan.payload_label,
         remote_payload_path=plan.remote_payload_path,
@@ -352,6 +368,12 @@ async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
                     streams=plan.requested_streams,
                     resume=config.transfer.resume_enabled,
                 )
+
+            await write_remote_text(
+                conn,
+                plan.remote_layout.manifest_path,
+                render_job_manifest(plan.job_manifest),
+            )
 
             submitted_job = await submit_job(
                 conn,
@@ -436,6 +458,7 @@ def _build_submit_plan(
         f"{archive_root_name}/{path.relative_to(resolved_input_dir).as_posix()}"
         for path in primary_inputs_to_paths(primary_inputs)
     )
+    task_references = build_task_references(primary_inputs)
 
     resolved_run_name = run_name or _generate_run_name(
         solver_key,
@@ -456,6 +479,11 @@ def _build_submit_plan(
         begin=begin,
         solver_overrides=SubmitOverrides(cpus=cpus),
     )
+    job_manifest = build_job_manifest(
+        solver=solver_key,
+        logs=dict(solver_adapter.log_catalog),
+        tasks=task_references,
+    )
 
     return SubmitPlan(
         resolved_config=resolved_config,
@@ -464,6 +492,7 @@ def _build_submit_plan(
         input_dir=resolved_input_dir,
         run_name=resolved_run_name,
         primary_inputs=primary_inputs,
+        task_references=task_references,
         package_files=package_files,
         manifest_entries=manifest_entries,
         archive_root_name=archive_root_name,
@@ -472,6 +501,7 @@ def _build_submit_plan(
         requested_streams=resolved_config.config.transfer.parallel_streams,
         remote_layout=remote_layout,
         submit_request=submit_request,
+        job_manifest=job_manifest,
     )
 
 
@@ -672,6 +702,8 @@ def _build_submit_dry_run_result(plan: SubmitPlan, script_preview: str) -> Submi
         primary_inputs=tuple(_serialize_discovered_input(item) for item in plan.primary_inputs),
         package_files=tuple(str(path) for path in plan.package_files),
         manifest_entries=plan.manifest_entries,
+        logs=dict(plan.job_manifest.logs),
+        tasks=tuple(_serialize_task_reference(item) for item in plan.task_references),
         partition=plan.submit_request.partition
         or config.submit.partition
         or config.cluster.default_partition,
@@ -696,6 +728,8 @@ def _build_submit_result(plan: SubmitPlan, execution: SubmitExecution) -> Submit
         job_id=execution.submitted_job.job_id,
         effective_streams=execution.effective_streams,
         monitor_command=f"launchpad status {execution.submitted_job.job_id}",
+        logs=dict(plan.job_manifest.logs),
+        tasks=tuple(_serialize_task_reference(item) for item in plan.task_references),
     )
 
 
@@ -709,3 +743,9 @@ def _serialize_discovered_input(item: DiscoveredInput) -> dict[str, object]:
         "extension": item.extension,
         "size_bytes": item.size_bytes,
     }
+
+
+def _serialize_task_reference(item: TaskReference) -> dict[str, object]:
+    """Serialize a task reference for CLI JSON responses."""
+
+    return item.as_dict()
