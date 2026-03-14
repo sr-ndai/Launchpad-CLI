@@ -1,116 +1,92 @@
 # Launchpad Architecture
 
+This document is for contributors and reviewers. If you are trying to use the
+tool, start with [README.md](README.md) or [docs/README.md](docs/README.md)
+instead.
+
 ## Purpose
 
 Launchpad is a Windows-first CLI for packaging solver inputs, transferring them
 to a shared SLURM cluster, submitting jobs, monitoring execution, and
-retrieving results. Phase 1 established the package boundaries and command
-surface; Phase 2 begins filling in the submission pipeline around stable solver
-contracts.
+retrieving results.
+
+The current product surface is organized around one normal workflow:
+
+1. resolve configuration
+2. submit work
+3. inspect status and logs
+4. download results
+5. optionally clean up remote job directories
 
 ## Code Map
 
 ### CLI Layer
 
-- `src/launchpad_cli/cli/__init__.py` defines the root Click group, global
-  options, and command registration.
-- `src/launchpad_cli/cli/*.py` modules own individual commands or command
-  groups. `submit.py` now orchestrates the functional Phase 2 Nastran submit
-  path and dry-run preview, while `status.py` now provides the first Phase 3
-  monitoring flow for current-user, specific-job, and watch-mode status
-  queries. `logs.py` and `cancel.py` now cover the remaining Phase 3 operator
-  workflows for remote log access and SLURM cancellation. `download.py` now
-  owns the Phase 4 result-retrieval orchestration on top of the shared
-  download primitives.
-- `src/launchpad_cli/display.py` centralizes Rich console creation plus the
-  submit-focused dry-run/confirmation formatting and the status overview/detail
-  renderables used by watch mode.
+`src/launchpad_cli/cli/` contains the user-facing command modules:
+
+- `__init__.py`: root Click group, global options, and command registration
+- `config_cmd.py`: config initialization and inspection
+- `doctor.py`: local and remote diagnostics
+- `ssh_cmd.py`: interactive cluster shell
+- `submit.py`: input discovery, packaging, transfer, script generation, submit
+- `status.py`: SLURM status and accounting queries
+- `logs.py`: SLURM and solver log access
+- `download.py`: result selection, transfer, verification, and extraction
+- `cancel.py`: SLURM cancellation
+- `ls.py`: remote listing
+- `cleanup.py`: remote job-directory removal
 
 ### Core Layer
 
-- `src/launchpad_cli/core/config.py` will hold the layered configuration models
-  and file/env loading entry points.
-- `src/launchpad_cli/core/logging.py` will configure structured application
-  logging.
-- `src/launchpad_cli/core/ssh.py`, `transfer.py`, and `compress.py` define the
-  transport and archive contracts used by submit/download flows. `compress.py`
-  now also exposes archive inspection, local checksum helpers, and remote
-  archive creation for Phase 4 retrieval workflows.
-- `src/launchpad_cli/core/slurm.py` now builds submit scripts, wraps remote
-  `sbatch` submission, parses `squeue --json` / `sacct --json` payloads into
-  typed records, and exposes reusable remote scheduler query wrappers for later
-  monitoring commands.
-- `src/launchpad_cli/core/remote_ops.py` and `local_ops.py` hold filesystem
-  helpers that should stay outside command modules. `remote_ops.py` now covers
-  remote job-directory setup, remote text writes, archive extraction, size
-  queries, listings, checksums, and deletions. `local_ops.py` now handles
-  download-destination resolution plus disk-space checks for Windows-first
-  retrieval flows.
+`src/launchpad_cli/core/` contains reusable services kept out of the Click
+callbacks:
+
+- `config.py`: layered configuration models and resolution
+- `logging.py`: application logging setup
+- `ssh.py`: SSH session helpers
+- `transfer.py`: upload and download primitives
+- `compress.py`: archive creation, inspection, extraction, and checksums
+- `remote_ops.py`: remote filesystem helpers
+- `local_ops.py`: local filesystem and disk-space helpers
+- `slurm.py`: submit-script generation plus `squeue` and `sacct` query helpers
 
 ### Solver Layer
 
-- `src/launchpad_cli/solvers/base.py` defines the solver adapter protocol,
-  discovered-input metadata, and narrow submit override contract.
-- `src/launchpad_cli/solvers/nastran.py` contains the first concrete solver:
-  deterministic input discovery, command construction, and scratch environment
-  setup for Nastran.
-- `src/launchpad_cli/solvers/ansys.py` preserves the planned ANSYS adapter slot
-  as a protocol-compliant stub with explicit runtime failure behavior.
+`src/launchpad_cli/solvers/` isolates solver-specific behavior:
 
-### Tests
+- `base.py`: shared solver protocol and types
+- `nastran.py`: implemented Nastran adapter
+- `ansys.py`: protocol-compliant stub with explicit runtime failure
 
-- `tests/test_cli.py` provides CLI smoke coverage for the root command.
-- `tests/test_project_scaffold.py` verifies packaging entry points and the
-  expected module skeleton.
-- `tests/test_solver_adapters.py` covers solver discovery, command building,
-  scratch environment setup, and the ANSYS stub behavior.
-- `tests/test_remote_ops.py` and `tests/test_slurm.py` cover the reusable
-  remote-submit, download-groundwork, and scheduler-query primitives with fakes
-  instead of a live cluster.
-- `tests/test_compress.py` and `tests/test_local_ops.py` cover archive
-  inspection, checksums, remote archive creation, and local download path/disk
-  semantics.
-- `tests/test_submit.py` covers the submit command’s dry-run preview and mocked
-  execution wiring.
-- `tests/test_status.py` covers the status command's overview/json/watch
-  wiring plus the polling helper.
-- `tests/test_logs.py` and `tests/test_cancel.py` cover the remote log and
-  cancellation command wiring with fake remote effects.
-- `tests/conftest.py` adds the `src/` tree to `sys.path` so local test runs can
-  import the package without extra setup.
+### Display Layer
+
+`src/launchpad_cli/display.py` centralizes Rich console and table rendering so
+command modules do not hand-build terminal UI in multiple places.
 
 ## Execution Flow
 
-The intended steady-state data flow is:
+Most commands follow the same pattern:
 
-1. Click parses the user command and global flags in the root CLI group.
-2. Command modules resolve configuration and hand work to `launchpad_cli.core`.
-3. Core services call solver adapters for solver-specific behavior.
-4. Display helpers render human-facing output while JSON output stays
-   script-friendly.
+1. Click parses the root flags and subcommand arguments.
+2. The command resolves the layered config from files, environment, and CLI
+   overrides.
+3. The command hands the actual work to `launchpad_cli.core`.
+4. Solver-specific branches go through the adapter layer.
+5. Rich renders human output; root `--json` produces machine-readable output
+   where the command supports it.
 
-The repository now implements the solver layer, reusable remote-submit
-primitives, the first functional `launchpad submit` orchestration path with
-Rich dry-run and confirmation output, and the reusable SLURM status/accounting
-query layer needed by the Phase 3 monitoring commands. `launchpad status`,
-`launchpad logs`, and `launchpad cancel` now build on that layer with the full
-Phase 3 operator command surface. Phase 4 now includes the reusable download
-and remote-filesystem groundwork plus the command-level `launchpad download`,
-`launchpad ls`, and `launchpad cleanup` flows for job lookup, remote listing,
-transfer orchestration, verification, and guarded remote cleanup.
+## Current Extension Points
 
-## Common Changes
-
-- Add a new command: create a module in `src/launchpad_cli/cli/`, register it
-  in `src/launchpad_cli/cli/__init__.py`, and add CLI smoke coverage.
-- Add a new solver: implement the `SolverAdapter` protocol in
-  `src/launchpad_cli/solvers/` and extend the solver registry.
-- Change transfer behavior: work in `src/launchpad_cli/core/transfer.py` and
-  keep transport details out of CLI callbacks.
-- Change configuration behavior: update `src/launchpad_cli/core/config.py` and
-  cover precedence rules in tests.
+- add a new root command by adding a module in `src/launchpad_cli/cli/` and
+  registering it in `cli/__init__.py`
+- add a new solver by implementing the protocol in `solvers/` and wiring it
+  into the submit path
+- change transfer behavior in `core/transfer.py`
+- change config behavior in `core/config.py`
 
 ## Current Limits
 
-- The ANSYS adapter remains intentionally unimplemented until the team defines
-  the supported runtime contract.
+- ANSYS submit support is not implemented yet
+- `launchpad config edit` and `launchpad config validate` are not implemented
+- some command combinations are intentionally terminal-only, such as
+  `status --watch` and `logs --follow`
