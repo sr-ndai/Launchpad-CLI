@@ -12,42 +12,42 @@
 Phase 4 — Download & Cleanup
 
 ## Active Task
-4.2 — Download command orchestration
+4.3 — Remote listing and cleanup commands
 
 ## Queue Snapshot
-- pending: 4.3
+- pending: —
 - ready: —
-- in-progress: —
+- in-progress: 4.3
 - needs-review: —
-- revision-needed: 4.2
+- revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/04-download-cleanup`
-- active task branch: `task/4.2-download-command-orchestration`
-- last processed builder session: `2026-03-13-1856-builder-4.2.md`
+- active task branch: `task/4.3-remote-ls-and-cleanup`
+- last processed builder session: `2026-03-13-1907-builder-4.2.md`
 
 ## What Changed Recently
-- Ingested Builder handoff `2026-03-13-1856-builder-4.2.md` and reran the task
-  `4.2` prompt verification successfully.
-- Reviewed task `4.2` and requested revisions for unsafe `--cleanup`
-  combinations and missing global `--json` support.
-- Kept `task/4.2-download-command-orchestration` active so the Builder can
-  address the review feedback without changing the Phase 4 task order.
+- Ingested Builder handoff `2026-03-13-1907-builder-4.2.md`, reviewed the
+  revision, and reran the task `4.2` prompt verification successfully.
+- Accepted and merged `task/4.2-download-command-orchestration` into
+  `phase/04-download-cleanup`.
+- Created `task/4.3-remote-ls-and-cleanup` and assigned task `4.3` as the
+  next active Builder task.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should stay on `task/4.2-download-command-orchestration`, read
-`.ai/reviews/4.2.md`, address the requested revisions, rerun the task `4.2`
-prompt verification, and hand the task back with `Outcome: READY_FOR_REVIEW`
-or `BLOCKED`.
+Builder should switch to `task/4.3-remote-ls-and-cleanup`, read
+`.ai/tasks/prompts/4.3.md`, implement the remaining Phase 4 operator
+commands, run the prompt verification, and hand the task back with
+`Outcome: READY_FOR_REVIEW` or `BLOCKED`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/reviews/4.2.md`
-4. `.ai/tasks/prompts/4.2.md`
-5. `.ai/sessions/2026-03-13-1900-coordinator-review-4.2.md`
+3. `.ai/tasks/prompts/4.3.md`
+4. `.ai/plans/04-download-cleanup.md`
+5. `.ai/plan.md`
