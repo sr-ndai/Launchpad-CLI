@@ -1254,15 +1254,17 @@ design gate.
 
 - [ ] Establish a shared CLI design system on top of the existing `click` +
   `rich` + `rich-click` stack
-- [ ] Redesign root and subcommand help to feel intentionally branded, colorful,
-  and easy to scan without changing the command surface
-- [ ] Add a compact ASCII Launchpad wordmark for root help and selected success
-  or onboarding surfaces
+- [ ] Split the top-level UX into three surfaces: a branded no-argument welcome
+  screen, a dry root help reference, and focused command help surfaces
+- [ ] Redesign root help to stay intentionally restrained and easy to scan,
+  using no more than three command groups plus one merged options panel
+- [ ] Reserve the ASCII Launchpad wordmark and tagline for the welcome screen,
+  onboarding, and selected success moments rather than `--help`
 - [ ] Upgrade `launchpad config init` and `launchpad doctor` into guided,
   next-step-oriented operator experiences
 - [ ] Polish the primary workflows (`submit`, `status`, `download`) so dry
-  runs, live status, confirmations, and success summaries all share one visual
-  language
+  runs, live status, confirmations, and success summaries carry most of the
+  CLI personality
 - [ ] Bring the secondary operator commands (`logs`, `ls`, `cancel`,
   `cleanup`) into the same design system and update docs with current styled
   examples

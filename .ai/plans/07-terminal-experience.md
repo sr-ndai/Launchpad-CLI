@@ -9,10 +9,13 @@ existing command surface or machine-readable workflows.
 
 ## Scope
 
-- Shared CLI theming, badges, panels, prompt wrappers, and branded help output
+- Shared CLI theming, badges, panels, prompt wrappers, and the welcome-screen
+  shell
+- Restrained help-reference improvements that prioritize scan speed over
+  branding chrome
 - Guided UX improvements for setup, diagnostics, confirmations, and next-step
   messaging
-- Human-facing output polish for the primary workflows and the remaining
+- Human-facing runtime polish for the primary workflows and the remaining
   operator commands
 - Documentation updates that reflect the refreshed terminal experience
 
@@ -47,10 +50,10 @@ existing command surface or machine-readable workflows.
 
 | Task ID | Title | Why It Exists | Depends On |
 |---------|-------|---------------|------------|
-| 7.1 | Design system and branded help | Establish the shared visual language, help layout, and ASCII brand treatment once so later command work can reuse a stable presentation layer. | — |
-| 7.2 | Guided setup and diagnostics UX | Turn the first-run and troubleshooting surfaces into stepwise, actionable operator workflows built on the new design system. | 7.1 |
-| 7.3 | Primary workflow terminal experience | Apply the design system to the busiest commands (`submit`, `status`, `download`) where the visual and guidance improvements matter most. | 7.1 |
-| 7.4 | Secondary command polish and docs | Bring the remaining implemented commands and the user docs into the same design language after the primary surfaces settle. | 7.2, 7.3 |
+| 7.1 | Design system and branded help | Establish the shared visual language, a distinct no-argument welcome screen, and a restrained help-reference shell so later tasks build on the right surface model. | — |
+| 7.2 | Guided setup and diagnostics UX | Turn `config init` and `doctor` into the branded onboarding and recovery moments that replace help-surface decoration. | 7.1 |
+| 7.3 | Primary workflow terminal experience | Put most of the CLI personality into `submit`, `status`, and `download` runtime feedback, especially success summaries and next steps. | 7.1 |
+| 7.4 | Secondary command polish and docs | Bring the remaining implemented commands and docs into the same design language after the welcome, onboarding, and primary flows settle. | 7.2, 7.3 |
 
 ## Risks
 
@@ -67,8 +70,14 @@ existing command surface or machine-readable workflows.
 
 - Design references for this phase: CLIG, GitHub CLI, Charm Gum, Vercel CLI,
   uv, and the current `rich-click` theming capabilities.
-- The ASCII Launchpad mark should appear only on root help and selected
-  first-run or success surfaces, never in watch loops or machine-readable
-  output.
+- Phase 7 now uses three distinct surfaces:
+  - bare `launchpad` is the branded welcome screen
+  - `launchpad --help` is the full dry reference card
+  - `launchpad <command> --help` is a focused command reference
+- Root help should use exactly three command groups (`Commands`,
+  `Configuration`, `Management`) plus one merged `Options` panel.
+- The ASCII Launchpad mark and tagline should not appear on `--help`; reserve
+  them for the welcome screen, `config init`, `doctor` all-pass, and selected
+  success moments that later tasks own.
 - Docs updates should use current output examples from the implemented CLI
   rather than aspirational screenshots.
