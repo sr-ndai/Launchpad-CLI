@@ -12,7 +12,7 @@
 Phase 4 — Download & Cleanup
 
 ## Active Task
-None — Phase 4 complete locally
+None — Phase 4 awaiting human PR review
 
 ## Queue Snapshot
 - pending: —
@@ -33,19 +33,20 @@ None — Phase 4 complete locally
   `4.3`, and reran the prompt verification successfully.
 - Accepted `.ai/reviews/4.3.md` and merged
   `task/4.3-remote-ls-and-cleanup` into `phase/04-download-cleanup`.
-- Marked task `4.3` done and updated Phase 4 to complete locally pending the
-  push and PR step.
+- Marked task `4.3` done and updated Phase 4 to complete locally.
+- Pushed `phase/04-download-cleanup` and opened PR `#4` to `main`:
+  `https://github.com/sr-ndai/Launchpad-CLI/pull/4`.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Coordinator should push `phase/04-download-cleanup`, open the Phase 4 PR to
-`main`, and then hand off to the human owner for review and merge.
+Human owner should review and merge PR `#4` from
+`phase/04-download-cleanup` to `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-13-1926-coordinator-accept-4.3-complete-phase-4.md`
-4. `.ai/plans/04-download-cleanup.md`
+3. `.ai/sessions/2026-03-13-1935-coordinator-open-phase-4-pr.md`
+4. `.ai/sessions/2026-03-13-1926-coordinator-accept-4.3-complete-phase-4.md`
 5. `.ai/plan.md`
