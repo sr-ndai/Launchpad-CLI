@@ -34,20 +34,20 @@ None.
 - Merged `task/8.3-interactive-log-picker` into
   `phase/08-task-references-and-solver-aware-logs`, bringing the TTY-only
   picker, final logs UX, and docs updates onto the shared phase branch.
-- Phase 8 is now complete locally with all tasks accepted and merged on the
-  phase branch.
+- Opened PR `#9` from `phase/08-task-references-and-solver-aware-logs` to
+  `main` after Phase 8 closed locally.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human should open or review the Phase 8 pull request from
+Human should review PR `#9` from
 `phase/08-task-references-and-solver-aware-logs` to `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1435-builder-8.3.md`
+3. `.ai/sessions/2026-03-14-1447-coordinator-open-phase-8-pr.md`
 4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
 5. `.ai/reviews/8.3.md`
 6. `.ai/plan.md`
