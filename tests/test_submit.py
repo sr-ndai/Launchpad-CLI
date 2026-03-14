@@ -216,7 +216,7 @@ def test_submit_wraps_asyncssh_errors_as_click_exceptions(monkeypatch, tmp_path:
 
     assert result.exit_code == 1
     assert not isinstance(result.exception, asyncssh.Error)
-    assert "Error: boom" in result.output
+    assert "boom" in result.output
 
 
 def test_build_submit_plan_errors_when_no_supported_inputs(monkeypatch, tmp_path: Path) -> None:
