@@ -24,7 +24,7 @@ This CLI follows the [Command Line Interface Guidelines](https://clig.dev/) as a
 - **Composable.** Commands return proper exit codes, write primary output to `stdout`, messaging/progress to `stderr`, and support `--json` for piping to `jq` or other tools. Each command does one thing well.
 - **Conversational.** When something goes wrong, the CLI explains what happened and suggests what to do next. After a successful submit, it tells you the next command to run. After an error, it tells you how to fix it.
 - **Solver-aware, not solver-specific.** The core engine handles compression, transfer, SLURM interaction, and folder structure. Solver-specific logic (input file extensions, output file extensions, executable paths, SLURM resource templates) is encapsulated in solver adapters. V1 ships with Nastran fully implemented. ANSYS ships as a Protocol-compliant stub — the adapter skeleton exists (so the abstraction is proven) but is not functionally implemented until an ANSYS user on the team defines the workflow.
-- **Reliable transfers first, fast transfers second.** V1 uses single-stream SFTP with resume support, integrity verification, and great progress UX. Parallel multi-stream transfer is a Phase 5 optimization that will be benchmarked against alternatives before committing to a design. Engineers will forgive a slower transfer. They will not forgive a corrupted archive.
+- **Reliable transfers first, fast transfers second.** V1 starts from resumable SFTP with integrity verification and strong progress UX. Phase 5 extends that baseline with a hybrid transfer design: striped `single-file` transfer for one logical payload, worker-pool `multi-file` transfer for many files, and explicit operator control over the stream budget. Engineers will forgive a slower transfer. They will not forgive a corrupted archive.
 - **Beautiful terminal UI.** The CLI should be visually polished and colorful — progress bars, status tables, clear color-coded states, styled headers, and helpful formatting. Even engineers who don't care about CLIs should find it pleasant to use. Use Rich extensively for all output. Respect `NO_COLOR` and `--no-color` for environments that don't support color.
 - **Windows-first.** The entire team is on Windows. All path handling, terminal output, and installation instructions assume Windows. Cross-platform correctness is maintained but not the priority.
 - **Documentation is a first-class deliverable.** Every module, function, and CLI command must have clear, concise documentation. The README must cover installation, quickstart, full command reference, and configuration. Docstrings follow a succinct style (one-liner summary + args if non-obvious). Documentation is maintained alongside code — not as an afterthought. This project will be developed and maintained with AI coding agents (Coordinator/Builder loop), so code clarity and documentation quality directly affect development velocity.
@@ -38,7 +38,7 @@ This CLI follows the [Command Line Interface Guidelines](https://clig.dev/) as a
 | Runtime behavior     | Stateless commands, no daemon                             |
 | Target audience      | 3–10 structural engineers (not Python experts)            |
 | Solvers              | Nastran (fully implemented), ANSYS (stub/placeholder for V1) |
-| Transfer size        | 10+ GB compressed (single-stream SFTP with resume in V1, parallel as Phase 5 optimization) |
+| Transfer size        | 10+ GB compressed (resumable SFTP baseline with Phase 5 `single-file` and `multi-file` acceleration paths) |
 | Compression          | zstd (already team standard)                              |
 | SSH access           | Direct to head node, key-based auth                       |
 | Cluster filesystem   | FSx for Lustre (mounted at `/shared`)                     |
@@ -410,7 +410,7 @@ launchpad-cli/
 │       │   ├── config.py            # Pydantic config models, layered loading
 │       │   ├── logging.py           # loguru setup: console + file sinks, rotation
 │       │   ├── ssh.py               # asyncssh connection management
-│       │   ├── transfer.py          # SFTP upload/download engine (single-stream V1, parallel Phase 5)
+│       │   ├── transfer.py          # SFTP upload/download engine (`single-file` striping + `multi-file` worker pool in Phase 5)
 │       │   ├── compress.py          # zstd compress/decompress (local + remote)
 │       │   ├── slurm.py             # SLURM command builders + output parsers
 │       │   ├── remote_ops.py        # Remote filesystem operations (mkdir, du, rm, etc.)
@@ -544,7 +544,7 @@ async def ssh_session(config: SSHConfig) -> AsyncGenerator[asyncssh.SSHClientCon
         conn.close()
 ```
 
-**`core/transfer.py`** — The SFTP transfer engine. V1 uses single-stream transfers with resume support. Parallel multi-stream is a Phase 5 optimization, benchmarked before implementation.
+**`core/transfer.py`** — The SFTP transfer engine. It provides resumable transfer primitives, striped `single-file` movement for a single logical payload, and worker-pool `multi-file` transfer for concurrent whole-file movement.
 
 - Opens one SFTP channel over the SSH connection.
 - Uploads/downloads with progress reporting via Rich.
@@ -728,17 +728,42 @@ V1 uses a single SFTP stream per transfer. This is intentionally conservative:
 
 A single SFTP stream over SSH typically achieves 100–150 MB/s on a good network. For a 3 GB compressed archive, that's ~20–30 seconds. This is slower than WinSCP's multi-connection approach but is correct, resumable, and simple to debug.
 
-### 5.2 Phase 5: Benchmark Before Committing to Parallel Design
+### 5.2 Phase 5: Hybrid Transfer Design
 
-The plan originally specified a custom multipart transfer system (N SFTP channels, chunk splitting, offset-based parallel writes). This is **not trivial** — it is a custom protocol on top of SFTP with correctness, resume, buffering, and integrity implications. Before committing to a design, Phase 5 benchmarks these candidates on the actual cluster and network:
+Phase 5 should expose three user-facing transfer modes:
 
-1. **Multiple SSH connections** (not channels) — open N separate SSH connections, each uploading/downloading a different part. Simpler than multiplexed channels.
-2. **Multiple SFTP channels on one connection** — the original plan. AsyncSSH supports this, but correctness of concurrent offset writes to one file needs validation.
-3. **Split archive into N parts** — compress into multiple `.tar.zst.NNN` parts, transfer each on its own stream, reassemble remotely. Simpler resume semantics.
-4. **Parallel transfer of many files** — skip archiving entirely, transfer individual files in parallel. Trades compression ratio for simplicity.
-5. **Remote `tar | zstd` streaming over SSH** — pipe directly over the SSH connection, bypassing SFTP. Potentially fastest, but no resume.
+1. **`auto`** — the CLI chooses the default mode for the workflow, while still
+   allowing explicit override.
+2. **`single-file`** — transfer one logical payload object using multiple
+   lanes/stripes. For submit, this remains the packaged archive path. For
+   download, it remains the remote archive path.
+3. **`multi-file`** — transfer many files concurrently with a worker pool and
+   preserved directory structure.
 
-The winner depends on: head node SSH config (MaxSessions, MaxStartups), FSx I/O characteristics, actual network bandwidth, and Windows asyncssh behavior. Do not assume any approach is optimal without benchmarking.
+The architecture should follow the patterns proven by tools such as `lftp`,
+`rclone`, OpenSSH `sftp`, AsyncSSH, and `mscp`: separate the “one large
+payload” strategy from the “many files” strategy instead of forcing one
+mechanism to solve both.
+
+**Chosen design for Launchpad:**
+
+- **Single-file mode:** use multiple SSH/SFTP worker connections and stripe the
+  payload across them. Uploads use remote temp parts plus a remote assembly
+  step rather than speculative concurrent writes into one remote SFTP file.
+  Downloads use multiple workers to fill one local temp archive with ranged
+  writes and resumable stripe state.
+- **Multi-file mode:** use a worker pool of whole-file transfers, one file per
+  worker at a time, reusing per-file resume and checksum verification.
+- **Streams:** `--streams` is the concurrency budget for either mode.
+- **Fallback:** if the server will not allow the requested stream count, warm
+  up as many workers as succeed, warn with the effective stream count, and
+  continue as long as at least one worker is available.
+- **Auto rules:** submit stays archive-first by default; download stays
+  archive-preferred when a full-job archive is safe and available, otherwise it
+  falls back to multi-file mode.
+
+Real-cluster measurement is still valuable later, but it is now tuning and
+validation work rather than the gate for choosing the architecture.
 
 ### 5.3 Compression Tuning
 
@@ -1186,10 +1211,10 @@ launchpad config init
 
 ### Phase 5: Performance & Polish (Weeks 9–10)
 
-**Goal:** Transfer optimization, edge cases, logging audit.
+**Goal:** Land the hybrid transfer design, then finish the remaining polish work.
 
-- [ ] **Transfer benchmark plan:** Document the benchmark matrix, prerequisites, and deferred real-cluster validation path, keeping resumable single-stream SFTP as the provisional baseline until cluster access exists.
-- [ ] Harden the current single-stream transfer path, resume behavior, and operator-facing transfer errors without introducing unvalidated parallel-transfer behavior
+- [ ] Document the Phase 5 transfer architecture and external precedent for `single-file`, `multi-file`, and `auto` modes, including the chosen safety and fallback rules
+- [ ] Implement striped `single-file` transfer plus worker-pool `multi-file` transfer with shared `--streams` controls for submit and download
 - [ ] Resume support hardened for interrupted transfers
 - [ ] Comprehensive error handling and user-friendly error messages
 - [ ] `--json` output mode for all commands (scriptability)
@@ -1197,10 +1222,11 @@ launchpad config init
 - [ ] Edge case handling: existing directories, partial results, cancelled jobs
 - [ ] Logging audit: verify every module has appropriate DEBUG/INFO/WARNING log calls, log file rotation works correctly, `--verbose` output is useful without being noisy
 
-Current constraint: the real-cluster benchmark is deferred until Launchpad SSH
-configuration and shared cluster config are available on a workstation. Until
-then, Phase 5 proceeds on the existing resumable single-stream transfer path
-and avoids speculative parallel-transfer implementation.
+Current constraint: real-cluster benchmarking is still deferred until
+Launchpad SSH configuration and shared cluster config are available on a
+workstation. That no longer blocks Phase 5 architecture or implementation;
+cluster access is now a later validation and tuning step rather than the
+design gate.
 
 **Not in Phase 5 (deferred):** `solvers/ansys.py` implementation. The stub exists and conforms to the `SolverAdapter` Protocol, but functional implementation requires an ANSYS user to define the workflow (input format, executable invocation, scratch requirements). This is tracked as a future task.
 
