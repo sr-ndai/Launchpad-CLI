@@ -12,7 +12,7 @@
 Phase 5 — Performance & Polish
 
 ## Active Task
-5.1 — Transfer benchmark plan and provisional direction
+5.1 — Transfer architecture and precedent review
 
 ## Queue Snapshot
 - pending: 5.2, 5.3
@@ -29,20 +29,18 @@ Phase 5 — Performance & Polish
 - last processed builder session: `2026-03-13-1956-builder-5.1.md`
 
 ## What Changed Recently
-- Ingested Builder handoff `2026-03-13-1956-builder-5.1.md` from
-  `task/5.1-transfer-benchmark-direction` and recorded the environment blocker:
-  no Launchpad cluster config or SSH credentials are available on this
-  workstation.
-- Deferred real-cluster transfer validation for Phase 5 and updated the shared
-  roadmap to keep resumable single-stream SFTP as the provisional baseline
-  until cluster access exists.
-- Revised task `5.1` on the task branch so Builder can finish the benchmark
-  matrix, deferred-validation decision, and provisional Phase 5 direction
-  without waiting for the real cluster.
+- Replaced the deferred single-stream fallback with a new Phase 5 plan for
+  hybrid `single-file` and `multi-file` transfer modes plus `auto` selection,
+  based on external precedent and current repo constraints.
+- Revised task `5.1` on `task/5.1-transfer-benchmark-direction` so Builder now
+  turns `docs/transfer-benchmark.md` into the implementation-ready transfer
+  architecture decision rather than a blocked benchmark note.
+- Updated pending tasks `5.2` and `5.3` so the next implementation pass builds
+  the hybrid transfer engine first and reserves JSON/UX/logging polish for the
+  follow-on pass.
 
 ## Known Blockers
-- Real-cluster transfer validation remains unavailable until Launchpad cluster
-  configuration and SSH credentials exist on a workstation.
+- None.
 
 ## Next Recommended Action
 Builder should switch to `task/5.1-transfer-benchmark-direction`, read the
