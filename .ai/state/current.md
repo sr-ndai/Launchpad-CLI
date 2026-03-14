@@ -12,45 +12,42 @@
 Phase 7 — Terminal Experience
 
 ## Active Task
-7.1 — Design system and branded help
+7.2 — Guided setup and diagnostics UX
 
 ## Queue Snapshot
-- pending: 7.2, 7.3, 7.4
-- ready: —
-- in-progress: —
+- pending: 7.4
+- ready: 7.3
+- in-progress: 7.2
 - needs-review: —
-- revision-needed: 7.1
+- revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/07-terminal-experience`
-- active task branch: `task/7.1-design-system-and-help`
-- last processed builder session: `2026-03-14-0012-builder-7.1.md`
+- active task branch: `task/7.2-guided-setup-and-diagnostics`
+- last processed builder session: `2026-03-14-0905-builder-7.1-wordmark-update.md`
 
 ## What Changed Recently
-- Ingested Builder session `2026-03-14-0012-builder-7.1.md` and reviewed the
-  first-pass Phase 7 help-shell implementation on
-  `task/7.1-design-system-and-help`.
-- Requested revisions on task `7.1` to move branding off `launchpad --help`,
-  introduce a distinct no-argument welcome screen, and collapse the root help
-  layout to the tighter command-grouping model.
-- Updated the shared Phase 7 plan and downstream prompts so later UX work uses
-  the corrected three-surface model: welcome screen, help reference, and
-  command/runtime surfaces.
+- Ingested the latest Builder handoff for `7.1`, reviewed the revised welcome
+  and help surfaces, and accepted the task.
+- Merged `task/7.1-design-system-and-help` into
+  `phase/07-terminal-experience`, carrying forward the three-surface CLI shell,
+  the manual wordmark update, and the docs/test refresh.
+- Promoted `7.3` to `ready` now that `7.1` is complete and assigned `7.2` as
+  the next active Builder task.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should stay on `task/7.1-design-system-and-help`, read the dated prompt
-revision plus `.ai/reviews/7.1.md`, and implement the revised welcome-screen
-and restrained-help behavior for task `7.1`.
+Builder should switch to `task/7.2-guided-setup-and-diagnostics`, read the
+prompt for task `7.2`, and implement the guided `config init` and `doctor` UX
+work on top of the accepted Phase 7 terminal shell.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/7.1.md`
-4. `.ai/reviews/7.1.md`
-5. `.ai/plans/07-terminal-experience.md`
-6. `.ai/plan.md`
+3. `.ai/tasks/prompts/7.2.md`
+4. `.ai/plans/07-terminal-experience.md`
+5. `.ai/plan.md`
