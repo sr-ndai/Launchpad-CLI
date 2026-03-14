@@ -19,7 +19,9 @@ contracts.
   path and dry-run preview, while `status.py` now provides the first Phase 3
   monitoring flow for current-user, specific-job, and watch-mode status
   queries. `logs.py` and `cancel.py` now cover the remaining Phase 3 operator
-  workflows for remote log access and SLURM cancellation.
+  workflows for remote log access and SLURM cancellation. `download.py` now
+  owns the Phase 4 result-retrieval orchestration on top of the shared
+  download primitives.
 - `src/launchpad_cli/display.py` centralizes Rich console creation plus the
   submit-focused dry-run/confirmation formatting and the status overview/detail
   renderables used by watch mode.
@@ -92,9 +94,11 @@ primitives, the first functional `launchpad submit` orchestration path with
 Rich dry-run and confirmation output, and the reusable SLURM status/accounting
 query layer needed by the Phase 3 monitoring commands. `launchpad status`,
 `launchpad logs`, and `launchpad cancel` now build on that layer with the full
-Phase 3 operator command surface. Phase 4 has added the reusable download and
-remote-filesystem groundwork, but the command-level download, listing, and
-cleanup flows are still pending.
+Phase 3 operator command surface. Phase 4 now includes the reusable download
+and remote-filesystem groundwork plus the command-level `launchpad download`
+flow for job lookup, disk checks, transfer orchestration, verification, and
+optional remote cleanup. Remote listing and cleanup command wiring are still
+pending.
 
 ## Common Changes
 
@@ -109,7 +113,6 @@ cleanup flows are still pending.
 
 ## Current Limits
 
-- Download, remote listing, and cleanup command orchestration are not active
-  yet.
+- Remote listing and cleanup command orchestration are not active yet.
 - The ANSYS adapter remains intentionally unimplemented until the team defines
   the supported runtime contract.
