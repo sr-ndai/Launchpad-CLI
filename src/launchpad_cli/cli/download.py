@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import json
 import os
 import shlex
 from collections import Counter
@@ -223,12 +224,13 @@ def command(
 ) -> None:
     """Download task result directories for a previously submitted SLURM job."""
 
+    json_output = _json_output(ctx)
     configure_logging(
         verbosity=_verbosity(ctx),
         colorize=_colorize_output(ctx),
     )
 
-    console = build_console(no_color=not _colorize_output(ctx))
+    console = build_console(stderr=json_output, no_color=not _colorize_output(ctx))
 
     try:
         result = asyncio.run(
@@ -236,6 +238,7 @@ def command(
                 cwd=Path.cwd(),
                 env=os.environ,
                 console=console,
+                json_output=json_output,
                 job_id=job_id,
                 local_dir=local_dir,
                 output=output,
@@ -255,7 +258,10 @@ def command(
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    console.print(_build_completion_panel(result))
+    if json_output:
+        click.echo(json.dumps(result.as_dict(), indent=2))
+    else:
+        console.print(_build_completion_panel(result))
 
 
 async def _run_download(
@@ -263,6 +269,7 @@ async def _run_download(
     cwd: Path,
     env: Mapping[str, str],
     console,
+    json_output: bool,
     job_id: str,
     local_dir: Path | None,
     output: Path | None,
@@ -309,8 +316,13 @@ async def _run_download(
             compression_level=compression_level or resolved.config.transfer.compression_level,
         )
 
+        _validate_cleanup_request(
+            plan,
+            requested_tasks=requested_tasks,
+            exclude_patterns=exclude_patterns,
+        )
         console.print(_build_summary_panel(plan))
-        if not click.confirm("Proceed with download?", default=True):
+        if not click.confirm("Proceed with download?", default=True, err=json_output):
             raise click.Abort()
 
         if plan.transfer_mode == "archive":
@@ -712,6 +724,30 @@ def _build_source_roots(
     return tuple(sources)
 
 
+def _validate_cleanup_request(
+    plan: DownloadPlan,
+    *,
+    requested_tasks: tuple[str, ...],
+    exclude_patterns: tuple[str, ...],
+) -> None:
+    """Reject cleanup requests which would delete remote data the user kept."""
+
+    if not plan.cleanup:
+        return
+    if plan.partial:
+        raise click.ClickException(
+            "`--cleanup` is only allowed for terminal jobs; partial downloads cannot remove the remote job directory."
+        )
+    if requested_tasks:
+        raise click.ClickException(
+            "`--cleanup` cannot be combined with `--tasks` because that narrows the downloaded payload."
+        )
+    if exclude_patterns:
+        raise click.ClickException(
+            "`--cleanup` cannot be combined with `--exclude` because that narrows the downloaded payload."
+        )
+
+
 def _filter_remote_entries(
     entries: tuple[RemotePathEntry, ...],
     *,
@@ -902,6 +938,11 @@ def _format_bytes(size_bytes: int) -> str:
 def _verbosity(ctx: click.Context) -> int:
     options = getattr(ctx.find_root(), "obj", None)
     return int(getattr(options, "verbose", 0))
+
+
+def _json_output(ctx: click.Context) -> bool:
+    options = getattr(ctx.find_root(), "obj", None)
+    return bool(getattr(options, "json_output", False))
 
 
 def _colorize_output(ctx: click.Context) -> bool:

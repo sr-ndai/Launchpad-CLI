@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
@@ -77,6 +77,41 @@ def test_download_command_passes_documented_options_to_async_runner(
     assert captured["compression_level"] == 7
     assert captured["exclude_patterns"] == ("*.tmp",)
     assert captured["local_dir"] == tmp_path / "custom-output"
+    assert captured["json_output"] is False
+
+
+def test_download_command_emits_json_when_global_flag_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The download command should honor the root CLI's `--json` flag."""
+
+    monkeypatch.setattr(download_module, "configure_logging", lambda **kwargs: None)
+
+    async def fake_run_download(**kwargs) -> download_module.DownloadResult:  # type: ignore[no-untyped-def]
+        assert kwargs["json_output"] is True
+        return download_module.DownloadResult(
+            job_id="12345",
+            run_name="tank_v3",
+            destination_dir=tmp_path / "results_tank_v3",
+            remote_job_dir="/shared/sergey/tank_v3",
+            transfer_mode="archive",
+            downloaded_bytes=1024,
+            file_count=3,
+            cleaned_up=False,
+            selected_tasks=("0",),
+            partial=False,
+        )
+
+    monkeypatch.setattr(download_module, "_run_download", fake_run_download)
+
+    result = CliRunner().invoke(cli, ["--json", "download", "12345"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["job_id"] == "12345"
+    assert payload["transfer_mode"] == "archive"
+    assert payload["selected_tasks"] == ["0"]
 
 
 @pytest.mark.asyncio
@@ -173,6 +208,7 @@ async def test_run_download_executes_archive_flow_and_cleanup(
         cwd=tmp_path,
         env={},
         console=build_console(no_color=True),
+        json_output=False,
         job_id="12345",
         local_dir=tmp_path / "results_tank_v3",
         output=None,
@@ -273,6 +309,7 @@ async def test_run_download_transfers_raw_files_and_applies_excludes(
         cwd=tmp_path,
         env={},
         console=build_console(no_color=True),
+        json_output=False,
         job_id="12345",
         local_dir=tmp_path / "results_tank_v3",
         output=None,
@@ -295,6 +332,128 @@ async def test_run_download_transfers_raw_files_and_applies_excludes(
         )
     ]
     assert not (tmp_path / "results_tank_v3" / "results_wing_0" / "skip.tmp").exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rows", "tasks", "exclude_patterns", "expected_message"),
+    [
+        (
+            (
+                download_module.DownloadJobRow(
+                    job_id="12345",
+                    task_id="0",
+                    run_name="tank_v3",
+                    state="RUNNING",
+                    remote_job_dir="/shared/sergey/tank_v3",
+                    work_dir="/shared/sergey/tank_v3/results_wing_0",
+                ),
+            ),
+            None,
+            (),
+            "only allowed for terminal jobs",
+        ),
+        (
+            (
+                download_module.DownloadJobRow(
+                    job_id="12345",
+                    task_id="0",
+                    run_name="tank_v3",
+                    state="COMPLETED",
+                    remote_job_dir="/shared/sergey/tank_v3",
+                    work_dir="/shared/sergey/tank_v3/results_wing_0",
+                ),
+                download_module.DownloadJobRow(
+                    job_id="12345",
+                    task_id="1",
+                    run_name="tank_v3",
+                    state="COMPLETED",
+                    remote_job_dir="/shared/sergey/tank_v3",
+                    work_dir="/shared/sergey/tank_v3/results_wing_1",
+                ),
+            ),
+            "0",
+            (),
+            "cannot be combined with `--tasks`",
+        ),
+        (
+            (
+                download_module.DownloadJobRow(
+                    job_id="12345",
+                    task_id="0",
+                    run_name="tank_v3",
+                    state="COMPLETED",
+                    remote_job_dir="/shared/sergey/tank_v3",
+                    work_dir="/shared/sergey/tank_v3/results_wing_0",
+                ),
+            ),
+            None,
+            ("results_wing_0/*.tmp",),
+            "cannot be combined with `--exclude`",
+        ),
+    ],
+)
+async def test_run_download_rejects_unsafe_cleanup_combinations(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    rows: tuple[download_module.DownloadJobRow, ...],
+    tasks: str | None,
+    exclude_patterns: tuple[str, ...],
+    expected_message: str,
+) -> None:
+    """Cleanup should fail before confirmation when the download is narrowed or partial."""
+
+    config = LaunchpadConfig(
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+    resolved = ResolvedConfig(config=config, layers=())
+
+    monkeypatch.setattr(download_module, "resolve_config", lambda **kwargs: resolved)
+
+    @asynccontextmanager
+    async def fake_ssh_session(_config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield object()
+
+    async def fake_query_job_rows(*args, **kwargs) -> tuple[download_module.DownloadJobRow, ...]:  # type: ignore[no-untyped-def]
+        return rows
+
+    async def fake_measure_remote_path(conn, path: str, **kwargs) -> int:  # type: ignore[no-untyped-def]
+        return 512
+
+    async def fake_remote_compression_available(*args, **kwargs) -> bool:  # type: ignore[no-untyped-def]
+        return True
+
+    def fail_confirm(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("cleanup safety gate should trigger before confirmation")
+
+    monkeypatch.setattr(download_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(download_module, "_query_job_rows", fake_query_job_rows)
+    monkeypatch.setattr(download_module, "measure_remote_path", fake_measure_remote_path)
+    monkeypatch.setattr(
+        download_module,
+        "_remote_compression_available",
+        fake_remote_compression_available,
+    )
+    monkeypatch.setattr(download_module.click, "confirm", fail_confirm)
+
+    with pytest.raises(download_module.click.ClickException, match=expected_message):
+        await download_module._run_download(
+            cwd=tmp_path,
+            env={},
+            console=build_console(no_color=True),
+            json_output=False,
+            job_id="12345",
+            local_dir=tmp_path / "results_tank_v3",
+            output=None,
+            cleanup=True,
+            force=False,
+            exclude_patterns=exclude_patterns,
+            include_scratch=False,
+            remote_compress="auto",
+            tasks=tasks,
+            streams=1,
+            compression_level=3,
+        )
 
 
 def test_parse_task_selection_deduplicates_and_sorts_numeric_values() -> None:
