@@ -118,6 +118,40 @@ class FakeConnection:
 
     async def run(self, command: str, check: bool = False) -> SimpleNamespace:
         self.commands.append(command)
+        segments = command.split(" && ")
+        if len(segments) == 4 and segments[1].startswith("cat -- "):
+            rm_tokens = shlex.split(segments[0])
+            cat_tokens = shlex.split(segments[1])
+            size_segment = segments[2]
+            mv_tokens = shlex.split(segments[3])
+
+            if rm_tokens[:3] != ["rm", "-f", "--"] or mv_tokens[:3] != ["mv", "-f", "--"]:
+                return SimpleNamespace(exit_status=1, stdout="", stderr="unsupported command")
+
+            partial_path = rm_tokens[3]
+            target_path = mv_tokens[4]
+            if mv_tokens[3] != partial_path:
+                return SimpleNamespace(exit_status=1, stdout="", stderr="unsupported command")
+
+            try:
+                redirect_index = cat_tokens.index(">")
+            except ValueError:
+                return SimpleNamespace(exit_status=1, stdout="", stderr="unsupported command")
+            if cat_tokens[:2] != ["cat", "--"] or cat_tokens[redirect_index + 1] != partial_path:
+                return SimpleNamespace(exit_status=1, stdout="", stderr="unsupported command")
+
+            part_paths = cat_tokens[2:redirect_index]
+            assembled = b"".join(self.client.storage[path] for path in part_paths)
+            self.client.storage.pop(partial_path, None)
+            self.client.storage[partial_path] = assembled
+
+            expected_size = int(size_segment.rsplit(" ", maxsplit=2)[1])
+            if len(assembled) != expected_size:
+                return SimpleNamespace(exit_status=1, stdout="", stderr="size mismatch")
+
+            self.client.storage[target_path] = self.client.storage.pop(partial_path)
+            return SimpleNamespace(exit_status=0, stdout="", stderr="")
+
         parts = shlex.split(command)
         if parts[:3] == ["rm", "-rf", "--"] and len(parts) == 4:
             root = parts[3]
@@ -238,6 +272,7 @@ async def test_striped_upload_assembles_remote_payload_and_cleans_staging(
 
     assert result.effective_streams == 3
     assert storage["/shared/run/payload.bin"] == b"abcdefghij"
+    assert any("cat --" in command for command in control_connection.commands)
     assert not any(path.startswith("/shared/run/.launchpad-transfer/") for path in storage)
 
 

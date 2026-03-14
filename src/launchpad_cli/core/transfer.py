@@ -592,38 +592,25 @@ async def _assemble_remote_parts(
     remote_target: str,
     expected_size: int,
 ) -> None:
-    """Concatenate remote part files into the final remote payload."""
+    """Concatenate remote part files into the final remote payload on the host."""
 
     partial_target = f"{remote_target}.partial"
-    async with conn.start_sftp_client() as sftp:
-        parent = str(PurePosixPath(remote_target).parent)
-        if parent not in ("", ".", "/"):
-            await sftp.makedirs(parent, exist_ok=True)
-
-        await _safe_remove_remote_file(sftp, partial_target)
-        async with sftp.open(partial_target, "wb") as assembled_file:
-            transferred = 0
-            for remote_part in remote_parts:
-                async with sftp.open(remote_part, "rb") as part_file:
-                    while True:
-                        chunk = await part_file.read(TRANSFER_CHUNK_SIZE)
-                        if not chunk:
-                            break
-                        await assembled_file.write(chunk)
-                        transferred += len(chunk)
-
-        if transferred != expected_size:
-            raise IOError(
-                f"Remote assembly size mismatch for {remote_target}: expected {expected_size}, got {transferred}"
-            )
-
-        await _safe_remove_remote_file(sftp, remote_target)
-        await sftp.rename(partial_target, remote_target)
-        final_size = int((await sftp.stat(remote_target)).size or 0)
-        if final_size != expected_size:
-            raise IOError(
-                f"Remote assembly stat mismatch for {remote_target}: expected {expected_size}, got {final_size}"
-            )
+    part_args = " ".join(shlex.quote(path) for path in remote_parts)
+    quoted_partial = shlex.quote(partial_target)
+    quoted_target = shlex.quote(remote_target)
+    command = " && ".join(
+        [
+            f"rm -f -- {quoted_partial}",
+            f"cat -- {part_args} > {quoted_partial}",
+            f'[ "$(wc -c < {quoted_partial})" -eq {expected_size} ]',
+            f"mv -f -- {quoted_partial} {quoted_target}",
+        ]
+    )
+    result = await conn.run(command, check=False)
+    if result.exit_status != 0:
+        raise RuntimeError(
+            f"Remote assembly failed for {remote_target}: {result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
 
 
 async def _safe_remove_remote_file(sftp, path: str) -> None:
