@@ -221,6 +221,13 @@ def render_submit_dry_run(
 ) -> None:
     """Render a Rich dry-run preview for `launchpad submit`."""
 
+    intro = Text()
+    intro.append("Ready to stage this run. ", style="lp.brand.secondary")
+    intro.append(
+        "Nothing has been uploaded yet; review the manifest and script below.",
+        style="lp.brand.subtle",
+    )
+
     summary = build_summary_table()
     summary.add_row("Run name", run_name)
     summary.add_row("Solver", solver_name)
@@ -233,21 +240,30 @@ def render_submit_dry_run(
     summary.add_row("Time", time_limit)
     summary.add_row("Begin", begin or "immediate")
 
-    manifest = Table(title="Manifest", show_header=True, header_style="bold")
+    manifest = Table(title="Detected Inputs", show_header=True, header_style="bold")
     manifest.add_column("Primary input")
     manifest.add_column("Size (bytes)", justify="right")
     for item in primary_inputs:
         manifest.add_row(item.relative_path.as_posix(), str(item.size_bytes))
 
-    package_table = Table(title="Packaged Files", show_header=True, header_style="bold")
+    package_table = Table(title="Payload Contents", show_header=True, header_style="bold")
     package_table.add_column("Path")
     for path in package_files:
         package_table.add_row(str(path))
 
-    console.print(build_detail_panel(summary, title="Dry Run"))
+    console.print(build_detail_panel(Group(intro, summary), title="Submit Preview"))
     console.print(manifest)
     console.print(package_table)
     console.print(build_detail_panel(script_preview, title="Generated SLURM Script"))
+    console.print(
+        build_next_steps_panel(
+            [
+                f"launchpad submit {input_dir}",
+                "Adjust flags and rerun --dry-run if anything looks off.",
+            ],
+            title="If This Looks Right",
+        )
+    )
 
 
 def render_submit_confirmation(
@@ -264,6 +280,10 @@ def render_submit_confirmation(
 ) -> None:
     """Render the Rich submit confirmation panel."""
 
+    intro = Text()
+    intro.append("Submission accepted. ", style="lp.brand.secondary")
+    intro.append("Use the job ID below as the anchor for the rest of the workflow.", style="lp.brand.subtle")
+
     summary = build_summary_table()
     summary.add_row("Run name", run_name)
     summary.add_row("Job ID", job_id)
@@ -274,10 +294,18 @@ def render_submit_confirmation(
     )
     summary.add_row("Payload", payload_label)
     summary.add_row("Remote payload", remote_payload_path)
-    summary.add_row("Monitor", f"launchpad status {job_id}")
 
     console.print(
-        build_detail_panel(summary, title="Submission Complete", tone="success")
+        build_detail_panel(Group(intro, summary), title="Submission Complete", tone="success")
+    )
+    console.print(
+        build_next_steps_panel(
+            [
+                f"launchpad status {job_id}",
+                f"launchpad status {job_id} --watch",
+                f"launchpad download {job_id}",
+            ]
+        )
     )
 
 
@@ -293,6 +321,8 @@ def build_status_renderable(
     remote_job_dir: str | None,
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
+    watch_mode: bool = False,
+    refresh_interval: int | None = None,
 ):
     """Build the Rich renderable used by `launchpad status`."""
 
@@ -306,6 +336,8 @@ def build_status_renderable(
             remote_job_dir=remote_job_dir,
             state_counts=state_counts,
             rows=rows,
+            watch_mode=watch_mode,
+            refresh_interval=refresh_interval,
         )
 
     return _build_status_overview_renderable(
@@ -314,6 +346,8 @@ def build_status_renderable(
         generated_at=generated_at,
         state_counts=state_counts,
         rows=rows,
+        watch_mode=watch_mode,
+        refresh_interval=refresh_interval,
     )
 
 
@@ -324,7 +358,20 @@ def _build_status_overview_renderable(
     generated_at: str,
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
+    watch_mode: bool,
+    refresh_interval: int | None,
 ) -> Group:
+    title = "Live Status" if watch_mode else "Status Overview"
+    if watch_mode:
+        intro = Text()
+        intro.append("Watching", style="lp.brand.secondary")
+        intro.append(
+            f" current jobs with a {refresh_interval}s refresh cadence.",
+            style="lp.brand.subtle",
+        )
+    else:
+        intro = Text("Current queue snapshot for the configured operator.", style="lp.brand.subtle")
+
     summary = build_summary_table()
     summary.add_row("User", queried_user or "configured user")
     summary.add_row(
@@ -335,8 +382,19 @@ def _build_status_overview_renderable(
     summary.add_row("Summary", _format_state_counts(state_counts))
 
     if not rows:
-        empty = build_detail_panel("No matching SLURM jobs were found.", title="Status")
-        return Group(build_detail_panel(summary, title="Status Overview"), empty)
+        empty = build_detail_panel(
+            "No matching SLURM jobs were found. If you expected older jobs, rerun with `--all`.",
+            title="Nothing To Show",
+            tone="warn",
+        )
+        return Group(
+            build_detail_panel(Group(intro, summary), title=title),
+            empty,
+            build_next_steps_panel(
+                ["launchpad status --all", "launchpad doctor"],
+                title="Try Next",
+            ),
+        )
 
     table = Table(title="Jobs", show_header=True, header_style="bold")
     table.add_column("Job", justify="right")
@@ -358,7 +416,7 @@ def _build_status_overview_renderable(
             str(row.get("elapsed") or "—"),
         )
 
-    return Group(build_detail_panel(summary, title="Status Overview"), table)
+    return Group(build_detail_panel(Group(intro, summary), title=title), table)
 
 
 def _build_job_detail_renderable(
@@ -371,7 +429,21 @@ def _build_job_detail_renderable(
     remote_job_dir: str | None,
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
+    watch_mode: bool,
+    refresh_interval: int | None,
 ) -> Group:
+    title = "Live Job Status" if watch_mode else "Job Status"
+    intro = Text()
+    if watch_mode:
+        intro.append("Watching", style="lp.brand.secondary")
+        intro.append(
+            f" job {requested_job_id} with a {refresh_interval}s refresh cadence.",
+            style="lp.brand.subtle",
+        )
+    else:
+        intro.append(f"Job {requested_job_id}", style="lp.brand.secondary")
+        intro.append(" detail across the active and accounting views.", style="lp.brand.subtle")
+
     summary = build_summary_table()
     summary.add_row("Job", requested_job_id)
     summary.add_row("Run name", run_name or "—")
@@ -407,7 +479,17 @@ def _build_job_detail_renderable(
             columns.append(str(row.get("max_rss") or "—"))
         table.add_row(*columns)
 
-    return Group(build_detail_panel(summary, title="Job Status"), table)
+    return Group(
+        build_detail_panel(Group(intro, summary), title=title),
+        table,
+        build_next_steps_panel(
+            [
+                f"launchpad status {requested_job_id} --watch",
+                f"launchpad download {requested_job_id}",
+            ],
+            title="Next Commands",
+        ),
+    )
 
 
 def _format_state_counts(counts: Mapping[str, int]) -> str:

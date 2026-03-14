@@ -51,6 +51,7 @@ def test_status_command_renders_overview_snapshot(monkeypatch: pytest.MonkeyPatc
     assert "tank_v3" in result.output
     assert "RUNNING" in result.output
     assert "12345" in result.output
+    assert "Status Overview" in result.output
 
 
 def test_status_command_emits_json_for_specific_job(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -100,8 +101,14 @@ def test_status_command_watch_passes_interval_to_async_runner(monkeypatch: pytes
     """Watch mode should delegate interval and callback handling to the async runner."""
 
     captured: dict[str, object] = {}
+    rendered: dict[str, object] = {}
 
     monkeypatch.setattr(status_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        status_module,
+        "build_status_renderable",
+        lambda **kwargs: rendered.update(kwargs) or "rendered",
+    )
 
     async def fake_run_status(**kwargs) -> status_module.StatusSnapshot:  # type: ignore[no-untyped-def]
         captured.update(kwargs)
@@ -139,6 +146,8 @@ def test_status_command_watch_passes_interval_to_async_runner(monkeypatch: pytes
     assert captured["watch"] is True
     assert captured["interval"] == 5
     assert callable(captured["on_snapshot"])
+    assert rendered["watch_mode"] is True
+    assert rendered["refresh_interval"] == 5
 
 
 def test_status_command_falls_back_to_sacct_when_squeue_query_fails(
@@ -191,6 +200,7 @@ def test_status_command_falls_back_to_sacct_when_squeue_query_fails(
     assert "tank_v3" in result.output
     assert "COMPLETED" in result.output
     assert "178G" in result.output
+    assert "Next Commands" in result.output
 
 
 def test_status_command_falls_back_to_squeue_when_sacct_query_fails(

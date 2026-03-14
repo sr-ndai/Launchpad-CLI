@@ -158,7 +158,11 @@ def command(
                         watch=watch,
                         interval=interval,
                         on_snapshot=lambda item: live.update(
-                            build_status_renderable(**item.to_display_payload()),
+                            build_status_renderable(
+                                **item.to_display_payload(),
+                                watch_mode=True,
+                                refresh_interval=interval,
+                            ),
                             refresh=True,
                         ),
                     )

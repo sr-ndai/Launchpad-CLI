@@ -16,8 +16,7 @@ from typing import Mapping
 import asyncssh
 import click
 from loguru import logger
-from rich.panel import Panel
-from rich.table import Table
+from rich.console import Group
 
 from launchpad_cli.core.compress import (
     create_remote_archive,
@@ -42,7 +41,12 @@ from launchpad_cli.core.transfer import (
     download_many,
     striped_download,
 )
-from launchpad_cli.display import build_console
+from launchpad_cli.display import (
+    build_console,
+    build_detail_panel,
+    build_next_steps_panel,
+    build_summary_table,
+)
 
 TERMINAL_STATES = {
     "BOOT_FAIL",
@@ -349,7 +353,7 @@ async def _run_download(
             exclude_patterns=exclude_patterns,
         )
         console.print(_build_summary_panel(plan))
-        if not click.confirm("Proceed with download?", default=True, err=json_output):
+        if not click.confirm(f"Start download for job {job_id}?", default=True, err=json_output):
             raise click.Abort()
 
         if plan.transfer_mode == "single-file":
@@ -955,10 +959,10 @@ def _sort_int(value: str | None) -> int:
         return 10**9
 
 
-def _build_summary_panel(plan: DownloadPlan) -> Panel:
+def _build_summary_panel(plan: DownloadPlan):
     """Render the pre-download summary shown before confirmation."""
 
-    summary = Table.grid(padding=(0, 2))
+    summary = build_summary_table()
     summary.add_row("Job", f"{plan.job_id} ({plan.run_name})")
     summary.add_row("Tasks", _format_selected_tasks(plan.selected_tasks))
     summary.add_row("States", _format_state_counts(plan.state_counts))
@@ -979,13 +983,27 @@ def _build_summary_panel(plan: DownloadPlan) -> Panel:
     if plan.exclude_patterns:
         summary.add_row("Excludes", ", ".join(plan.exclude_patterns))
 
-    return Panel(summary, title="Download Plan", expand=False)
+    steps = [
+        "Confirm the prompt to start the transfer.",
+        "Wait for checksum verification before trusting the local copy.",
+    ]
+    if not plan.cleanup:
+        steps.append(f"Run `launchpad cleanup {plan.job_id} --yes` after verifying the download.")
+
+    return Group(
+        build_detail_panel(
+            summary,
+            title="Download Preview",
+            tone="warn" if plan.partial or plan.cancelled else "neutral",
+        ),
+        build_next_steps_panel(steps, title="What Happens Next"),
+    )
 
 
-def _build_completion_panel(result: DownloadResult) -> Panel:
+def _build_completion_panel(result: DownloadResult):
     """Render the final success summary after a completed download."""
 
-    summary = Table.grid(padding=(0, 2))
+    summary = build_summary_table()
     summary.add_row("Job", f"{result.job_id} ({result.run_name})")
     summary.add_row("Destination", str(result.destination_dir))
     summary.add_row("Transfer mode", result.transfer_mode)
@@ -996,7 +1014,12 @@ def _build_completion_panel(result: DownloadResult) -> Panel:
     summary.add_row("Remote cleanup", "completed" if result.cleaned_up else "not requested")
     if result.cancelled:
         summary.add_row("Warning", "download included cancelled tasks; verify results before cleanup")
-    return Panel(summary, title="Download Complete", expand=False)
+    panel = build_detail_panel(summary, title="Download Complete", tone="success")
+    steps = ["Inspect the local results before deleting anything else."]
+    if not result.cleaned_up:
+        steps.append(f"launchpad cleanup {result.job_id} --yes")
+    steps.append(f"launchpad status {result.job_id}")
+    return Group(panel, build_next_steps_panel(steps))
 
 
 def _format_state_counts(counts: Mapping[str, int]) -> str:
