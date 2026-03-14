@@ -5,15 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import asyncssh
+import pytest
 
 from click.testing import CliRunner
 
 from launchpad_cli.cli import cli
 from launchpad_cli.cli import submit as submit_module
 from launchpad_cli.core.config import LaunchpadConfig, ResolvedConfig, SSHConfig
-from launchpad_cli.core.remote_ops import build_remote_job_layout
-from launchpad_cli.core.slurm import SubmitRequest, SubmittedJob
-from launchpad_cli.solvers import NastranAdapter
+from launchpad_cli.core.slurm import SubmittedJob
 
 
 def test_submit_dry_run_previews_detected_inputs(monkeypatch, tmp_path: Path) -> None:
@@ -44,6 +43,7 @@ def test_submit_dry_run_previews_detected_inputs(monkeypatch, tmp_path: Path) ->
     assert "Dry Run" in result.output
     assert "wing.dat" in result.output
     assert "/shared/sergey/" in result.output
+    assert "single-file" in result.output
     assert "Generated SLURM Script" in result.output
 
 
@@ -68,14 +68,17 @@ def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_pat
         lambda **kwargs: resolved,
     )
 
-    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> SubmittedJob:
+    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> submit_module.SubmitExecution:
         captured_plan["plan"] = plan
-        return SubmittedJob(
-            job_id="12345",
-            script_path=plan.submit_request.script_path,
-            remote_job_dir=plan.remote_layout.job_dir,
-            stdout="12345\n",
-            stderr="",
+        return submit_module.SubmitExecution(
+            submitted_job=SubmittedJob(
+                job_id="12345",
+                script_path=plan.submit_request.script_path,
+                remote_job_dir=plan.remote_layout.job_dir,
+                stdout="12345\n",
+                stderr="",
+            ),
+            effective_streams=4,
         )
 
     monkeypatch.setattr(submit_module, "_execute_submit", fake_execute_submit)
@@ -84,6 +87,7 @@ def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_pat
 
     assert result.exit_code == 0
     assert captured_plan["plan"].run_name == "tank_v3"
+    assert captured_plan["plan"].transfer_mode == "single-file"
     assert captured_plan["plan"].submit_request.input_files == (f"{tmp_path.name}/wing.dat",)
     assert "Submission Complete" in result.output
     assert "12345" in result.output
@@ -110,7 +114,7 @@ def test_submit_wraps_asyncssh_errors_as_click_exceptions(monkeypatch, tmp_path:
         lambda **kwargs: resolved,
     )
 
-    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> SubmittedJob:
+    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> submit_module.SubmitExecution:
         raise asyncssh.Error(1, "boom")
 
     monkeypatch.setattr(submit_module, "_execute_submit", fake_execute_submit)
@@ -142,7 +146,10 @@ def test_build_submit_plan_errors_when_no_supported_inputs(monkeypatch, tmp_path
             partition=None,
             time_limit=None,
             begin=None,
+            transfer_mode=None,
+            streams=None,
             compression_level=None,
+            no_compress=False,
             extra_files=(),
             include_all=False,
         )
@@ -150,3 +157,36 @@ def test_build_submit_plan_errors_when_no_supported_inputs(monkeypatch, tmp_path
         assert "No supported solver inputs" in str(exc)
     else:
         raise AssertionError("Expected submit planning to fail when no inputs exist.")
+
+
+def test_build_submit_plan_rejects_multi_file_without_no_compress(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Submit should reject the explicit multi-file mode unless archive creation is disabled."""
+
+    (tmp_path / "wing.dat").write_text("SOL 101\n", encoding="utf-8")
+    config = LaunchpadConfig(
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+    resolved = ResolvedConfig(config=config, layers=())
+
+    monkeypatch.setattr(submit_module, "resolve_config", lambda **kwargs: resolved)
+
+    with pytest.raises(Exception, match="requires `--no-compress`"):
+        submit_module._build_submit_plan(
+            input_dir=tmp_path,
+            explicit_solver=None,
+            run_name=None,
+            cpus=None,
+            max_concurrent=None,
+            partition=None,
+            time_limit=None,
+            begin=None,
+            transfer_mode="multi-file",
+            streams=None,
+            compression_level=None,
+            no_compress=False,
+            extra_files=(),
+            include_all=False,
+        )
