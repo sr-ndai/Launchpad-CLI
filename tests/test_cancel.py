@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -17,10 +18,10 @@ def test_cancel_command_cancels_entire_job_with_yes(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(cancel_module, "configure_logging", lambda **kwargs: None)
 
-    async def fake_run_cancel(**kwargs) -> str:  # type: ignore[no-untyped-def]
+    async def fake_run_cancel(**kwargs) -> cancel_module.CancelResult:  # type: ignore[no-untyped-def]
         assert kwargs["job_id"] == "12345"
         assert kwargs["task_ids"] == ()
-        return "Cancelled job 12345."
+        return cancel_module.CancelResult(job_id="12345", task_ids=(), target="12345")
 
     monkeypatch.setattr(cancel_module, "_run_cancel", fake_run_cancel)
 
@@ -34,12 +35,12 @@ def test_cancel_command_prompts_and_cancels_selected_tasks(monkeypatch: pytest.M
     """The cancel command should confirm before cancelling specific array tasks."""
 
     monkeypatch.setattr(cancel_module, "configure_logging", lambda **kwargs: None)
-    monkeypatch.setattr(cancel_module.click, "confirm", lambda text, default=True: True)
+    monkeypatch.setattr(cancel_module.click, "confirm", lambda *args, **kwargs: True)
 
-    async def fake_run_cancel(**kwargs) -> str:  # type: ignore[no-untyped-def]
+    async def fake_run_cancel(**kwargs) -> cancel_module.CancelResult:  # type: ignore[no-untyped-def]
         assert kwargs["job_id"] == "12345"
         assert kwargs["task_ids"] == ("2", "4")
-        return "Cancelled job 12345 task(s): 2, 4."
+        return cancel_module.CancelResult(job_id="12345", task_ids=("2", "4"), target="12345_2,12345_4")
 
     monkeypatch.setattr(cancel_module, "_run_cancel", fake_run_cancel)
 
@@ -49,11 +50,33 @@ def test_cancel_command_prompts_and_cancels_selected_tasks(monkeypatch: pytest.M
     assert "Cancelled job 12345 task(s): 2, 4." in result.output
 
 
+def test_cancel_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cancellation should emit a structured payload under the root JSON flag."""
+
+    monkeypatch.setattr(cancel_module, "configure_logging", lambda **kwargs: None)
+
+    async def fake_run_cancel(**kwargs) -> cancel_module.CancelResult:  # type: ignore[no-untyped-def]
+        return cancel_module.CancelResult(job_id="12345", task_ids=("2", "4"), target="12345_2,12345_4")
+
+    monkeypatch.setattr(cancel_module, "_run_cancel", fake_run_cancel)
+
+    result = CliRunner().invoke(cli, ["--json", "cancel", "12345", "2", "4", "--yes"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload == {
+        "job_id": "12345",
+        "task_ids": ["2", "4"],
+        "target": "12345_2,12345_4",
+        "message": "Cancelled job 12345 task(s): 2, 4.",
+    }
+
+
 def test_cancel_command_aborts_when_confirmation_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """The cancel command should stop if the user declines confirmation."""
 
     monkeypatch.setattr(cancel_module, "configure_logging", lambda **kwargs: None)
-    monkeypatch.setattr(cancel_module.click, "confirm", lambda text, default=True: False)
+    monkeypatch.setattr(cancel_module.click, "confirm", lambda *args, **kwargs: False)
 
     result = CliRunner().invoke(cli, ["cancel", "12345"])
 
@@ -93,7 +116,7 @@ async def test_run_cancel_invokes_scancel_for_selected_tasks(monkeypatch: pytest
 
     monkeypatch.setattr(cancel_module, "ssh_session", fake_ssh_session)
 
-    message = await cancel_module._run_cancel(
+    result = await cancel_module._run_cancel(
         cwd=cancel_module.Path.cwd(),
         env={},
         job_id="12345",
@@ -101,4 +124,4 @@ async def test_run_cancel_invokes_scancel_for_selected_tasks(monkeypatch: pytest
     )
 
     assert connection.commands == ["scancel 12345_2,12345_4"]
-    assert message == "Cancelled job 12345 task(s): 2, 4."
+    assert result.message == "Cancelled job 12345 task(s): 2, 4."

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import json
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,38 @@ def test_ls_command_renders_short_listing(monkeypatch: pytest.MonkeyPatch) -> No
     assert result.exit_code == 0
     assert "tank_v3/" in result.output
     assert "notes.txt" in result.output
+
+
+def test_ls_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ls command should honor the root JSON flag."""
+
+    monkeypatch.setattr(ls_module, "configure_logging", lambda **kwargs: None)
+
+    async def fake_run_ls(**kwargs) -> ls_module.ListingResult:  # type: ignore[no-untyped-def]
+        return ls_module.ListingResult(
+            requested_path="/shared/sergey",
+            base_path="/shared/sergey",
+            long_format=True,
+            pattern=None,
+            entries=(
+                RemotePathEntry(
+                    path="/shared/sergey/tank_v3",
+                    size_bytes=0,
+                    entry_type="directory",
+                    modified_epoch=1710451200.0,
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(ls_module, "_run_ls", fake_run_ls)
+
+    result = CliRunner().invoke(cli, ["--json", "ls"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["requested_path"] == "/shared/sergey"
+    assert payload["long_format"] is True
+    assert payload["entries"][0]["path"] == "/shared/sergey/tank_v3"
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
@@ -34,7 +35,9 @@ def test_download_command_passes_documented_options_to_async_runner(
             run_name="tank_v3",
             destination_dir=tmp_path / "results_tank_v3",
             remote_job_dir="/shared/sergey/tank_v3",
-            transfer_mode="archive",
+            transfer_mode="single-file",
+            requested_streams=4,
+            effective_streams=2,
             downloaded_bytes=1024,
             file_count=3,
             cleaned_up=True,
@@ -55,12 +58,12 @@ def test_download_command_passes_documented_options_to_async_runner(
             "--exclude",
             "*.tmp",
             "--include-scratch",
-            "--remote-compress",
-            "always",
+            "--transfer-mode",
+            "single-file",
             "--tasks",
             "2,0",
             "--streams",
-            "1",
+            "4",
             "--compression-level",
             "7",
         ],
@@ -71,9 +74,10 @@ def test_download_command_passes_documented_options_to_async_runner(
     assert captured["cleanup"] is True
     assert captured["force"] is True
     assert captured["include_scratch"] is True
-    assert captured["remote_compress"] == "always"
+    assert captured["transfer_mode"] == "single-file"
+    assert captured["remote_compress"] is None
     assert captured["tasks"] == "2,0"
-    assert captured["streams"] == 1
+    assert captured["streams"] == 4
     assert captured["compression_level"] == 7
     assert captured["exclude_patterns"] == ("*.tmp",)
     assert captured["local_dir"] == tmp_path / "custom-output"
@@ -95,7 +99,9 @@ def test_download_command_emits_json_when_global_flag_is_set(
             run_name="tank_v3",
             destination_dir=tmp_path / "results_tank_v3",
             remote_job_dir="/shared/sergey/tank_v3",
-            transfer_mode="archive",
+            transfer_mode="single-file",
+            requested_streams=4,
+            effective_streams=4,
             downloaded_bytes=1024,
             file_count=3,
             cleaned_up=False,
@@ -110,16 +116,16 @@ def test_download_command_emits_json_when_global_flag_is_set(
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["job_id"] == "12345"
-    assert payload["transfer_mode"] == "archive"
+    assert payload["transfer_mode"] == "single-file"
     assert payload["selected_tasks"] == ["0"]
 
 
 @pytest.mark.asyncio
-async def test_run_download_executes_archive_flow_and_cleanup(
+async def test_run_download_executes_single_file_flow_and_cleanup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Archive mode should create, verify, unpack, and clean up the remote payload."""
+    """Single-file mode should create, verify, unpack, and clean up the remote payload."""
 
     config = LaunchpadConfig(
         ssh=SSHConfig(host="cluster.example.com", username="sergey"),
@@ -158,10 +164,12 @@ async def test_run_download_executes_archive_flow_and_cleanup(
         recorded["archive_kwargs"] = kwargs
         return kwargs["archive_path"]
 
-    async def fake_transfer_download(conn, remote_path: str, local_path: Path, **kwargs) -> None:  # type: ignore[no-untyped-def]
+    async def fake_striped_download(conn, ssh_config, remote_path: str, local_path: Path, **kwargs) -> object:  # type: ignore[no-untyped-def]
         recorded["downloaded_remote_path"] = remote_path
+        recorded["striped_kwargs"] = kwargs
         local_path.parent.mkdir(parents=True, exist_ok=True)
         local_path.write_bytes(b"archive-bytes")
+        return SimpleNamespace(effective_streams=2)
 
     async def fake_compute_remote_sha256(conn, path: str, **kwargs) -> str:  # type: ignore[no-untyped-def]
         return "same-digest"
@@ -197,7 +205,7 @@ async def test_run_download_executes_archive_flow_and_cleanup(
         fake_remote_compression_available,
     )
     monkeypatch.setattr(download_module, "create_remote_archive", fake_create_remote_archive)
-    monkeypatch.setattr(download_module, "transfer_download", fake_transfer_download)
+    monkeypatch.setattr(download_module, "striped_download", fake_striped_download)
     monkeypatch.setattr(download_module, "compute_remote_sha256", fake_compute_remote_sha256)
     monkeypatch.setattr(download_module, "compute_sha256", fake_compute_sha256)
     monkeypatch.setattr(download_module, "inspect_archive", fake_inspect_archive)
@@ -216,28 +224,32 @@ async def test_run_download_executes_archive_flow_and_cleanup(
         force=False,
         exclude_patterns=(),
         include_scratch=False,
+        transfer_mode=None,
         remote_compress="auto",
         tasks=None,
-        streams=1,
+        streams=4,
         compression_level=5,
     )
 
-    assert result.transfer_mode == "archive"
+    assert result.transfer_mode == "single-file"
+    assert result.requested_streams == 8
+    assert result.effective_streams == 2
     assert result.cleaned_up is True
     assert result.file_count == 1
     assert recorded["archive_kwargs"]["source_paths"] == ["results_wing_0"]
-    assert recorded["archive_kwargs"]["compression_level"] == 5
+    assert recorded["archive_kwargs"]["compression_level"] == 3
     assert recorded["downloaded_remote_path"] == "/shared/sergey/tank_v3/.launchpad-download-12345.tar.zst"
+    assert recorded["striped_kwargs"]["streams"] == 8
     assert recorded["deleted"] == [("/shared/sergey/tank_v3", {})]
     assert (tmp_path / "results_tank_v3" / "results_wing_0" / "summary.txt").exists()
 
 
 @pytest.mark.asyncio
-async def test_run_download_transfers_raw_files_and_applies_excludes(
+async def test_run_download_transfers_multi_file_payload_and_applies_excludes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Raw mode should download filtered files directly when remote compression is disabled."""
+    """Multi-file mode should download filtered files through the worker pool."""
 
     config = LaunchpadConfig(
         ssh=SSHConfig(host="cluster.example.com", username="sergey"),
@@ -286,22 +298,24 @@ async def test_run_download_transfers_raw_files_and_applies_excludes(
             ),
         )
 
-    async def fake_transfer_download(conn, remote_path: str, local_path: Path, **kwargs) -> None:  # type: ignore[no-untyped-def]
-        recorded["downloads"].append((remote_path, local_path))
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_text("keep", encoding="utf-8")
-
     async def fake_compute_remote_sha256(conn, path: str, **kwargs) -> str:  # type: ignore[no-untyped-def]
         return "same"
 
     def fake_compute_sha256(path: Path, **kwargs) -> str:  # type: ignore[no-untyped-def]
         return "same"
 
+    async def fake_download_many(ssh_config, items, **kwargs):  # type: ignore[no-untyped-def]
+        recorded["downloads"] = [(item.remote_path, item.local_path) for item in items]
+        for item in items:
+            item.local_path.parent.mkdir(parents=True, exist_ok=True)
+            item.local_path.write_text("keep", encoding="utf-8")
+        return SimpleNamespace(effective_streams=2)
+
     monkeypatch.setattr(download_module, "ssh_session", fake_ssh_session)
     monkeypatch.setattr(download_module, "_query_job_rows", fake_query_job_rows)
     monkeypatch.setattr(download_module, "measure_remote_path", fake_measure_remote_path)
     monkeypatch.setattr(download_module, "list_remote_directory", fake_list_remote_directory)
-    monkeypatch.setattr(download_module, "transfer_download", fake_transfer_download)
+    monkeypatch.setattr(download_module, "download_many", fake_download_many)
     monkeypatch.setattr(download_module, "compute_remote_sha256", fake_compute_remote_sha256)
     monkeypatch.setattr(download_module, "compute_sha256", fake_compute_sha256)
 
@@ -317,13 +331,16 @@ async def test_run_download_transfers_raw_files_and_applies_excludes(
         force=False,
         exclude_patterns=("results_wing_0/*.tmp",),
         include_scratch=False,
-        remote_compress="never",
+        transfer_mode="multi-file",
+        remote_compress=None,
         tasks=None,
-        streams=1,
+        streams=3,
         compression_level=None,
     )
 
-    assert result.transfer_mode == "raw"
+    assert result.transfer_mode == "multi-file"
+    assert result.requested_streams == 8
+    assert result.effective_streams == 2
     assert result.file_count == 1
     assert recorded["downloads"] == [
         (
@@ -352,6 +369,21 @@ async def test_run_download_transfers_raw_files_and_applies_excludes(
             None,
             (),
             "only allowed for terminal jobs",
+        ),
+        (
+            (
+                download_module.DownloadJobRow(
+                    job_id="12345",
+                    task_id="0",
+                    run_name="tank_v3",
+                    state="CANCELLED",
+                    remote_job_dir="/shared/sergey/tank_v3",
+                    work_dir="/shared/sergey/tank_v3/results_wing_0",
+                ),
+            ),
+            None,
+            (),
+            "not allowed when cancelled tasks are selected",
         ),
         (
             (
@@ -449,9 +481,10 @@ async def test_run_download_rejects_unsafe_cleanup_combinations(
             force=False,
             exclude_patterns=exclude_patterns,
             include_scratch=False,
+            transfer_mode=None,
             remote_compress="auto",
             tasks=tasks,
-            streams=1,
+            streams=4,
             compression_level=3,
         )
 

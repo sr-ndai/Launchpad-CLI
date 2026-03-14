@@ -67,6 +67,7 @@ class TransferConfig(LaunchpadBaseModel):
     chunk_size_mb: int = Field(
         default=64,
         description="Preferred chunk size in megabytes for transfer work.",
+        ge=1,
     )
     compression_level: int = Field(
         default=3,
@@ -84,6 +85,12 @@ class TransferConfig(LaunchpadBaseModel):
         default=True,
         description="Whether interrupted transfers should attempt resume behavior.",
     )
+
+    @property
+    def chunk_size_bytes(self) -> int:
+        """Return the configured transfer chunk size in bytes."""
+
+        return self.chunk_size_mb * 1024 * 1024
 
 
 class ClusterConfig(LaunchpadBaseModel):
