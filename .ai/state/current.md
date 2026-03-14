@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-8.5 — SLURM login-shell execution and diagnostics
+None.
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 8.5
+- in-progress: —
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,15 @@ Phase 8 — Task References and Solver-Aware Logs
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `task/8.5-slurm-login-shell`
-- last processed builder session: `2026-03-14-1558-builder-8.4.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-14-1617-builder-8.5.md`
 
 ## What Changed Recently
+- Accepted task `8.5` after review and prompt verification, then merged
+  `task/8.5-slurm-login-shell` into the phase branch.
+- Phase 8 now also includes the shared SLURM login-shell execution path, the
+  aligned doctor scheduler-binary checks, and the related docs/tests from
+  `8.5`.
 - Reopened Phase 8 again with task `8.5` after field debugging showed that
   `status` and `logs` still fail when `squeue` and `sacct` are only available
   through the head node's login-shell initialization.
@@ -57,14 +62,15 @@ Phase 8 — Task References and Solver-Aware Logs
 - None.
 
 ## Next Recommended Action
-Builder should switch to `task/8.5-slurm-login-shell`, read the task prompt,
-and implement the shared SLURM login-shell execution fix plus aligned doctor
-diagnostics.
+Human should review the updated PR `#9` from
+`phase/08-task-references-and-solver-aware-logs` to `main`, including the
+cluster-access follow-ups from tasks `8.4` and `8.5`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/8.5.md`
-4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/plan.md`
-6. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1619-coordinator-accept-8.5-update-pr.md`
+4. `.ai/reviews/8.5.md`
+5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+6. `.ai/plan.md`
+7. `.ai/git-rules.md`
