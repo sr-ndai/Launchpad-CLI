@@ -275,8 +275,14 @@ async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: Lau
         return DiagnosticResult(
             name="remote-binaries",
             status="fail",
-            detail=f"Missing remote executables: {', '.join(missing)}",
-            suggestion="Install the missing tools on the cluster head node or update `remote_binaries.*` paths.",
+            detail=(
+                "Launchpad's remote exec environment could not resolve these executables: "
+                f"{', '.join(missing)}"
+            ),
+            suggestion=(
+                "Set `remote_binaries.*` to absolute paths or make the tools available on the "
+                "PATH for non-interactive SSH exec sessions, then rerun `launchpad doctor`."
+            ),
         )
 
     return DiagnosticResult(
@@ -300,10 +306,7 @@ async def _remote_root_check(conn: asyncssh.SSHClientConnection, config: Launchp
 
     remote_root = PurePosixPath(config.cluster.shared_root) / username
     quoted_root = shlex.quote(str(remote_root))
-    result = await conn.run(
-        f"sh -lc 'test -d {quoted_root} && test -w {quoted_root}'",
-        check=False,
-    )
+    result = await conn.run(f"test -d {quoted_root} && test -w {quoted_root}", check=False)
 
     if result.exit_status == 0:
         return DiagnosticResult(
@@ -328,10 +331,12 @@ async def _resolve_remote_executable(
 
     quoted_executable = shlex.quote(executable)
     result = await conn.run(
-        "sh -lc "
-        + shlex.quote(
-            f"path=$(command -v {quoted_executable} 2>/dev/null || true); "
-            'if [ -n "$path" ] && [ -x "$path" ]; then printf "%s" "$path"; else exit 1; fi'
+        (
+            f"candidate={quoted_executable}; "
+            'path=$(command -v "$candidate" 2>/dev/null || true); '
+            'if [ -n "$path" ] && [ -x "$path" ]; then printf "%s" "$path"; '
+            'elif [ -x "$candidate" ]; then printf "%s" "$candidate"; '
+            "else exit 1; fi"
         ),
         check=False,
     )

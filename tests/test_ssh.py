@@ -5,9 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import asyncssh
+import click
 import pytest
 
 from launchpad_cli.core.config import SSHConfig
+from launchpad_cli.cli import ssh_cmd as ssh_cmd_module
 from launchpad_cli.core import ssh as ssh_module
 
 
@@ -76,3 +78,82 @@ async def test_ssh_session_requires_host_and_username() -> None:
     with pytest.raises(ValueError):
         async with ssh_module.ssh_session(SSHConfig(host="cluster.example.com")):
             pass
+
+
+@pytest.mark.asyncio
+async def test_open_interactive_shell_uses_local_windows_ssh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows interactive SSH should shell out through the local OpenSSH client."""
+
+    recorded: dict[str, object] = {}
+
+    monkeypatch.setattr(ssh_cmd_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        ssh_cmd_module.sys,
+        "stdin",
+        type("FakeIn", (), {"isatty": staticmethod(lambda: True)})(),
+    )
+    monkeypatch.setattr(
+        ssh_cmd_module.sys,
+        "stdout",
+        type("FakeOut", (), {"isatty": staticmethod(lambda: True)})(),
+    )
+    monkeypatch.setattr(ssh_cmd_module.shutil, "which", lambda name: "C:/Windows/System32/OpenSSH/ssh.exe")
+
+    def fake_run_local_ssh_subprocess(command: list[str]) -> int:
+        recorded["command"] = command
+        return 0
+
+    monkeypatch.setattr(
+        ssh_cmd_module,
+        "_run_local_ssh_subprocess",
+        fake_run_local_ssh_subprocess,
+    )
+
+    exit_code = await ssh_cmd_module._open_interactive_shell(
+        SSHConfig(
+            host="cluster.example.com",
+            port=2222,
+            username="sergey",
+            key_path="~/.ssh/id_ed25519",
+            known_hosts_path="~/.ssh/known_hosts",
+        )
+    )
+
+    assert exit_code == 0
+    assert recorded["command"] == [
+        "C:/Windows/System32/OpenSSH/ssh.exe",
+        "-p",
+        "2222",
+        "-i",
+        str(Path("~/.ssh/id_ed25519").expanduser()),
+        "-o",
+        f"UserKnownHostsFile={Path('~/.ssh/known_hosts').expanduser()}",
+        "sergey@cluster.example.com",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_open_interactive_shell_fails_when_windows_ssh_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows interactive SSH should fail clearly when the local client is absent."""
+
+    monkeypatch.setattr(ssh_cmd_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        ssh_cmd_module.sys,
+        "stdin",
+        type("FakeIn", (), {"isatty": staticmethod(lambda: True)})(),
+    )
+    monkeypatch.setattr(
+        ssh_cmd_module.sys,
+        "stdout",
+        type("FakeOut", (), {"isatty": staticmethod(lambda: True)})(),
+    )
+    monkeypatch.setattr(ssh_cmd_module.shutil, "which", lambda name: None)
+
+    with pytest.raises(click.ClickException, match="Local OpenSSH client not found"):
+        await ssh_cmd_module._open_interactive_shell(
+            SSHConfig(host="cluster.example.com", username="sergey")
+        )
