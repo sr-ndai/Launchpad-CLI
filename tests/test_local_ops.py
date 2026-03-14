@@ -36,6 +36,25 @@ def test_resolve_download_destination_rejects_existing_file(tmp_path: Path) -> N
         )
 
 
+def test_resolve_download_destination_expands_home_before_joining_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Home-relative paths should resolve from the user's home, not the cwd."""
+
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    destination = local_ops.resolve_download_destination(
+        Path("~/Downloads"),
+        run_name="tank_v3",
+        cwd=tmp_path / "workspace",
+    )
+
+    assert destination == home_dir / "Downloads"
+
+
 def test_inspect_disk_space_uses_nearest_existing_parent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

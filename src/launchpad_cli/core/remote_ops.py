@@ -202,7 +202,7 @@ async def list_remote_directory(
     max_depth_clause = "" if recursive else " -maxdepth 1"
     command = (
         f"{shlex.quote(find_binary)} {shlex.quote(normalized)} -mindepth 1{max_depth_clause} "
-        "-printf '%y\\t%s\\t%T@\\t%p\\n' | sort"
+        "-printf '%y\\t%s\\t%T@\\t%p\\n'"
     )
     result = await conn.run(command, check=False)
     if result.exit_status != 0:
@@ -211,7 +211,7 @@ async def list_remote_directory(
         )
 
     entries: list[RemotePathEntry] = []
-    for line in (result.stdout or "").splitlines():
+    for line in sorted((result.stdout or "").splitlines()):
         if not line.strip():
             continue
         kind, size_text, modified_text, entry_path = line.split("\t", maxsplit=3)
@@ -236,6 +236,8 @@ async def delete_remote_path(
     """Delete a remote path and return its normalized form."""
 
     normalized = str(PurePosixPath(path))
+    if normalized in {".", "/"} or not str(path).strip():
+        raise ValueError(f"Refusing to delete unsafe remote path: {path!r}")
     command = " ".join(
         [
             shlex.quote(rm_binary),

@@ -62,11 +62,13 @@ def resolve_download_destination(
 
     if destination is None:
         resolved = default_download_destination(run_name, cwd=cwd)
-    elif destination.is_absolute():
-        resolved = destination.expanduser()
     else:
-        base_dir = cwd.expanduser() if cwd is not None else Path.cwd()
-        resolved = (base_dir / destination).expanduser()
+        expanded_destination = destination.expanduser()
+        if expanded_destination.is_absolute():
+            resolved = expanded_destination
+        else:
+            base_dir = cwd.expanduser() if cwd is not None else Path.cwd()
+            resolved = base_dir / expanded_destination
 
     if resolved.exists() and not resolved.is_dir():
         raise NotADirectoryError(f"Download destination is not a directory: {resolved}")

@@ -196,8 +196,8 @@ async def test_list_remote_directory_returns_typed_entries() -> None:
     connection.run_result = SimpleNamespace(
         exit_status=0,
         stdout=(
-            "d\t4096\t1710249600.0\t/shared/sergey/run/results_0\n"
             "f\t12\t1710249601.5\t/shared/sergey/run/results_0/summary.txt\n"
+            "d\t4096\t1710249600.0\t/shared/sergey/run/results_0\n"
         ),
         stderr="",
     )
@@ -217,8 +217,23 @@ async def test_list_remote_directory_returns_typed_entries() -> None:
     assert entries[0].name == "results_0"
     assert entries[1].entry_type == "file"
     assert connection.commands == [
-        "/usr/bin/find /shared/sergey/run -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' | sort"
+        "/usr/bin/find /shared/sergey/run -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n'"
     ]
+
+
+@pytest.mark.asyncio
+async def test_list_remote_directory_raises_when_find_fails() -> None:
+    """Remote listing failures should preserve the failing `find` exit status."""
+
+    connection = FakeConnection()
+    connection.run_result = SimpleNamespace(
+        exit_status=1,
+        stdout="",
+        stderr="find: /shared/sergey/missing: No such file or directory",
+    )
+
+    with pytest.raises(RuntimeError, match="No such file or directory"):
+        await list_remote_directory(connection, "/shared/sergey/missing")
 
 
 @pytest.mark.asyncio
@@ -235,6 +250,19 @@ async def test_delete_remote_path_uses_recursive_rm_by_default() -> None:
 
     assert deleted == "/shared/sergey/run"
     assert connection.commands == ["/bin/rm -rf -- /shared/sergey/run"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["", ".", "/"])
+async def test_delete_remote_path_rejects_unsafe_targets(target: str) -> None:
+    """Remote deletion should reject unsafe normalized targets before shelling out."""
+
+    connection = FakeConnection()
+
+    with pytest.raises(ValueError, match="unsafe remote path"):
+        await delete_remote_path(connection, target)
+
+    assert connection.commands == []
 
 
 @pytest.mark.asyncio
