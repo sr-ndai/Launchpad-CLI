@@ -12,7 +12,7 @@
 Phase 5 — Performance & Polish
 
 ## Active Task
-5.1 — Transfer benchmark and strategy decision
+5.1 — Transfer benchmark plan and provisional direction
 
 ## Queue Snapshot
 - pending: 5.2, 5.3
@@ -26,28 +26,31 @@ Phase 5 — Performance & Polish
 - default branch: `main`
 - coordination branch: `phase/05-performance-polish`
 - active task branch: `task/5.1-transfer-benchmark-direction`
-- last processed builder session: `none`
+- last processed builder session: `2026-03-13-1956-builder-5.1.md`
 
 ## What Changed Recently
-- Fast-forwarded local `main` to the merged Phase 4 history after PR `#4`
-  landed on `main` on 2026-03-14 UTC.
-- Deleted stale merged task branches for `3.2`, `4.1`, `4.2`, and `4.3` from
-  the local repo, and removed the remaining remote task branches for `3.2` and
-  `4.1` from `origin`.
-- Created the new coordination branch `phase/05-performance-polish`.
-- Marked Phase 4 complete in `.ai/plan.md`, created the Phase 5 plan and task
-  prompts, and assigned task `5.1` as the active Builder task.
+- Ingested Builder handoff `2026-03-13-1956-builder-5.1.md` from
+  `task/5.1-transfer-benchmark-direction` and recorded the environment blocker:
+  no Launchpad cluster config or SSH credentials are available on this
+  workstation.
+- Deferred real-cluster transfer validation for Phase 5 and updated the shared
+  roadmap to keep resumable single-stream SFTP as the provisional baseline
+  until cluster access exists.
+- Revised task `5.1` on the task branch so Builder can finish the benchmark
+  matrix, deferred-validation decision, and provisional Phase 5 direction
+  without waiting for the real cluster.
 
 ## Known Blockers
-- None.
+- Real-cluster transfer validation remains unavailable until Launchpad cluster
+  configuration and SSH credentials exist on a workstation.
 
 ## Next Recommended Action
-Builder should start from `task/5.1-transfer-benchmark-direction` and execute
-`.ai/tasks/prompts/5.1.md`.
+Builder should switch to `task/5.1-transfer-benchmark-direction`, read the
+revised `.ai/tasks/prompts/5.1.md` on that branch, and resume task `5.1`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/5.1.md`
+3. `.ai/sessions/2026-03-13-1956-builder-5.1.md`
 4. `.ai/plans/05-performance-polish.md`
 5. `.ai/plan.md`

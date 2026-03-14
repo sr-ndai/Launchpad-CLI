@@ -1188,14 +1188,19 @@ launchpad config init
 
 **Goal:** Transfer optimization, edge cases, logging audit.
 
-- [ ] **Transfer benchmark:** Test 3+ parallel transfer strategies (see Section 5.2) against the actual cluster. Measure throughput, resume correctness, and stability. Select winner based on data, not assumptions.
-- [ ] Implement the winning parallel transfer strategy (or keep single-stream if overhead isn't justified)
+- [ ] **Transfer benchmark plan:** Document the benchmark matrix, prerequisites, and deferred real-cluster validation path, keeping resumable single-stream SFTP as the provisional baseline until cluster access exists.
+- [ ] Harden the current single-stream transfer path, resume behavior, and operator-facing transfer errors without introducing unvalidated parallel-transfer behavior
 - [ ] Resume support hardened for interrupted transfers
 - [ ] Comprehensive error handling and user-friendly error messages
 - [ ] `--json` output mode for all commands (scriptability)
 - [ ] Typo suggestions for invalid subcommands (custom `difflib.get_close_matches` in Click group)
 - [ ] Edge case handling: existing directories, partial results, cancelled jobs
 - [ ] Logging audit: verify every module has appropriate DEBUG/INFO/WARNING log calls, log file rotation works correctly, `--verbose` output is useful without being noisy
+
+Current constraint: the real-cluster benchmark is deferred until Launchpad SSH
+configuration and shared cluster config are available on a workstation. Until
+then, Phase 5 proceeds on the existing resumable single-stream transfer path
+and avoids speculative parallel-transfer implementation.
 
 **Not in Phase 5 (deferred):** `solvers/ansys.py` implementation. The stub exists and conforms to the `SolverAdapter` Protocol, but functional implementation requires an ANSYS user to define the workflow (input format, executable invocation, scratch requirements). This is tracked as a future task.
 
