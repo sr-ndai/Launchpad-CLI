@@ -138,15 +138,21 @@ workflows now build on that scheduler data contract.
 
 ## Download Groundwork
 
-Phase 4 currently extends the reusable core layer with:
+Phase 4 extends the reusable core layer with:
 
 - local download-destination resolution and disk-space inspection helpers
 - archive inspection and SHA-256 helpers for later integrity checks
 - remote archive creation, byte-size measurement, filesystem listing, and
   deletion primitives
 
-The command-facing `launchpad download`, `launchpad ls`, and `launchpad cleanup`
-flows will build on those helpers in the next tasks.
+The command-facing `launchpad download` flow now builds on those helpers for:
+
+- job lookup and task-aware result selection from SLURM metadata
+- local destination resolution plus free-space checks before transfer
+- remote archive-or-raw transfer policy with checksum verification
+- optional remote cleanup after a successful download
+
+The `launchpad ls` and `launchpad cleanup` command workflows are still pending.
 
 ## Status Command
 
