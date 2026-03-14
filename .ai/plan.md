@@ -1232,26 +1232,50 @@ design gate.
 
 **Milestone:** Production-ready for team rollout (Nastran). Transfer speed validated against WinSCP baseline.
 
-### Phase 6: Team Rollout (Week 11)
+### Phase 6: Documentation & Help Coverage (Completed on `main`)
+
+- [x] Finalize README: installation, quickstart, command reference entry points,
+  and config reference links
+- [x] Finalize `ARCHITECTURE.md` with current module coverage
+- [x] Publish the user docs set under `docs/` for getting started, first job,
+  common tasks, troubleshooting, commands, and configuration
+- [x] Close the largest command-help documentation gaps so every implemented
+  command has a current reference page
+
+**Operational follow-up still deferred after Phase 6:**
 
 - [ ] Write the shared cluster config (`/shared/config/launchpad.toml`)
-- [ ] Finalize README: installation, quickstart, full command reference, config reference
-- [ ] Finalize ARCHITECTURE.md with all modules documented
-- [ ] Verify `--help` output is clear and complete for every command
-- [ ] `launchpad config init` wizard tested on a fresh Windows machine
-- [ ] `lp doctor` passes on a fresh Windows machine after install + config init
+- [ ] Test `launchpad config init` on a fresh Windows machine
+- [ ] Verify `lp doctor` after install + config init on a fresh Windows machine
 - [ ] Walk each team member through first submit + download cycle
-- [ ] Collect feedback, file issues
+- [ ] Collect rollout feedback and file follow-up issues
 
-**Rollout success metrics (measure after 2 weeks of team use):**
+### Phase 7: Terminal Experience (Week 12)
 
-| Metric | Target |
-|--------|--------|
-| First successful submit from a fresh machine | Under 10 minutes (install + config + first job) |
-| Manual SSH / WinSCP sessions per analysis cycle | Reduced to near zero for standard workflows |
-| Failed submissions due to wrong paths, bad scripts, or missing files | Significantly reduced vs. manual workflow |
-| Transfer throughput | At least comparable to current WinSCP workflow |
-| One-command download for completed jobs | Works reliably for all team members |
+- [ ] Establish a shared CLI design system on top of the existing `click` +
+  `rich` + `rich-click` stack
+- [ ] Redesign root and subcommand help to feel intentionally branded, colorful,
+  and easy to scan without changing the command surface
+- [ ] Add a compact ASCII Launchpad wordmark for root help and selected success
+  or onboarding surfaces
+- [ ] Upgrade `launchpad config init` and `launchpad doctor` into guided,
+  next-step-oriented operator experiences
+- [ ] Polish the primary workflows (`submit`, `status`, `download`) so dry
+  runs, live status, confirmations, and success summaries all share one visual
+  language
+- [ ] Bring the secondary operator commands (`logs`, `ls`, `cancel`,
+  `cleanup`) into the same design system and update docs with current styled
+  examples
+- [ ] Preserve `--json`, `--quiet`, `--no-color`, and non-TTY behavior so the
+  new UX remains script-friendly and accessible
+
+**Design references for Phase 7 direction:**
+
+- CLIG for human-first help, next-step guidance, and output-stream discipline
+- GitHub CLI for structured formatting, guided flows, and strong summary views
+- Charm Gum for tasteful choose/confirm/spinner/table primitives
+- Vercel CLI for discoverable onboarding and command affordances
+- uv for terse, confidence-building completion messaging
 
 ---
 
