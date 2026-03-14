@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-8.3 — Interactive log picker and docs.
+None.
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 8.3
+- in-progress: —
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,32 +25,30 @@ Phase 8 — Task References and Solver-Aware Logs
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `task/8.3-interactive-log-picker`
-- last processed builder session: `2026-03-14-1422-builder-8.2.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-14-1435-builder-8.3.md`
 
 ## What Changed Recently
-- Accepted task `8.2` after the manifest-backed selector layer, solver-aware
-  `logs --log-kind`, and legacy fallback boundaries passed review and prompt
-  verification.
-- Merged `task/8.2-solver-aware-log-resolution` into
-  `phase/08-task-references-and-solver-aware-logs`, carrying the shared task
-  selector helper into `logs`, `download`, and `cancel`.
-- Opened `task/8.3-interactive-log-picker` so Builder can finish Phase 8 with
-  the human TTY picker, final docs/help updates, and regression coverage.
+- Accepted task `8.3` after the interactive picker, retry-by-name follow mode,
+  and final docs/help updates passed review and prompt verification.
+- Merged `task/8.3-interactive-log-picker` into
+  `phase/08-task-references-and-solver-aware-logs`, bringing the TTY-only
+  picker, final logs UX, and docs updates onto the shared phase branch.
+- Phase 8 is now complete locally with all tasks accepted and merged on the
+  phase branch.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should switch to `task/8.3-interactive-log-picker`, read the task
-prompt, and implement the interactive multi-task `logs` picker plus the final
-docs/help updates for Phase 8.
+Human should open or review the Phase 8 pull request from
+`phase/08-task-references-and-solver-aware-logs` to `main`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/8.3.md`
+3. `.ai/sessions/2026-03-14-1435-builder-8.3.md`
 4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/reviews/8.2.md`
-6. `.ai/sessions/2026-03-14-1422-builder-8.2.md`
+5. `.ai/reviews/8.3.md`
+6. `.ai/plan.md`
 7. `.ai/git-rules.md`
