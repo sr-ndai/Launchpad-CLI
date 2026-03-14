@@ -97,6 +97,14 @@ Controls how Launchpad connects to the cluster:
 - `key_path`
 - `known_hosts_path`
 
+Notes:
+
+- `launchpad doctor` checks remote binaries and the writable shared root
+  through Launchpad's non-interactive SSH exec environment, so PATH differences
+  between interactive login shells and command exec sessions matter
+- on Windows, `launchpad ssh` maps these same values onto the local OpenSSH
+  client instead of using AsyncSSH stdio passthrough
+
 ### `transfer`
 
 Controls packaging and transfer behavior:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 import shutil
 import sys
 from pathlib import Path
@@ -46,6 +47,9 @@ async def _open_interactive_shell(config) -> int:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         raise click.ClickException("`launchpad ssh` requires an interactive terminal.")
 
+    if sys.platform == "win32":
+        return _open_windows_ssh_subprocess(config)
+
     term_size = shutil.get_terminal_size(fallback=(80, 24))
     term_type = os.environ.get("TERM", "xterm-256color")
 
@@ -60,6 +64,50 @@ async def _open_interactive_shell(config) -> int:
         ) as process:
             await process.wait_closed()
             return int(process.exit_status or 0)
+
+
+def _open_windows_ssh_subprocess(config) -> int:
+    """Launch the local OpenSSH client on Windows for interactive access."""
+
+    ssh_executable = shutil.which("ssh")
+    if ssh_executable is None:
+        raise click.ClickException(
+            "Local OpenSSH client not found. Install Windows OpenSSH or add `ssh` to PATH."
+        )
+
+    command = _build_windows_ssh_command(config, ssh_executable=ssh_executable)
+    return _run_local_ssh_subprocess(command)
+
+
+def _build_windows_ssh_command(config, *, ssh_executable: str) -> list[str]:
+    """Map resolved Launchpad SSH config onto a local `ssh` subprocess command."""
+
+    if not config.host:
+        raise ValueError("SSH host is required to open a session.")
+    if not config.username:
+        raise ValueError("SSH username is required to open a session.")
+
+    command = [ssh_executable]
+    if config.port:
+        command.extend(["-p", str(config.port)])
+    if config.key_path:
+        command.extend(["-i", str(Path(config.key_path).expanduser())])
+    if config.known_hosts_path:
+        command.extend(
+            [
+                "-o",
+                f"UserKnownHostsFile={Path(config.known_hosts_path).expanduser()}",
+            ]
+        )
+    command.append(f"{config.username}@{config.host}")
+    return command
+
+
+def _run_local_ssh_subprocess(command: list[str]) -> int:
+    """Run the local OpenSSH client with stdio inherited from the terminal."""
+
+    completed = subprocess.run(command, check=False)
+    return int(completed.returncode)
 
 
 def _verbosity(ctx: click.Context) -> int:

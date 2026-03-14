@@ -44,6 +44,24 @@ Fix the path in `~/.launchpad/config.toml` or rerun:
 launchpad config init --force
 ```
 
+## `doctor` says remote binaries are missing but manual SSH works
+
+Launchpad checks remote binaries through the same non-interactive SSH exec
+environment it uses for submit, status, download, and other command execution.
+That environment can have a different PATH than an interactive login shell.
+
+Fixes:
+
+- set `remote_binaries.*` to absolute paths in config
+- or update the cluster's non-interactive shell startup so those tools are on
+  PATH for SSH exec sessions
+
+Then rerun:
+
+```powershell
+launchpad doctor
+```
+
 ## `submit` says no supported solver inputs were found
 
 Launchpad did not find a supported input file in the directory you submitted.
@@ -102,6 +120,25 @@ Safer fixes:
 - download only selected tasks with `--tasks`
 
 If you really want to continue anyway, use `--force`.
+
+## `launchpad ssh` fails on Windows before opening a shell
+
+On Windows, Launchpad uses the local OpenSSH client for interactive shell
+access instead of AsyncSSH stdio redirection.
+
+Check:
+
+- `ssh.exe` is installed
+- `ssh.exe` is on PATH
+- the resolved `ssh.host`, `ssh.username`, `ssh.key_path`, and optional
+  `ssh.known_hosts_path` values are correct
+
+If you are unsure about the config first, run:
+
+```powershell
+launchpad doctor
+launchpad config show
+```
 
 ## `ls` or `cleanup` cannot resolve a default remote path
 

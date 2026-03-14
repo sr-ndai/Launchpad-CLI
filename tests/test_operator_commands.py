@@ -195,8 +195,11 @@ def test_doctor_config_check_passes_for_complete_ssh_configuration() -> None:
 async def test_doctor_remote_binary_check_reports_missing_tools() -> None:
     """Remote binary validation should fail when a configured tool is absent."""
 
+    commands: list[str] = []
+
     class FakeConnection:
         async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            commands.append(command)
             if "command -v sbatch" in command:
                 return SimpleNamespace(exit_status=0, stdout="/usr/bin/sbatch")
             return SimpleNamespace(exit_status=1, stdout="")
@@ -209,3 +212,27 @@ async def test_doctor_remote_binary_check_reports_missing_tools() -> None:
 
     assert result.status == "fail"
     assert "squeue" in result.detail
+    assert "remote exec environment" in result.detail
+    assert "non-interactive SSH exec sessions" in (result.suggestion or "")
+    assert not any("sh -lc" in command for command in commands)
+
+
+@pytest.mark.asyncio
+async def test_doctor_remote_root_check_uses_launchpad_exec_environment() -> None:
+    """Writable-root checks should use the same remote exec shell as Launchpad commands."""
+
+    commands: list[str] = []
+
+    class FakeConnection:
+        async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            commands.append(command)
+            return SimpleNamespace(exit_status=0, stdout="", stderr="")
+
+    config = LaunchpadConfig(
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+
+    result = await doctor_module._remote_root_check(FakeConnection(), config)
+
+    assert result.status == "pass"
+    assert commands == ["test -d /shared/sergey && test -w /shared/sergey"]
