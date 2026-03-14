@@ -12,43 +12,42 @@
 Phase 4 — Download & Cleanup
 
 ## Active Task
-4.1 — Download primitives and filesystem groundwork
+4.2 — Download command orchestration
 
 ## Queue Snapshot
-- pending: 4.2, 4.3
+- pending: 4.3
 - ready: —
-- in-progress: —
+- in-progress: 4.2
 - needs-review: —
-- revision-needed: 4.1
+- revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/04-download-cleanup`
-- active task branch: `task/4.1-download-primitives`
-- last processed builder session: `2026-03-13-0823-builder-4.1.md`
+- active task branch: `task/4.2-download-command-orchestration`
+- last processed builder session: `2026-03-13-1841-builder-4.1.md`
 
 ## What Changed Recently
-- Ingested Builder handoff `2026-03-13-0823-builder-4.1.md` and reran the task
-  `4.1` prompt verification successfully.
-- Reviewed task `4.1` and requested revisions for home-directory output path
-  handling, remote listing error propagation, and destructive delete
-  guardrails.
-- Kept `task/4.1-download-primitives` active so the Builder can address the
-  review feedback without changing the Phase 4 task order.
+- Ingested Builder handoff `2026-03-13-1841-builder-4.1.md`, reviewed the
+  revision, and reran the task `4.1` prompt verification successfully.
+- Accepted and merged `task/4.1-download-primitives` into
+  `phase/04-download-cleanup`.
+- Created `task/4.2-download-command-orchestration` and assigned task `4.2`
+  as the next active Builder task.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should stay on `task/4.1-download-primitives`, read
-`.ai/reviews/4.1.md`, address the requested revisions, rerun the task `4.1`
-prompt verification, and hand the task back with `Outcome: READY_FOR_REVIEW`
-or `BLOCKED`.
+Builder should switch to `task/4.2-download-command-orchestration`, read
+`.ai/tasks/prompts/4.2.md`, implement the download command orchestration,
+run the prompt verification, and hand the task back with
+`Outcome: READY_FOR_REVIEW` or `BLOCKED`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/reviews/4.1.md`
-4. `.ai/tasks/prompts/4.1.md`
-5. `.ai/sessions/2026-03-13-1836-coordinator-review-4.1.md`
+3. `.ai/tasks/prompts/4.2.md`
+4. `.ai/plans/04-download-cleanup.md`
+5. `.ai/plan.md`
