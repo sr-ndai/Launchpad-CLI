@@ -14,6 +14,7 @@ from launchpad_cli.cli import cli
 from launchpad_cli.cli import download as download_module
 from launchpad_cli.core.compress import ArchiveEntry, ArchiveInspection
 from launchpad_cli.core.config import LaunchpadConfig, ResolvedConfig, SSHConfig
+from launchpad_cli.core.job_manifest import JobManifest, TaskReference
 from launchpad_cli.core.remote_ops import RemotePathEntry
 from launchpad_cli.display import build_console
 
@@ -159,6 +160,9 @@ async def test_run_download_executes_single_file_flow_and_cleanup(
             return 1024
         return 4096
 
+    async def fake_load_job_manifest(*args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        return None
+
     async def fake_remote_compression_available(*args, **kwargs) -> bool:  # type: ignore[no-untyped-def]
         return True
 
@@ -200,6 +204,7 @@ async def test_run_download_executes_single_file_flow_and_cleanup(
 
     monkeypatch.setattr(download_module, "ssh_session", fake_ssh_session)
     monkeypatch.setattr(download_module, "_query_job_rows", fake_query_job_rows)
+    monkeypatch.setattr(download_module, "load_job_manifest", fake_load_job_manifest)
     monkeypatch.setattr(download_module, "measure_remote_path", fake_measure_remote_path)
     monkeypatch.setattr(
         download_module,
@@ -281,6 +286,9 @@ async def test_run_download_transfers_multi_file_payload_and_applies_excludes(
     async def fake_measure_remote_path(conn, path: str, **kwargs) -> int:  # type: ignore[no-untyped-def]
         return 512
 
+    async def fake_load_job_manifest(*args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        return None
+
     async def fake_list_remote_directory(conn, path: str, **kwargs) -> tuple[RemotePathEntry, ...]:  # type: ignore[no-untyped-def]
         return (
             RemotePathEntry(
@@ -315,6 +323,7 @@ async def test_run_download_transfers_multi_file_payload_and_applies_excludes(
 
     monkeypatch.setattr(download_module, "ssh_session", fake_ssh_session)
     monkeypatch.setattr(download_module, "_query_job_rows", fake_query_job_rows)
+    monkeypatch.setattr(download_module, "load_job_manifest", fake_load_job_manifest)
     monkeypatch.setattr(download_module, "measure_remote_path", fake_measure_remote_path)
     monkeypatch.setattr(download_module, "list_remote_directory", fake_list_remote_directory)
     monkeypatch.setattr(download_module, "download_many", fake_download_many)
@@ -454,6 +463,9 @@ async def test_run_download_rejects_unsafe_cleanup_combinations(
     async def fake_measure_remote_path(conn, path: str, **kwargs) -> int:  # type: ignore[no-untyped-def]
         return 512
 
+    async def fake_load_job_manifest(*args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        return None
+
     async def fake_remote_compression_available(*args, **kwargs) -> bool:  # type: ignore[no-untyped-def]
         return True
 
@@ -462,6 +474,7 @@ async def test_run_download_rejects_unsafe_cleanup_combinations(
 
     monkeypatch.setattr(download_module, "ssh_session", fake_ssh_session)
     monkeypatch.setattr(download_module, "_query_job_rows", fake_query_job_rows)
+    monkeypatch.setattr(download_module, "load_job_manifest", fake_load_job_manifest)
     monkeypatch.setattr(download_module, "measure_remote_path", fake_measure_remote_path)
     monkeypatch.setattr(
         download_module,
@@ -492,6 +505,134 @@ async def test_run_download_rejects_unsafe_cleanup_combinations(
 
 
 def test_parse_task_selection_deduplicates_and_sorts_numeric_values() -> None:
-    """Task parsing should normalize repeated numeric task IDs."""
+    """Task parsing should normalize repeated selectors without reordering them."""
 
-    assert download_module._parse_task_selection("2,0,2,1") == ("0", "1", "2")
+    assert download_module._parse_task_selection("002,wing.dat,002,inputs/wing.dat") == (
+        "002",
+        "wing.dat",
+        "inputs/wing.dat",
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_download_plan_resolves_manifest_task_references(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Manifest-backed aliases and relative paths should select the intended rows."""
+
+    manifest = JobManifest(
+        version=1,
+        solver="nastran",
+        logs={"solver": ".f06"},
+        tasks=(
+            TaskReference(
+                task_id="0",
+                alias="001",
+                input_relative_path="inputs/root.dat",
+                input_filename="root.dat",
+                input_stem="root",
+                display_label="root",
+                result_dir="results_root_0",
+            ),
+            TaskReference(
+                task_id="1",
+                alias="002",
+                input_relative_path="inputs/wing.dat",
+                input_filename="wing.dat",
+                input_stem="wing",
+                display_label="wing",
+                result_dir="results_wing_1",
+            ),
+        ),
+    )
+    rows = (
+        download_module.DownloadJobRow(
+            job_id="12345",
+            task_id="0",
+            run_name="tank_v3",
+            state="COMPLETED",
+            remote_job_dir="/shared/sergey/tank_v3",
+            work_dir="/shared/sergey/tank_v3/results_root_0",
+        ),
+        download_module.DownloadJobRow(
+            job_id="12345",
+            task_id="1",
+            run_name="tank_v3",
+            state="COMPLETED",
+            remote_job_dir="/shared/sergey/tank_v3",
+            work_dir="/shared/sergey/tank_v3/results_wing_1",
+        ),
+    )
+
+    async def fake_measure_remote_path(conn, path: str, **kwargs) -> int:  # type: ignore[no-untyped-def]
+        assert path == "/shared/sergey/tank_v3/results_wing_1"
+        return 512
+
+    async def fake_select_transfer_mode(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
+        return "multi-file"
+
+    monkeypatch.setattr(download_module, "measure_remote_path", fake_measure_remote_path)
+    monkeypatch.setattr(download_module, "_select_transfer_mode", fake_select_transfer_mode)
+
+    plan = await download_module._build_download_plan(
+        conn=object(),
+        config=LaunchpadConfig(ssh=SSHConfig(host="cluster.example.com", username="sergey")),
+        job_id="12345",
+        rows=rows,
+        manifest=manifest,
+        destination=tmp_path / "results_tank_v3",
+        requested_tasks=("002", "inputs/wing.dat"),
+        cleanup=False,
+        force=False,
+        exclude_patterns=(),
+        include_scratch=False,
+        transfer_mode="multi-file",
+        compression_level=3,
+        requested_streams=4,
+    )
+
+    assert plan.selected_tasks == ("1",)
+    assert plan.source_roots == (
+        download_module.RemoteSource(
+            absolute_path="/shared/sergey/tank_v3/results_wing_1",
+            relative_path="results_wing_1",
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_download_plan_rejects_non_numeric_legacy_task_refs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Legacy jobs without a manifest should require raw numeric task IDs."""
+
+    rows = (
+        download_module.DownloadJobRow(
+            job_id="12345",
+            task_id="0",
+            run_name="tank_v3",
+            state="COMPLETED",
+            remote_job_dir="/shared/sergey/tank_v3",
+            work_dir="/shared/sergey/tank_v3/results_root_0",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="Only raw numeric task IDs are supported"):
+        await download_module._build_download_plan(
+            conn=object(),
+            config=LaunchpadConfig(ssh=SSHConfig(host="cluster.example.com", username="sergey")),
+            job_id="12345",
+            rows=rows,
+            manifest=None,
+            destination=tmp_path / "results_tank_v3",
+            requested_tasks=("wing.dat",),
+            cleanup=False,
+            force=False,
+            exclude_patterns=(),
+            include_scratch=False,
+            transfer_mode="multi-file",
+            compression_level=3,
+            requested_streams=4,
+        )

@@ -53,6 +53,32 @@ def test_cancel_command_prompts_and_cancels_selected_tasks(monkeypatch: pytest.M
     assert "Cancelled job 12345 task(s): 2, 4." in result.output
 
 
+def test_cancel_command_resolves_manifest_task_refs_before_cancelling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-numeric task refs should resolve before the destructive action runs."""
+
+    monkeypatch.setattr(cancel_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(cancel_module.click, "confirm", lambda *args, **kwargs: True)
+
+    async def fake_resolve_cancel_task_ids(**kwargs) -> tuple[str, ...]:  # type: ignore[no-untyped-def]
+        assert kwargs["task_refs"] == ("002", "wing.dat")
+        return ("2", "4")
+
+    async def fake_run_cancel(**kwargs) -> cancel_module.CancelResult:  # type: ignore[no-untyped-def]
+        assert kwargs["job_id"] == "12345"
+        assert kwargs["task_ids"] == ("2", "4")
+        return cancel_module.CancelResult(job_id="12345", task_ids=("2", "4"), target="12345_2,12345_4")
+
+    monkeypatch.setattr(cancel_module, "_resolve_cancel_task_ids", fake_resolve_cancel_task_ids)
+    monkeypatch.setattr(cancel_module, "_run_cancel", fake_run_cancel)
+
+    result = CliRunner().invoke(cli, ["cancel", "12345", "002", "wing.dat"])
+
+    assert result.exit_code == 0
+    assert "Cancelled job 12345 task(s): 2, 4." in result.output
+
+
 def test_cancel_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cancellation should emit a structured payload under the root JSON flag."""
 
@@ -128,3 +154,55 @@ async def test_run_cancel_invokes_scancel_for_selected_tasks(monkeypatch: pytest
 
     assert connection.commands == ["scancel 12345_2,12345_4"]
     assert result.message == "Cancelled job 12345 task(s): 2, 4."
+
+
+@pytest.mark.asyncio
+async def test_resolve_cancel_task_ids_rejects_non_numeric_legacy_refs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy jobs without a manifest should reject alias-style task selectors."""
+
+    monkeypatch.setattr(
+        cancel_module,
+        "resolve_config",
+        lambda **kwargs: SimpleNamespace(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey")
+            )
+        ),
+    )
+
+    class FakeConnection:
+        pass
+
+    connection = FakeConnection()
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def fake_ssh_session(config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield connection
+
+    async def fake_query_job_rows(*args, **kwargs) -> tuple[cancel_module.CancelJobRow, ...]:  # type: ignore[no-untyped-def]
+        return (
+            cancel_module.CancelJobRow(
+                job_id="12345",
+                task_id="0",
+                remote_job_dir="/shared/sergey/tank_v3",
+            ),
+        )
+
+    async def fake_load_job_manifest(*args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr(cancel_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(cancel_module, "_query_job_rows", fake_query_job_rows)
+    monkeypatch.setattr(cancel_module, "load_job_manifest", fake_load_job_manifest)
+
+    with pytest.raises(ValueError, match="Only raw numeric task IDs are supported"):
+        await cancel_module._resolve_cancel_task_ids(
+            cwd=cancel_module.Path.cwd(),
+            env={},
+            job_id="12345",
+            task_refs=("wing.dat",),
+        )

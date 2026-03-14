@@ -14,11 +14,12 @@ it.
 | Package the whole directory | `launchpad submit --include-all` |
 | Watch all current jobs | `launchpad status --watch` |
 | Inspect a specific job | `launchpad status <JOB_ID>` |
-| Follow the live log for one task | `launchpad logs <JOB_ID> <TASK_ID> -f` |
-| Download only selected tasks | `launchpad download <JOB_ID> --tasks 0,2` |
+| Follow the live log for one task | `launchpad logs <JOB_ID> <TASK_REF> -f` |
+| Follow a multi-task log with the picker | `launchpad logs <JOB_ID> -f` |
+| Download only selected tasks | `launchpad download <JOB_ID> --tasks 001,wing.dat` |
 | Include scratch folders in the download | `launchpad download <JOB_ID> --include-scratch` |
 | Cancel a whole job | `launchpad cancel <JOB_ID>` |
-| Cancel only selected tasks | `launchpad cancel <JOB_ID> 0 2` |
+| Cancel only selected tasks | `launchpad cancel <JOB_ID> 002 wing.dat` |
 | List files on the cluster | `launchpad ls` or `launchpad ls REMOTE_PATH` |
 | Remove old remote job directories | `launchpad cleanup --older-than 30d` |
 
