@@ -8,14 +8,131 @@ from typing import Mapping, Sequence
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
+from rich.theme import Theme
 
 from launchpad_cli.solvers import DiscoveredInput
+
+PALETTE = {
+    "ink": "#13212b",
+    "slate": "#38586c",
+    "mist": "#7f9aab",
+    "ice": "#d9edf7",
+    "cyan": "#3cc5d9",
+    "green": "#5cc88b",
+    "amber": "#f0b45a",
+    "red": "#df6d57",
+}
+LAUNCHPAD_THEME = Theme(
+    {
+        "lp.brand.primary": f"bold {PALETTE['ice']}",
+        "lp.brand.secondary": f"bold {PALETTE['cyan']}",
+        "lp.brand.accent": f"bold {PALETTE['amber']}",
+        "lp.brand.subtle": f"dim {PALETTE['mist']}",
+        "lp.panel.border": PALETTE["cyan"],
+        "lp.panel.border.success": PALETTE["green"],
+        "lp.panel.border.warn": PALETTE["amber"],
+        "lp.panel.border.danger": PALETTE["red"],
+        "lp.section": f"bold {PALETTE['ice']}",
+        "lp.badge.info": f"bold {PALETTE['ink']} on {PALETTE['cyan']}",
+        "lp.badge.success": f"bold {PALETTE['ink']} on {PALETTE['green']}",
+        "lp.badge.warn": f"bold {PALETTE['ink']} on {PALETTE['amber']}",
+        "lp.badge.danger": f"bold {PALETTE['ice']} on {PALETTE['red']}",
+        "lp.badge.neutral": f"bold {PALETTE['ink']} on {PALETTE['mist']}",
+        "lp.label": f"bold {PALETTE['ice']}",
+        "lp.value": PALETTE["ice"],
+    }
+)
+STATUS_TONES = {
+    "RUNNING": "info",
+    "COMPLETED": "success",
+    "PENDING": "warn",
+    "FAILED": "danger",
+    "CANCELLED": "danger",
+    "TIMEOUT": "danger",
+}
 
 
 def build_console(*, stderr: bool = False, no_color: bool = False) -> Console:
     """Create a Rich console with the repository's baseline output defaults."""
 
-    return Console(stderr=stderr, no_color=no_color)
+    return Console(stderr=stderr, no_color=no_color, theme=LAUNCHPAD_THEME)
+
+
+def build_launchpad_wordmark() -> Text:
+    """Return the compact ASCII Launchpad mark used on branded help surfaces."""
+
+    text = Text()
+    text.append(" _                           _                     _\n", style="lp.brand.primary")
+    text.append("| |    __ _ _   _ _ __   ___| |__   __ _  __| |\n", style="lp.brand.secondary")
+    text.append("| |   / _` | | | | '_ \\/ __| '_ \\ / _` |/ _` |\n", style="lp.brand.primary")
+    text.append("| |__| (_| | |_| | | | | (__| | | | (_| | (_| |\n", style="lp.brand.accent")
+    text.append("|_____\\__,_|\\__,_|_| |_|\\___|_| |_|\\__,_|\\__,_|\n", style="lp.brand.secondary")
+    text.append("Solver jobs, cluster UX, no shell-script drift.", style="lp.brand.subtle")
+    return text
+
+
+def build_badge(label: str, *, tone: str = "neutral") -> Text:
+    """Return a reusable pill-style status badge."""
+
+    normalized = tone if tone in {"info", "success", "warn", "danger", "neutral"} else "neutral"
+    return Text(f" {label.upper()} ", style=f"lp.badge.{normalized}")
+
+
+def build_status_badge(state: object) -> Text:
+    """Return the shared state badge used across later command surfaces."""
+
+    text = str(state or "UNKNOWN").upper()
+    tone = STATUS_TONES.get(text, "neutral")
+    return build_badge(text, tone=tone)
+
+
+def build_section_heading(title: str, *, detail: str | None = None) -> Text:
+    """Return a reusable section heading."""
+
+    heading = Text(title, style="lp.section")
+    if detail:
+        heading.append(f"  {detail}", style="lp.brand.subtle")
+    return heading
+
+
+def build_summary_table() -> Table:
+    """Return the shared two-column summary grid."""
+
+    table = Table.grid(padding=(0, 2))
+    table.add_column(style="lp.label")
+    table.add_column(style="lp.value")
+    return table
+
+
+def build_detail_panel(
+    renderable,
+    *,
+    title: str,
+    tone: str = "neutral",
+    expand: bool = False,
+) -> Panel:
+    """Wrap a renderable in the shared Launchpad panel shell."""
+
+    border_style = {
+        "success": "lp.panel.border.success",
+        "warn": "lp.panel.border.warn",
+        "danger": "lp.panel.border.danger",
+    }.get(tone, "lp.panel.border")
+    return Panel(renderable, title=title, expand=expand, border_style=border_style)
+
+
+def build_next_steps_panel(
+    steps: Sequence[str],
+    *,
+    title: str = "Next Steps",
+) -> Panel:
+    """Render a simple shared next-step block for later Phase 7 tasks."""
+
+    table = Table.grid(padding=(0, 1))
+    for index, step in enumerate(steps, start=1):
+        table.add_row(f"{index}.", step)
+    return build_detail_panel(table, title=title)
 
 
 def render_submit_dry_run(
@@ -37,7 +154,7 @@ def render_submit_dry_run(
 ) -> None:
     """Render a Rich dry-run preview for `launchpad submit`."""
 
-    summary = Table.grid(padding=(0, 2))
+    summary = build_summary_table()
     summary.add_row("Run name", run_name)
     summary.add_row("Solver", solver_name)
     summary.add_row("Input dir", str(input_dir))
@@ -60,10 +177,10 @@ def render_submit_dry_run(
     for path in package_files:
         package_table.add_row(str(path))
 
-    console.print(Panel(summary, title="Dry Run", expand=False))
+    console.print(build_detail_panel(summary, title="Dry Run"))
     console.print(manifest)
     console.print(package_table)
-    console.print(Panel(script_preview, title="Generated SLURM Script", expand=False))
+    console.print(build_detail_panel(script_preview, title="Generated SLURM Script"))
 
 
 def render_submit_confirmation(
@@ -80,7 +197,7 @@ def render_submit_confirmation(
 ) -> None:
     """Render the Rich submit confirmation panel."""
 
-    summary = Table.grid(padding=(0, 2))
+    summary = build_summary_table()
     summary.add_row("Run name", run_name)
     summary.add_row("Job ID", job_id)
     summary.add_row("Remote job dir", remote_job_dir)
@@ -90,7 +207,7 @@ def render_submit_confirmation(
     summary.add_row("Remote payload", remote_payload_path)
     summary.add_row("Monitor", f"launchpad status {job_id}")
 
-    console.print(Panel(summary, title="Submission Complete", expand=False))
+    console.print(build_detail_panel(summary, title="Submission Complete", tone="success"))
 
 
 def build_status_renderable(
@@ -137,7 +254,7 @@ def _build_status_overview_renderable(
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
 ) -> Group:
-    summary = Table.grid(padding=(0, 2))
+    summary = build_summary_table()
     summary.add_row("User", queried_user or "configured user")
     summary.add_row("Scope", "active + recent completed" if include_all else "active only")
     summary.add_row("Updated", generated_at)
@@ -145,8 +262,8 @@ def _build_status_overview_renderable(
     summary.add_row("Summary", _format_state_counts(state_counts))
 
     if not rows:
-        empty = Panel("No matching SLURM jobs were found.", title="Status", expand=False)
-        return Group(Panel(summary, title="Status Overview", expand=False), empty)
+        empty = build_detail_panel("No matching SLURM jobs were found.", title="Status")
+        return Group(build_detail_panel(summary, title="Status Overview"), empty)
 
     table = Table(title="Jobs", show_header=True, header_style="bold")
     table.add_column("Job", justify="right")
@@ -162,13 +279,13 @@ def _build_status_overview_renderable(
             str(row.get("job_id") or "—"),
             str(row.get("task_id") or "—"),
             str(row.get("run_name") or "—"),
-            _styled_state(row.get("state")),
+            build_status_badge(row.get("state")),
             str(row.get("partition") or "—"),
             str(row.get("node") or "—"),
             str(row.get("elapsed") or "—"),
         )
 
-    return Group(Panel(summary, title="Status Overview", expand=False), table)
+    return Group(build_detail_panel(summary, title="Status Overview"), table)
 
 
 def _build_job_detail_renderable(
@@ -182,7 +299,7 @@ def _build_job_detail_renderable(
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
 ) -> Group:
-    summary = Table.grid(padding=(0, 2))
+    summary = build_summary_table()
     summary.add_row("Job", requested_job_id)
     summary.add_row("Run name", run_name or "—")
     summary.add_row("Partition", partition or "—")
@@ -207,7 +324,7 @@ def _build_job_detail_renderable(
     for row in rows:
         columns = [
             str(row.get("task_id") or "—"),
-            _styled_state(row.get("state")),
+            build_status_badge(row.get("state")),
             str(row.get("node") or "—"),
             str(row.get("elapsed") or "—"),
         ]
@@ -217,7 +334,7 @@ def _build_job_detail_renderable(
             columns.append(str(row.get("max_rss") or "—"))
         table.add_row(*columns)
 
-    return Group(Panel(summary, title="Job Status", expand=False), table)
+    return Group(build_detail_panel(summary, title="Job Status"), table)
 
 
 def _format_state_counts(counts: Mapping[str, int]) -> str:
@@ -225,16 +342,3 @@ def _format_state_counts(counts: Mapping[str, int]) -> str:
         return "no jobs"
     return ", ".join(f"{state.lower()}={count}" for state, count in counts.items())
 
-
-def _styled_state(state: object) -> str:
-    text = str(state or "UNKNOWN")
-    styles = {
-        "RUNNING": "green",
-        "COMPLETED": "blue",
-        "PENDING": "yellow",
-        "FAILED": "red",
-        "CANCELLED": "red",
-        "TIMEOUT": "red",
-    }
-    style = styles.get(text.upper(), "white")
-    return f"[{style}]{text}[/{style}]"

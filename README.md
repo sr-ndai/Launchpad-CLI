@@ -41,6 +41,10 @@ launchpad --help
 
 If you prefer the short alias, `lp` works everywhere that `launchpad` works.
 
+The human-facing help shell is grouped and branded on a real terminal. Use
+`launchpad --help` to browse commands and examples, and use `--no-color` or
+`NO_COLOR=1` when you want plain output.
+
 Developer install from a source checkout:
 
 ```powershell
@@ -92,5 +96,7 @@ Technical and contributor docs:
 - Examples in these docs assume Windows PowerShell.
 - The primary command spelling in the docs is `launchpad`; `lp` is just a
   shorter alias.
+- The ASCII Launchpad mark only appears on human-oriented TTY help surfaces.
+  It is suppressed for `--json`, `--quiet`, `--no-color`, and non-TTY output.
 - The code is the source of truth. Where older plan text and current behavior
   disagree, these docs follow the current CLI.
