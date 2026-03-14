@@ -8,7 +8,7 @@ import os
 from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Awaitable, Callable, Mapping
 
 import asyncssh
@@ -16,7 +16,9 @@ import click
 from rich.live import Live
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
+from launchpad_cli.core.job_manifest import JobManifest, parse_job_manifest
 from launchpad_cli.core.logging import configure_logging
+from launchpad_cli.core.remote_ops import read_remote_text
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.display import build_console, build_status_renderable
@@ -41,6 +43,12 @@ class StatusRow:
     stdout_path: str | None = None
     stderr_path: str | None = None
     work_dir: str | None = None
+    alias: str | None = None
+    input_relative_path: str | None = None
+    input_filename: str | None = None
+    input_stem: str | None = None
+    display_label: str | None = None
+    result_dir: str | None = None
     source: str = "squeue"
 
 
@@ -286,12 +294,16 @@ async def _collect_status_snapshot(
         if not active_jobs and not accounting_jobs and errors:
             raise RuntimeError(" ; ".join(errors))
 
-        return _build_detail_snapshot(
+        snapshot = _build_detail_snapshot(
             requested_job_id=job_id,
             queried_user=config.ssh.username,
             active_jobs=active_jobs,
             accounting_jobs=accounting_jobs,
         )
+        manifest = await _load_job_manifest(conn, snapshot.remote_job_dir)
+        if manifest is not None:
+            return _attach_task_references(snapshot, manifest)
+        return snapshot
 
     active_jobs = await query_squeue(conn, config=config)
     accounting_jobs: tuple[JobAccounting, ...] = ()
@@ -472,6 +484,45 @@ def _array_range(rows: tuple[StatusRow, ...]) -> str | None:
         return str(lower) if lower == upper else f"{lower}-{upper}"
 
     return ",".join(sorted(task_ids))
+
+
+async def _load_job_manifest(
+    conn: asyncssh.SSHClientConnection,
+    remote_job_dir: str | None,
+) -> JobManifest | None:
+    """Load the submitted task manifest for new jobs when it is present."""
+
+    if not remote_job_dir:
+        return None
+
+    manifest_path = str(PurePosixPath(remote_job_dir) / "launchpad-manifest.json")
+    try:
+        raw = await read_remote_text(conn, manifest_path)
+    except FileNotFoundError:
+        return None
+    return parse_job_manifest(raw)
+
+
+def _attach_task_references(snapshot: StatusSnapshot, manifest: JobManifest) -> StatusSnapshot:
+    """Merge manifest-backed task references into detail rows by raw task ID."""
+
+    references = {item.task_id: item for item in manifest.tasks}
+    rows = tuple(_attach_row_reference(row, references.get(row.task_id or "")) for row in snapshot.rows)
+    return replace(snapshot, rows=rows)
+
+
+def _attach_row_reference(row: StatusRow, task_ref) -> StatusRow:
+    if task_ref is None:
+        return row
+    return replace(
+        row,
+        alias=task_ref.alias,
+        input_relative_path=task_ref.input_relative_path,
+        input_filename=task_ref.input_filename,
+        input_stem=task_ref.input_stem,
+        display_label=task_ref.display_label,
+        result_dir=task_ref.result_dir,
+    )
 
 
 def _timestamp_now() -> str:

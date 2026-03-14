@@ -11,7 +11,7 @@ from types import UnionType
 from typing import Any, Mapping, MutableMapping, Sequence, Union, get_args, get_origin
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_CLUSTER_CONFIG_PATH = Path("/shared/config/launchpad.toml")
 DEFAULT_PROJECT_CONFIG_NAME = ".launchpad.toml"
@@ -149,6 +149,31 @@ class RemoteBinariesConfig(LaunchpadBaseModel):
     zstd: str = Field(default="zstd", description="Path or executable name for zstd.")
 
 
+class SolverLogsConfig(LaunchpadBaseModel):
+    """Named solver-log kinds captured at submit time for later workflows."""
+
+    solver: str = Field(
+        default=".log",
+        description="Primary solver log extension used by `launchpad logs --solver-log`.",
+    )
+    telemetry: str | None = Field(
+        default=None,
+        description="Optional secondary solver log extension for telemetry or trace output.",
+    )
+
+    @field_validator("solver", "telemetry", mode="before")
+    @classmethod
+    def _normalize_log_extension(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("Solver log extensions must be non-empty strings.")
+
+        from launchpad_cli.solvers.base import normalize_extension
+
+        return normalize_extension(value)
+
+
 class NastranDefaults(LaunchpadBaseModel):
     """Baseline Nastran configuration defaults."""
 
@@ -172,6 +197,10 @@ class NastranDefaults(LaunchpadBaseModel):
         default=12,
         description="Default CPU count used for Nastran submissions.",
     )
+    logs: SolverLogsConfig = Field(
+        default_factory=lambda: SolverLogsConfig(solver=".f06", telemetry=".f04"),
+        description="Named Nastran log kinds captured for submitted jobs.",
+    )
 
 
 class AnsysDefaults(LaunchpadBaseModel):
@@ -188,6 +217,10 @@ class AnsysDefaults(LaunchpadBaseModel):
     default_cpus: int = Field(
         default=12,
         description="Default CPU count used for ANSYS submissions.",
+    )
+    logs: SolverLogsConfig = Field(
+        default_factory=lambda: SolverLogsConfig(solver=".out"),
+        description="Named ANSYS log kinds captured for submitted jobs.",
     )
 
 

@@ -35,6 +35,9 @@ def test_resolve_config_honors_documented_precedence(tmp_path: Path) -> None:
                 "",
                 "[solvers.nastran]",
                 "default_cpus = 12",
+                "",
+                "[solvers.nastran.logs]",
+                'solver = "F06"',
             ]
         )
         + "\n",
@@ -65,6 +68,9 @@ def test_resolve_config_honors_documented_precedence(tmp_path: Path) -> None:
                 "",
                 "[cluster]",
                 'default_partition = "project-partition"',
+                "",
+                "[solvers.nastran.logs]",
+                'telemetry = "F04"',
             ]
         )
         + "\n",
@@ -95,6 +101,8 @@ def test_resolve_config_honors_documented_precedence(tmp_path: Path) -> None:
     assert resolved.config.submit.solver == "ansys"
     assert resolved.config.submit.cpus == 16
     assert resolved.config.solvers.nastran.default_cpus == 20
+    assert resolved.config.solvers.nastran.logs.solver == ".f06"
+    assert resolved.config.solvers.nastran.logs.telemetry == ".f04"
     assert resolved.loaded_files == (cluster_config, user_config, project_config)
 
 
@@ -106,6 +114,7 @@ def test_render_config_docs_includes_key_paths() -> None:
     assert "ssh.host" in docs
     assert "cluster.default_partition" in docs
     assert "remote_binaries.sbatch" in docs
+    assert "solvers.nastran.logs.solver" in docs
 
 
 def test_configure_logging_writes_debug_logs(tmp_path: Path) -> None:

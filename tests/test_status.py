@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from launchpad_cli.cli import cli
 from launchpad_cli.cli import status as status_module
 from launchpad_cli.core.config import LaunchpadConfig, SSHConfig
+from launchpad_cli.core.job_manifest import TaskReference, build_job_manifest, render_job_manifest
 from launchpad_cli.core.slurm import JobAccounting, JobStatus
 
 
@@ -194,11 +195,16 @@ def test_status_command_falls_back_to_sacct_when_squeue_query_fails(
     monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
     monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
 
+    async def fake_read_remote_text(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
+        raise FileNotFoundError("missing")
+
+    monkeypatch.setattr(status_module, "read_remote_text", fake_read_remote_text)
+
     result = CliRunner().invoke(cli, ["status", "12345"])
 
     assert result.exit_code == 0
     assert "tank_v3" in result.output
-    assert "COMPLETED" in result.output
+    assert "completed=1" in result.output
     assert "178G" in result.output
     assert "Next Commands" in result.output
 
@@ -245,6 +251,11 @@ def test_status_command_falls_back_to_squeue_when_sacct_query_fails(
     monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
     monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
 
+    async def fake_read_remote_text(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
+        raise FileNotFoundError("missing")
+
+    monkeypatch.setattr(status_module, "read_remote_text", fake_read_remote_text)
+
     result = CliRunner().invoke(cli, ["status", "12345"])
 
     assert result.exit_code == 0
@@ -252,6 +263,97 @@ def test_status_command_falls_back_to_squeue_when_sacct_query_fails(
     assert "RUNNING" in result.output
     assert "CPU" not in result.output
     assert "Max RSS" not in result.output
+
+
+def test_status_command_renders_manifest_backed_task_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Job detail output should show label, alias, and raw task ID when a manifest exists."""
+
+    monkeypatch.setattr(status_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        status_module,
+        "resolve_config",
+        lambda **kwargs: SimpleNamespace(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey")
+            )
+        ),
+    )
+
+    @asynccontextmanager
+    async def fake_ssh_session(config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield object()
+
+    async def fake_query_squeue(*args, **kwargs) -> tuple[JobStatus, ...]:  # type: ignore[no-untyped-def]
+        return (
+            JobStatus(
+                job_id="12345_0",
+                job_name="tank_v3",
+                state="RUNNING",
+                array_job_id="12345",
+                array_task_id="0",
+                partition="simulation-r6i-8x",
+                node_list="compute-dy-1",
+                elapsed="00:12:00",
+                comment="/shared/sergey/tank_v3",
+            ),
+            JobStatus(
+                job_id="12345_1",
+                job_name="tank_v3",
+                state="PENDING",
+                array_job_id="12345",
+                array_task_id="1",
+                partition="simulation-r6i-8x",
+                node_list="compute-dy-1",
+                elapsed="00:00:00",
+                comment="/shared/sergey/tank_v3",
+            ),
+        )
+
+    async def fake_query_sacct(*args, **kwargs) -> tuple[JobAccounting, ...]:  # type: ignore[no-untyped-def]
+        return ()
+
+    async def fake_read_remote_text(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
+        return render_job_manifest(
+            build_job_manifest(
+                solver="nastran",
+                logs={"solver": ".f06", "telemetry": ".f04"},
+                tasks=(
+                    TaskReference(
+                        task_id="0",
+                        alias="t01",
+                        input_relative_path="wing.dat",
+                        input_filename="wing.dat",
+                        input_stem="wing",
+                        display_label="wing",
+                        result_dir="results_wing_0",
+                    ),
+                    TaskReference(
+                        task_id="1",
+                        alias="t02",
+                        input_relative_path="fuselage.dat",
+                        input_filename="fuselage.dat",
+                        input_stem="fuselage",
+                        display_label="fuselage",
+                        result_dir="results_fuselage_1",
+                    ),
+                ),
+            )
+        )
+
+    monkeypatch.setattr(status_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
+    monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
+    monkeypatch.setattr(status_module, "read_remote_text", fake_read_remote_text)
+
+    result = CliRunner().invoke(cli, ["status", "12345"])
+
+    assert result.exit_code == 0
+    assert "wing" in result.output
+    assert "fuselage" in result.output
+    assert "t01" in result.output
+    assert "t02" in result.output
 
 
 @pytest.mark.asyncio

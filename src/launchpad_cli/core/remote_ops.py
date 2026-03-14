@@ -19,6 +19,7 @@ class RemoteJobLayout:
     scratch_root: str
     archive_path: str
     script_path: str
+    manifest_path: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,7 @@ def build_remote_job_layout(
     remote_job_dir: str,
     archive_name: str = "inputs.tar.zst",
     script_name: str = "submit.sbatch",
+    manifest_name: str = "launchpad-manifest.json",
     logs_subdir: str = "logs",
     scratch_root_template: str = "{job_dir}/scratch",
 ) -> RemoteJobLayout:
@@ -60,6 +62,7 @@ def build_remote_job_layout(
         scratch_root=scratch_root_template.format(job_dir=job_dir),
         archive_path=str(PurePosixPath(job_dir) / archive_name),
         script_path=str(PurePosixPath(job_dir) / script_name),
+        manifest_path=str(PurePosixPath(job_dir) / manifest_name),
     )
 
 
@@ -90,6 +93,23 @@ async def write_remote_text(
         async with sftp.open(normalized, "wb") as remote_file:
             await remote_file.write(content.encode("utf-8"))
     return normalized
+
+
+async def read_remote_text(
+    conn: asyncssh.SSHClientConnection,
+    path: str,
+) -> str:
+    """Read UTF-8 text from a remote file."""
+
+    normalized = str(PurePosixPath(path))
+    async with conn.start_sftp_client() as sftp:
+        if not await sftp.exists(normalized):
+            raise FileNotFoundError(normalized)
+        async with sftp.open(normalized, "rb") as remote_file:
+            payload = await remote_file.read()
+    if isinstance(payload, bytes):
+        return payload.decode("utf-8")
+    return str(payload)
 
 
 async def prepare_remote_job_directory(
