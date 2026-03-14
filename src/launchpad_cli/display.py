@@ -51,7 +51,9 @@ STATUS_TONES = {
     "CANCELLED": "danger",
     "TIMEOUT": "danger",
 }
-GET_STARTED_BREADCRUMB = "Get started: launchpad config init -> doctor -> submit --dry-run ."
+GET_STARTED_BREADCRUMB = (
+    "Get started: launchpad config init -> doctor -> submit --dry-run ."
+)
 WELCOME_COMMANDS = (
     ("submit", "Package a run and preview the SLURM handoff."),
     ("status", "Watch the queue and inspect task state."),
@@ -59,11 +61,12 @@ WELCOME_COMMANDS = (
     ("doctor", "Check config, SSH, and cluster readiness."),
 )
 _FULL_WORDMARK_LINES = (
-    "    __                           __    __               __",
-    "   / /   ____ ___  ______  _____/ /_  / /   ____ _____/ /",
-    "  / /   / __ `/ / / / __ \\/ ___/ __ \\/ /   / __ `/ __  /",
-    " / /___/ /_/ / /_/ / / / / /__/ / / / /___/ /_/ / /_/ /",
-    "/_____/\\__,_/\\__,_/_/ /_/\\___/_/ /_/_____/\\__,_/\\__,_/",
+    "    __                           __                    __",
+    "   / /   ____ ___  ______  _____/ /_  ____  ____ _____/ /",
+    "  / /   / __ `/ / / / __ \\/ ___/ __ \\/ __ \\/ __ `/ __  /",
+    " / /___/ /_/ / /_/ / / / / /__/ / / / /_/ / /_/ / /_/ /",
+    "/_____/\\__,_/\\__,_/_/ /_/\\___/_/ /_/ .___/\\__,_/\\__,_/",
+    "                                  /_/",
 )
 _COMPACT_WORDMARK = "Launchpad"
 
@@ -87,6 +90,7 @@ def build_launchpad_wordmark(*, width: int | None = None) -> Text | None:
             "lp.brand.secondary",
             "lp.brand.primary",
             "lp.brand.accent",
+            "lp.brand.secondary",
             "lp.brand.secondary",
         )
         for line, style in zip(_FULL_WORDMARK_LINES, styles, strict=True):
@@ -119,8 +123,15 @@ def build_welcome_screen(*, show_wordmark: bool, width: int | None = None) -> Gr
         wordmark = build_launchpad_wordmark(width=width)
         if wordmark is not None:
             renderables.append(wordmark)
-    renderables.append(Text("From folder to cluster in one command.", style="lp.brand.secondary"))
-    renderables.append(Text("Use launchpad <command> --help for command-specific help.", style="lp.brand.subtle"))
+    renderables.append(
+        Text("From folder to cluster in one command.", style="lp.brand.secondary")
+    )
+    renderables.append(
+        Text(
+            "Use launchpad <command> --help for command-specific help.",
+            style="lp.brand.subtle",
+        )
+    )
     renderables.append(build_detail_panel(commands, title="Key Commands"))
     renderables.append(build_get_started_text())
     return Group(*renderables)
@@ -129,7 +140,9 @@ def build_welcome_screen(*, show_wordmark: bool, width: int | None = None) -> Gr
 def build_badge(label: str, *, tone: str = "neutral") -> Text:
     """Return a reusable pill-style status badge."""
 
-    normalized = tone if tone in {"info", "success", "warn", "danger", "neutral"} else "neutral"
+    normalized = (
+        tone if tone in {"info", "success", "warn", "danger", "neutral"} else "neutral"
+    )
     return Text(f" {label.upper()} ", style=f"lp.badge.{normalized}")
 
 
@@ -256,12 +269,16 @@ def render_submit_confirmation(
     summary.add_row("Job ID", job_id)
     summary.add_row("Remote job dir", remote_job_dir)
     summary.add_row("Transfer mode", transfer_mode)
-    summary.add_row("Streams", f"requested {requested_streams}, effective {effective_streams}")
+    summary.add_row(
+        "Streams", f"requested {requested_streams}, effective {effective_streams}"
+    )
     summary.add_row("Payload", payload_label)
     summary.add_row("Remote payload", remote_payload_path)
     summary.add_row("Monitor", f"launchpad status {job_id}")
 
-    console.print(build_detail_panel(summary, title="Submission Complete", tone="success"))
+    console.print(
+        build_detail_panel(summary, title="Submission Complete", tone="success")
+    )
 
 
 def build_status_renderable(
@@ -310,7 +327,9 @@ def _build_status_overview_renderable(
 ) -> Group:
     summary = build_summary_table()
     summary.add_row("User", queried_user or "configured user")
-    summary.add_row("Scope", "active + recent completed" if include_all else "active only")
+    summary.add_row(
+        "Scope", "active + recent completed" if include_all else "active only"
+    )
     summary.add_row("Updated", generated_at)
     summary.add_row("Rows", str(len(rows)))
     summary.add_row("Summary", _format_state_counts(state_counts))
