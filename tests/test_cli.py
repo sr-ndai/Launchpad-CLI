@@ -120,3 +120,17 @@ def test_submit_help_uses_grouped_sections_and_examples() -> None:
     assert "launchpad submit --dry-run ." in result.output
     assert "From folder to cluster in one command." not in result.output
     assert "Get started: launchpad config init -> doctor -> submit --dry-run ." not in result.output
+
+
+def test_logs_help_mentions_task_refs_and_log_kind() -> None:
+    """Logs help should document the final Phase 8 selector and log-kind surface."""
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["logs", "--help"], prog_name="launchpad")
+
+    assert result.exit_code == 0
+    assert "TASK_REF" in result.output
+    assert "--log-kind" in result.output
+    assert "launchpad logs 12345 --follow" in result.output
+    assert "launchpad logs 12345 001 --log-kind telemetry" in result.output

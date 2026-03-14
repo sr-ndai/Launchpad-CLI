@@ -203,6 +203,30 @@ def build_next_steps_panel(
     return build_detail_panel(table, title=title)
 
 
+def build_logs_picker_panel(
+    *,
+    job_id: str,
+    log_kind: str,
+    task_count: int,
+) -> Panel:
+    """Render the pre-picker panel for interactive `launchpad logs` flows."""
+
+    intro = Text()
+    intro.append("Multiple task logs match this request. ", style="lp.brand.secondary")
+    intro.append(
+        "Choose one task before Launchpad reads or follows the remote file.",
+        style="lp.brand.subtle",
+    )
+
+    summary = build_summary_table()
+    summary.add_row("Job", job_id)
+    summary.add_row("Log kind", log_kind)
+    summary.add_row("Choices", str(task_count))
+    summary.add_row("Controls", "Up/Down to move, Enter to select, Ctrl+C to cancel")
+    summary.add_row("Rows", "Label | Alias | Task | State | Kind | File")
+    return build_detail_panel(Group(intro, summary), title="Task Picker")
+
+
 def render_submit_dry_run(
     console: Console,
     *,

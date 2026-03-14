@@ -25,6 +25,9 @@ Notes:
 
 - `--json` only works when the selected command supports structured output
 - human-readable command flows use the shared Phase 7 panel layout
+- `launchpad logs` now accepts manifest-backed task references such as aliases,
+  filenames, and relative paths on new jobs, and uses an interactive picker for
+  ambiguous multi-task human TTY flows
 - `launchpad` and `lp` are equivalent
 
 ## Commands

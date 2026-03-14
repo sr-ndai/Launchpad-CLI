@@ -52,10 +52,14 @@ you stop it with `Ctrl+C`.
 
 ```powershell
 launchpad logs <JOB_ID>
+launchpad logs <JOB_ID> -f
 launchpad logs <JOB_ID> 0 -f
 ```
 
-The second command follows task `0` live.
+If the job has multiple tasks and you run `launchpad logs <JOB_ID> -f` from a
+human terminal, Launchpad opens the interactive picker so you can choose the
+task log with arrow keys. Explicit task refs still work with raw task IDs,
+aliases, filenames, and relative paths on new manifest-backed jobs.
 
 ## 6. Download Results
 

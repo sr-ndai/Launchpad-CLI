@@ -53,6 +53,12 @@ across `submit`, `status`, `download`, `logs`, `ls`, `cancel`, `cleanup`, and
 follow-up commands. Root `--json` still keeps the machine-readable payloads for
 the commands that support it.
 
+For new manifest-backed jobs, task-oriented commands also accept richer task
+references such as aliases, filenames, relative paths, and stems. `launchpad
+logs` can now open an interactive arrow-key picker for ambiguous multi-task
+human TTY flows, and `--log-kind` reads non-primary solver logs from the
+submitted manifest when they exist.
+
 Use `--no-color` or `NO_COLOR=1` when you want plain output.
 
 Developer install from a source checkout:
