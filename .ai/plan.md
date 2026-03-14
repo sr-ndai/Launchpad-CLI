@@ -1175,12 +1175,12 @@ launchpad config init
 
 **Goal:** Results retrieval with safety checks.
 
-- [ ] `core/local_ops.py` — Disk space checking, path handling (Windows-aware)
-- [ ] `core/compress.py` — Remote-side compression (tar + zstd over SSH)
-- [ ] `cli/download.py` — Full orchestration: check status → size check → space check → compress remote → download → decompress local → verify
-- [ ] `cli/cleanup.py` — Remote directory management
-- [ ] `cli/ls.py` — Remote file listing
-- [ ] Integrity verification (file counts, optional checksums)
+- [x] `core/local_ops.py` — Disk space checking, path handling (Windows-aware)
+- [x] `core/compress.py` — Remote-side compression (tar + zstd over SSH)
+- [x] `cli/download.py` — Full orchestration: check status → size check → space check → compress remote → download → decompress local → verify
+- [x] `cli/cleanup.py` — Remote directory management
+- [x] `cli/ls.py` — Remote file listing
+- [x] Integrity verification (file counts, optional checksums)
 
 **Milestone:** Full job lifecycle works: submit → monitor → download → cleanup.
 
