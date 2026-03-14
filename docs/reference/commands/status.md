@@ -44,6 +44,9 @@ launchpad status --all
 
 - with no `JOB_ID`, Launchpad shows the current user's jobs
 - with a `JOB_ID`, Launchpad shows detail for that job
+- Launchpad runs SLURM scheduler commands through the cluster login shell
+  because some head nodes expose `squeue` and `sacct` only through login-shell
+  initialization
 - `--watch` refreshes until you stop it and keeps a live status header instead
   of redrawing extra branding
 - root `--json` is supported for non-watch usage only

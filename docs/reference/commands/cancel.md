@@ -38,5 +38,8 @@ launchpad cancel 12345 --yes
   confirmation prompt
 - human-readable mode finishes with a cancellation summary and next-step hints
 - if you pass no task IDs, Launchpad cancels the whole job
-- if you pass task IDs, they must be numeric
+- if you pass task refs, Launchpad resolves raw task IDs and manifest-backed
+  selectors before invoking `scancel`
+- Launchpad runs `scancel` through the cluster login shell because some head
+  nodes expose SLURM commands only through login-shell initialization
 - root `--json` is supported

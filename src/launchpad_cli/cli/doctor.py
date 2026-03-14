@@ -19,6 +19,7 @@ from rich.text import Text
 
 from launchpad_cli.core.config import DEFAULT_CLUSTER_CONFIG_PATH, LaunchpadConfig, SSHConfig, resolve_config
 from launchpad_cli.core.logging import configure_logging
+from launchpad_cli.core.slurm import resolve_slurm_executable
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.display import (
     build_badge,
@@ -262,27 +263,52 @@ async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: Lau
     """Ensure the configured remote binaries resolve to executables."""
 
     resolved_paths: list[str] = []
-    missing: list[str] = []
+    missing_scheduler: list[str] = []
+    missing_exec: list[str] = []
+    scheduler_binaries = {"sbatch", "squeue", "sacct"}
 
     for name, configured_value in config.remote_binaries.model_dump(mode="python").items():
-        result = await _resolve_remote_executable(conn, str(configured_value))
+        if name in scheduler_binaries:
+            result = await resolve_slurm_executable(conn, str(configured_value))
+        else:
+            result = await _resolve_remote_executable(conn, str(configured_value))
         if result is None:
-            missing.append(f"{name}={configured_value}")
+            rendered = f"{name}={configured_value}"
+            if name in scheduler_binaries:
+                missing_scheduler.append(rendered)
+            else:
+                missing_exec.append(rendered)
         else:
             resolved_paths.append(f"{name}={result}")
 
-    if missing:
+    if missing_scheduler or missing_exec:
+        detail_parts: list[str] = []
+        suggestion_parts: list[str] = []
+
+        if missing_scheduler:
+            detail_parts.append(
+                "Launchpad's scheduler login-shell environment could not resolve these executables: "
+                f"{', '.join(missing_scheduler)}"
+            )
+            suggestion_parts.append(
+                "Ensure the head-node login-shell initialization exposes SLURM there, or set "
+                "`remote_binaries.sbatch`, `remote_binaries.squeue`, and `remote_binaries.sacct` "
+                "to absolute paths as needed."
+            )
+        if missing_exec:
+            detail_parts.append(
+                "Launchpad's remote exec environment could not resolve these executables: "
+                f"{', '.join(missing_exec)}"
+            )
+            suggestion_parts.append(
+                "Set `remote_binaries.*` to absolute paths or make the tools available on the "
+                "PATH for non-interactive SSH exec sessions."
+            )
         return DiagnosticResult(
             name="remote-binaries",
             status="fail",
-            detail=(
-                "Launchpad's remote exec environment could not resolve these executables: "
-                f"{', '.join(missing)}"
-            ),
-            suggestion=(
-                "Set `remote_binaries.*` to absolute paths or make the tools available on the "
-                "PATH for non-interactive SSH exec sessions, then rerun `launchpad doctor`."
-            ),
+            detail=" ".join(detail_parts),
+            suggestion=" ".join(suggestion_parts) + " Then rerun `launchpad doctor`.",
         )
 
     return DiagnosticResult(

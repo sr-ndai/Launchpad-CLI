@@ -10,6 +10,7 @@ import pytest
 from launchpad_cli.core.config import LaunchpadConfig, SSHConfig
 from launchpad_cli.core.slurm import (
     SubmitRequest,
+    build_slurm_login_shell_command,
     build_submit_script,
     parse_sacct_output,
     parse_squeue_output,
@@ -228,7 +229,11 @@ async def test_submit_job_writes_script_and_parses_parsable_job_id() -> None:
 
     assert result.job_id == "12345"
     assert request.script_path in connection.written
-    assert connection.commands == ["sbatch --parsable /shared/sergey/nastran-20260312-1947-abcd/submit.sbatch"]
+    assert connection.commands == [
+        build_slurm_login_shell_command(
+            "sbatch --parsable /shared/sergey/nastran-20260312-1947-abcd/submit.sbatch"
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -265,7 +270,7 @@ async def test_query_squeue_uses_current_user_filter_and_parses_results() -> Non
         config=LaunchpadConfig(ssh=SSHConfig(username="sergey")),
     )
 
-    assert connection.commands == ["squeue --json --user sergey"]
+    assert connection.commands == [build_slurm_login_shell_command("squeue --json --user sergey")]
     assert jobs[0].job_id == "12345"
     assert jobs[0].state == "RUNNING"
 
@@ -285,6 +290,32 @@ async def test_query_sacct_builds_job_specific_command_and_parses_results() -> N
         duplicates=True,
     )
 
-    assert connection.commands == ["sacct --json --allocations --duplicates --starttime 2026-03-01 --jobs 12345"]
+    assert connection.commands == [
+        build_slurm_login_shell_command(
+            "sacct --json --allocations --duplicates --starttime 2026-03-01 --jobs 12345"
+        )
+    ]
     assert jobs[0].job_id == "12345_2"
     assert jobs[0].state == "COMPLETED"
+
+
+@pytest.mark.asyncio
+async def test_query_squeue_reports_login_shell_guidance_when_scheduler_is_missing() -> None:
+    """Missing scheduler binaries should point operators toward login-shell init or absolute paths."""
+
+    connection = FakeConnection()
+    connection.run_result = SimpleNamespace(
+        exit_status=127,
+        stdout="",
+        stderr="bash: line 1: squeue: command not found",
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await query_squeue(
+            connection,
+            config=LaunchpadConfig(ssh=SSHConfig(username="sergey")),
+        )
+
+    message = str(excinfo.value)
+    assert "login shell did not expose `squeue`" in message
+    assert "remote_binaries.squeue" in message
