@@ -249,3 +249,27 @@ async def test_doctor_remote_root_check_uses_launchpad_exec_environment() -> Non
 
     assert result.status == "pass"
     assert commands == ["test -d /shared/sergey && test -w /shared/sergey"]
+
+
+@pytest.mark.asyncio
+async def test_doctor_remote_root_check_uses_configured_workspace_root() -> None:
+    """Writable-root checks should honor an explicit cluster workspace root."""
+
+    commands: list[str] = []
+
+    class FakeConnection:
+        async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            commands.append(command)
+            return SimpleNamespace(exit_status=1, stdout="", stderr="")
+
+    config = LaunchpadConfig(
+        cluster={"workspace_root": "/shared/launchpad"},
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+
+    result = await doctor_module._remote_root_check(FakeConnection(), config)
+
+    assert result.status == "fail"
+    assert "/shared/launchpad" in result.detail
+    assert "cluster.workspace_root" in (result.suggestion or "")
+    assert commands == ["test -d /shared/launchpad && test -w /shared/launchpad"]

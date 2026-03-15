@@ -8,8 +8,9 @@ from click.testing import CliRunner
 from loguru import logger
 
 from launchpad_cli.cli import cli
-from launchpad_cli.core.config import render_config_docs, resolve_config
+from launchpad_cli.core.config import LaunchpadConfig, SSHConfig, render_config_docs, resolve_config
 from launchpad_cli.core.logging import configure_logging
+from launchpad_cli.core.workspace import resolve_remote_workspace_root
 
 
 def test_resolve_config_honors_documented_precedence(tmp_path: Path) -> None:
@@ -113,8 +114,35 @@ def test_render_config_docs_includes_key_paths() -> None:
 
     assert "ssh.host" in docs
     assert "cluster.default_partition" in docs
+    assert "cluster.workspace_root" in docs
     assert "remote_binaries.sbatch" in docs
     assert "solvers.nastran.logs.solver" in docs
+
+
+def test_resolve_remote_workspace_root_prefers_configured_root() -> None:
+    """Configured workspace roots should override the legacy username fallback."""
+
+    root = resolve_remote_workspace_root(
+        LaunchpadConfig(
+            cluster={"workspace_root": "/shared/launchpad"},
+            ssh=SSHConfig(username="sergey"),
+        )
+    )
+
+    assert root == "/shared/launchpad"
+
+
+def test_resolve_remote_workspace_root_falls_back_to_shared_root_username() -> None:
+    """Unset workspace roots should preserve the legacy shared_root/username behavior."""
+
+    root = resolve_remote_workspace_root(
+        LaunchpadConfig(
+            cluster={"shared_root": "/shared"},
+            ssh=SSHConfig(username="sergey"),
+        )
+    )
+
+    assert root == "/shared/sergey"
 
 
 def test_configure_logging_writes_debug_logs(tmp_path: Path) -> None:

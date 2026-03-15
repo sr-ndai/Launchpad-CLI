@@ -42,7 +42,8 @@ launchpad cleanup --older-than 30d --yes
   panel layout
 - with `JOB_IDS`, Launchpad resolves the remote job directory from scheduler
   metadata
-- without `JOB_IDS`, Launchpad discovers cleanup candidates under your remote
-  user root
+- without `JOB_IDS`, Launchpad discovers cleanup candidates under
+  `cluster.workspace_root` when set and otherwise under the legacy remote user
+  root fallback
 - cleanup only supports terminal jobs
 - root `--json` is supported

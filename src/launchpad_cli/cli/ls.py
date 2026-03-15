@@ -22,6 +22,7 @@ from launchpad_cli.core.config import resolve_config
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.remote_ops import RemotePathEntry, list_remote_directory
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
     build_badge,
     build_console,
@@ -138,10 +139,7 @@ async def _run_ls(
 
 
 def _default_remote_root(config) -> str:  # type: ignore[no-untyped-def]
-    username = config.ssh.username
-    if not username:
-        raise click.ClickException("Cannot resolve a default remote path without `ssh.username`.")
-    return str(PurePosixPath(config.cluster.shared_root) / username)
+    return resolve_remote_workspace_root(config)
 
 
 def _normalize_remote_path(remote_path: str | None, *, remote_root: str) -> str:

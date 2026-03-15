@@ -78,11 +78,11 @@ key_path = "C:\\Users\\sergey\\.ssh\\id_ed25519"
 parallel_streams = 8
 compression_level = 3
 
+[cluster]
+workspace_root = "/shared/launchpad"
+
 [submit]
 name_prefix = "wing"
-
-[cluster]
-default_partition = "simulation-r6i-8x"
 ```
 
 ## Key Settings To Know
@@ -124,10 +124,19 @@ Controls packaging and transfer behavior:
 Controls shared filesystem and scheduler defaults:
 
 - `shared_root`
+- `workspace_root`
 - `default_partition`
 - `default_wall_time`
 - `scratch_root`
 - `logs_subdir`
+
+Notes:
+
+- `shared_root` is the shared filesystem mount root, such as `/shared`
+- `workspace_root` is the writable Launchpad workspace subtree, such as
+  `/shared/launchpad`
+- if `workspace_root` is unset, Launchpad falls back to the legacy
+  `<shared_root>/<ssh.username>` workspace layout
 
 ### `submit`
 

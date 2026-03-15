@@ -43,6 +43,8 @@ launchpad --json doctor
   same login-shell environment Launchpad uses for scheduler commands
 - non-scheduler remote checks such as `tar`, `zstd`, and the writable-root
   probe still run through Launchpad's normal non-interactive SSH exec path
+- the writable-root probe checks `cluster.workspace_root` when configured and
+  otherwise falls back to `<cluster.shared_root>/<ssh.username>`
 - if scheduler binaries fail, Launchpad points you toward head-node
   login-shell initialization or `remote_binaries.sbatch` /
   `remote_binaries.squeue` / `remote_binaries.sacct` absolute paths
