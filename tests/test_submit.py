@@ -81,7 +81,7 @@ def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_pat
         lambda **kwargs: resolved,
     )
 
-    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> submit_module.SubmitExecution:
+    async def fake_execute_submit(plan: submit_module.SubmitPlan, console) -> submit_module.SubmitExecution:
         captured_plan["plan"] = plan
         return submit_module.SubmitExecution(
             submitted_job=SubmittedJob(
@@ -171,7 +171,7 @@ def test_submit_emits_json_after_successful_execution(monkeypatch, tmp_path: Pat
         lambda **kwargs: resolved,
     )
 
-    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> submit_module.SubmitExecution:
+    async def fake_execute_submit(plan: submit_module.SubmitPlan, console) -> submit_module.SubmitExecution:
         return submit_module.SubmitExecution(
             submitted_job=SubmittedJob(
                 job_id="12345",
@@ -278,7 +278,7 @@ def test_submit_wraps_asyncssh_errors_as_click_exceptions(monkeypatch, tmp_path:
         lambda **kwargs: resolved,
     )
 
-    async def fake_execute_submit(plan: submit_module.SubmitPlan) -> submit_module.SubmitExecution:
+    async def fake_execute_submit(plan: submit_module.SubmitPlan, console) -> submit_module.SubmitExecution:
         raise asyncssh.Error(1, "boom")
 
     monkeypatch.setattr(submit_module, "_execute_submit", fake_execute_submit)
@@ -462,7 +462,8 @@ async def test_execute_submit_writes_launchpad_manifest(
     monkeypatch.setattr(submit_module, "submit_job", fake_submit_job)
     monkeypatch.setattr(submit_module, "write_remote_text", fake_write_remote_text)
 
-    execution = await submit_module._execute_submit(plan)
+    console = submit_module.build_console(no_color=True)
+    execution = await submit_module._execute_submit(plan, console)
 
     assert execution.submitted_job.job_id == "12345"
     assert plan.remote_layout.manifest_path in written
@@ -523,5 +524,6 @@ async def test_execute_submit_rejects_existing_remote_job_directory(
 
     monkeypatch.setattr(submit_module, "ssh_session", fake_ssh_session)
 
+    console = submit_module.build_console(no_color=True)
     with pytest.raises(submit_module.click.ClickException, match="Remote job directory already exists"):
-        await submit_module._execute_submit(plan)
+        await submit_module._execute_submit(plan, console)

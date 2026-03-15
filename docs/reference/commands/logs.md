@@ -51,8 +51,10 @@ launchpad logs 12345 001 --log-kind telemetry
 
 ## Behavior Notes
 
-- human-readable mode prints a minimal job/task/log header and path line, then
-  shows raw log content with almost no wrapper chrome
+- in non-follow mode, Launchpad shows a spinner while reading the log from the
+  cluster before printing the content
+- output prints a minimal job/task/log header and path line, then the raw log
+  content
 - Launchpad resolves the scheduler metadata behind `logs` through the cluster
   login shell because some head nodes expose `squeue` and `sacct` only there
 - `--follow` prints that header once and then streams the remote log until you

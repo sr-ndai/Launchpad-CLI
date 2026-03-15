@@ -41,7 +41,7 @@ from launchpad_cli.core.transfer import (
     upload_many,
 )
 from launchpad_cli.core.workspace import resolve_remote_workspace_root
-from launchpad_cli.display import build_console, render_submit_confirmation, render_submit_dry_run
+from launchpad_cli.display import build_console, build_progress, build_spinner, render_submit_confirmation, render_submit_dry_run
 from launchpad_cli.solvers import AnsysAdapter, DiscoveredInput, NastranAdapter, SolverAdapter, SubmitOverrides
 
 
@@ -288,7 +288,7 @@ def command(
         return
 
     try:
-        execution = asyncio.run(_execute_submit(plan))
+        execution = asyncio.run(_execute_submit(plan, console))
     except (asyncssh.Error, RuntimeError, OSError, ValueError, NotImplementedError) as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -316,7 +316,7 @@ def command(
     )
 
 
-async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
+async def _execute_submit(plan: SubmitPlan, console) -> SubmitExecution:
     """Execute the end-to-end submit flow once planning is complete."""
 
     config = plan.resolved_config.config
@@ -334,27 +334,36 @@ async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
                     plan.run_name,
                     plan.remote_layout.archive_path,
                 )
-                archive_path = _materialize_archive(
-                    plan,
-                    temp_root,
-                    compression_level=config.transfer.compression_level,
+                with build_spinner(console, "Compressing..."):
+                    archive_path = await asyncio.to_thread(
+                        _materialize_archive,
+                        plan,
+                        temp_root,
+                        compression_level=config.transfer.compression_level,
+                    )
+                transfer_execution = await _run_with_upload_progress(
+                    console,
+                    total_bytes=archive_path.stat().st_size,
+                    description="Uploading",
+                    operation=lambda cb: striped_upload(
+                        conn,
+                        config.ssh,
+                        archive_path,
+                        plan.remote_layout.archive_path,
+                        streams=plan.requested_streams,
+                        chunk_size=config.transfer.chunk_size_bytes,
+                        resume=config.transfer.resume_enabled,
+                        progress_callback=cb,
+                    ),
                 )
-                transfer_execution = await striped_upload(
-                    conn,
-                    config.ssh,
-                    archive_path,
-                    plan.remote_layout.archive_path,
-                    streams=plan.requested_streams,
-                    chunk_size=config.transfer.chunk_size_bytes,
-                    resume=config.transfer.resume_enabled,
-                )
-                await extract_remote_archive(
-                    conn,
-                    archive_path=plan.remote_layout.archive_path,
-                    destination_dir=plan.remote_layout.job_dir,
-                    tar_binary=config.remote_binaries.tar,
-                    zstd_binary=config.remote_binaries.zstd,
-                )
+                with build_spinner(console, "Extracting on cluster..."):
+                    await extract_remote_archive(
+                        conn,
+                        archive_path=plan.remote_layout.archive_path,
+                        destination_dir=plan.remote_layout.job_dir,
+                        tar_binary=config.remote_binaries.tar,
+                        zstd_binary=config.remote_binaries.zstd,
+                    )
             else:
                 logger.trace(
                     "Submitting {} via multi-file upload into {}",
@@ -363,11 +372,17 @@ async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
                 )
                 payload_root = _materialize_payload_root(plan, temp_root)
                 upload_items = _build_multi_file_upload_items(plan, payload_root)
-                transfer_execution = await upload_many(
-                    config.ssh,
-                    upload_items,
-                    streams=plan.requested_streams,
-                    resume=config.transfer.resume_enabled,
+                transfer_execution = await _run_with_upload_progress(
+                    console,
+                    total_bytes=sum(item.local_path.stat().st_size for item in upload_items),
+                    description="Uploading",
+                    operation=lambda cb: upload_many(
+                        config.ssh,
+                        upload_items,
+                        streams=plan.requested_streams,
+                        resume=config.transfer.resume_enabled,
+                        progress_callback=cb,
+                    ),
                 )
 
             await write_remote_text(
@@ -386,6 +401,27 @@ async def _execute_submit(plan: SubmitPlan) -> SubmitExecution:
                 submitted_job=submitted_job,
                 effective_streams=transfer_execution.effective_streams,
             )
+
+
+async def _run_with_upload_progress(
+    console,
+    *,
+    total_bytes: int,
+    description: str,
+    operation,
+):
+    """Run an upload operation under the shared minimal progress surface."""
+
+    if total_bytes <= 0:
+        return await operation(None)
+
+    with build_progress(console=console) as progress:
+        task_id = progress.add_task(description, total=total_bytes)
+
+        def on_progress(transferred: int) -> None:
+            progress.update(task_id, completed=min(transferred, total_bytes))
+
+        return await operation(on_progress)
 
 
 def _build_submit_plan(
@@ -409,9 +445,15 @@ def _build_submit_plan(
 
     resolved_input_dir = input_dir.expanduser().resolve()
     if not resolved_input_dir.exists():
-        raise click.ClickException(f"Input directory does not exist: {resolved_input_dir}")
+        raise click.ClickException(
+            f"Input directory does not exist: {resolved_input_dir}. "
+            "Run from your solver input folder or pass the path explicitly."
+        )
     if not resolved_input_dir.is_dir():
-        raise click.ClickException(f"Input path is not a directory: {resolved_input_dir}")
+        raise click.ClickException(
+            f"Input path is not a directory: {resolved_input_dir}. "
+            "Pass a directory path or run from your solver input folder."
+        )
 
     resolved_config = resolve_config(
         cwd=resolved_input_dir,
@@ -443,7 +485,8 @@ def _build_submit_plan(
 
     if not primary_inputs:
         raise click.ClickException(
-            f"No supported {solver_key} input files were found in {resolved_input_dir}."
+            f"No supported {solver_key} input files were found in {resolved_input_dir}. "
+            "Use --include-all to transfer everything, or check solver detection with --solver."
         )
 
     package_files = tuple(
@@ -571,7 +614,10 @@ def _collect_package_files(
     for extra_file in extra_files:
         resolved = (input_dir / extra_file).resolve() if not extra_file.is_absolute() else extra_file.resolve()
         if not resolved.exists() or not resolved.is_file():
-            raise click.ClickException(f"Extra file does not exist: {resolved}")
+            raise click.ClickException(
+                f"Extra file does not exist: {resolved}. "
+                "Check the path is relative to the input directory or use an absolute path."
+            )
         try:
             resolved.relative_to(input_dir)
         except ValueError as exc:

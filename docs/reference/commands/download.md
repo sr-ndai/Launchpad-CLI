@@ -52,8 +52,10 @@ launchpad download 12345 --cleanup
 - use either `LOCAL_DIR` or `--output`, not both
 - Launchpad checks local disk space before download and previews the transfer
   plan before asking for confirmation
+- `launchpad download` shows a determinate progress bar during transfer and a
+  spinner while extracting the archive locally
 - root `--json` is supported
 - `--remote-compress` is deprecated; prefer `--transfer-mode`
 - `--tasks` accepts a comma-separated task list
-- successful downloads now summarize the transfer and point to the next cleanup
-  or status command
+- successful downloads summarize the transfer and point to the next cleanup or
+  status command

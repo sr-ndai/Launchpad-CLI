@@ -29,6 +29,7 @@ from launchpad_cli.display import (
     build_inline_kv,
     build_next_steps,
     build_logs_picker_panel,
+    build_spinner,
     build_warning_line,
 )
 from launchpad_cli.solvers import AnsysAdapter, NastranAdapter
@@ -137,10 +138,14 @@ def command(
     colorize_output = _colorize_output(ctx)
     if sum(bool(item) for item in (solver_log, log_kind, err)) > 1:
         raise click.ClickException(
-            "`launchpad logs` accepts only one of `--solver-log`, `--log-kind`, or `--err`."
+            "`launchpad logs` accepts only one of `--solver-log`, `--log-kind`, or `--err`. "
+            "Specify exactly one log flag at a time."
         )
     if follow and json_output:
-        raise click.ClickException("`launchpad logs --follow` does not support `--json` output.")
+        raise click.ClickException(
+            "`launchpad logs --follow` does not support `--json` output. "
+            "Run without --follow or --json to get a buffered snapshot."
+        )
 
     configure_logging(
         verbosity=_verbosity(ctx),
@@ -153,6 +158,7 @@ def command(
             _run_logs(
                 cwd=Path.cwd(),
                 env=os.environ,
+                console=console,
                 job_id=job_id,
                 task_ref=task_ref,
                 follow=follow,
@@ -170,7 +176,7 @@ def command(
             )
         )
     except KeyboardInterrupt:
-        click.echo("Interrupted.")
+        console.print("  Interrupted.", style="lp.text.tertiary")
         raise click.exceptions.Exit(130) from None
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -187,6 +193,7 @@ async def _run_logs(
     *,
     cwd: Path,
     env: dict[str, str],
+    console=None,
     job_id: str,
     task_ref: str | None,
     follow: bool,
@@ -240,12 +247,21 @@ async def _run_logs(
         if on_ready is not None:
             on_ready(preview)
         logger.trace("Reading {} log for job {} from {}", effective_log_kind, job_id, remote_path)
-        content = await _read_remote_log(
-            conn,
-            remote_path=remote_path,
-            lines=lines,
-            follow=follow,
-        )
+        if not follow and console is not None:
+            with build_spinner(console, "Reading log..."):
+                content = await _read_remote_log(
+                    conn,
+                    remote_path=remote_path,
+                    lines=lines,
+                    follow=follow,
+                )
+        else:
+            content = await _read_remote_log(
+                conn,
+                remote_path=remote_path,
+                lines=lines,
+                follow=follow,
+            )
         return replace(preview, content=content)
 
 
@@ -328,7 +344,8 @@ def _select_row(
                 on_picker=on_picker,
             )
         raise click.ClickException(
-            f"Job {job_id} has multiple task logs. Specify a TASK_REF explicitly."
+            f"Job {job_id} has multiple task logs. Specify a TASK_REF explicitly. "
+            f"Run launchpad status {job_id} to see available task IDs."
         )
     return LogSelection(row=rows[0])
 

@@ -1369,6 +1369,31 @@ without regressing clusters that lack SLURM accounting.
 
 ---
 
+### Phase 11: Transfer Progress Indicators (Week 16)
+
+- [ ] Add `progress_callback` to `upload_many()` and `striped_upload()` in
+  `core/transfer.py`, mirroring the existing download callback pattern
+- [ ] Wire spinner for local compression in `lp submit` using
+  `asyncio.to_thread()` so the event loop stays free
+- [ ] Wire determinate progress bar for the upload transfer in `lp submit`
+  (both single-file and multi-file modes)
+- [ ] Wire spinner for remote extraction in `lp submit`
+- [ ] Wire spinner for local decompression in `lp download` using
+  `asyncio.to_thread()`
+
+- [ ] Audit and improve all `click.ClickException` messages to include
+  actionable suggestions where warranted
+- [ ] Add spinners to slow remote operations in `ls`, `cleanup`, and `logs`
+  that currently run without user feedback
+- [ ] Replace `click.echo("Interrupted.")` in `status`, `logs`, and `download`
+  with `console.print()` calls that respect `--quiet` and `--no-color`
+
+**Milestone:** Every long-running operation shows a spinner or progress bar;
+every error message includes an actionable suggestion; no output bypasses the
+design system's quiet/color controls.
+
+---
+
 ## 12. Testing Strategy
 
 | Layer | Approach |

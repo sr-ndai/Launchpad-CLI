@@ -9,10 +9,10 @@
 2026-03-15
 
 ## Active Phase
-None — awaiting next planned phase
+Phase 11 — Progress Indicators & UI Consistency Sweep
 
 ## Active Task
-None — no Builder work assigned
+— (all Phase 11 tasks complete)
 
 ## Queue Snapshot
 - pending: —
@@ -24,27 +24,23 @@ None — no Builder work assigned
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `main`
-- active task branch: `none`
-- last processed builder session: `2026-03-15-1228-builder-10.1.md`
+- coordination branch: `phase/11-progress-and-ui-sweep`
+- active task branch: none
+- last processed builder session: `2026-03-15-1500-builder-11.2.md`
 
 ## What Changed Recently
-- PR `#14` (`Phase 10: cluster env and live metrics`) was merged into `main`
-  on 2026-03-15.
-- Phase 10 landed the deferred Nastran environment-export and live
-  running-metrics follow-up on `main` with docs, diagnostics, and regression
-  coverage included.
-- The phase branch and task branch were closed after merge, and no new phase or
-  Builder task has been created yet.
+- Task 11.2 (`UI consistency sweep`) ACCEPTED and merged into phase branch.
+  All 173 tests pass.
+- All Phase 11 tasks are now `done`. Phase branch is ready for PR to `main`.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Coordinator should plan the next phase or the human should define the next
-priority before assigning more Builder work.
+Open a PR from `phase/11-progress-and-ui-sweep` to `main` summarising Phase 11
+deliverables. Human owner reviews and merges.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
-2. `.ai/plan.md`
-3. `.ai/tasks/queue.md`
+2. `.ai/tasks/queue.md`
+3. `.ai/plan.md`

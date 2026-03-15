@@ -290,7 +290,7 @@ def command(
             )
         )
     except KeyboardInterrupt:
-        click.echo("Interrupted.")
+        console.print("  Interrupted.", style="lp.text.tertiary")
         raise click.exceptions.Exit(130) from None
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -421,7 +421,8 @@ async def _build_download_plan(
     destination_dir = resolve_download_destination(destination, run_name=run_name)
     if destination_dir.exists() and any(destination_dir.iterdir()):
         raise click.ClickException(
-            f"Download destination already exists and is not empty: {destination_dir}"
+            f"Download destination already exists and is not empty: {destination_dir}. "
+            "Use --output to choose a different path or delete the existing directory."
         )
 
     source_roots = _build_source_roots(
@@ -568,7 +569,8 @@ async def _execute_single_file_download(
             )
 
     inspection = inspect_archive(plan.local_archive_path)
-    decompress_path(plan.local_archive_path, plan.destination_dir)
+    with build_spinner(console, "Extracting..."):
+        await asyncio.to_thread(decompress_path, plan.local_archive_path, plan.destination_dir)
 
     extracted_files = _count_local_files(plan.destination_dir)
     if extracted_files != inspection.file_count:
@@ -815,7 +817,8 @@ def _select_download_rows(
     missing = [task_id for task_id in requested_tasks if all(row.task_id != task_id for row in selected)]
     if missing:
         raise click.ClickException(
-            f"Task selection did not match job rows for {rows[0].job_id}: {', '.join(missing)}"
+            f"Task selection did not match job rows for {rows[0].job_id}: {', '.join(missing)}. "
+            f"Verify task IDs with: launchpad status {rows[0].job_id}"
         )
     return selected
 
@@ -925,7 +928,9 @@ def _parse_task_selection(raw: str | None) -> tuple[str, ...]:
     parts = [part.strip() for part in raw.split(",")]
     selected = [part for part in parts if part]
     if not selected:
-        raise click.ClickException("`--tasks` requires at least one task reference.")
+        raise click.ClickException(
+            "`--tasks` requires at least one task reference. Pass comma-separated task IDs or aliases."
+        )
 
     deduplicated = list(dict.fromkeys(selected))
     return tuple(deduplicated)

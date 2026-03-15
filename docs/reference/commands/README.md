@@ -24,12 +24,10 @@ These options are available on the root command:
 Notes:
 
 - `--json` only works when the selected command supports structured output
-- human-readable command flows use the final Phase 9 text hierarchy: restrained
-  headers, aligned metadata, borderless listings, and minimal log chrome
-- `launchpad logs` now accepts manifest-backed task references such as aliases,
-  filenames, and relative paths on new jobs, and uses an interactive picker for
-  ambiguous multi-task human TTY flows
-- `launchpad` and `lp` are equivalent
+- `launchpad logs` accepts manifest-backed task references: raw task IDs,
+  aliases, filenames, relative paths, and input stems; an interactive picker
+  opens for ambiguous multi-task flows in a human terminal
+- `launchpad` and `lp` are equivalent — all examples work with either
 
 ## Commands
 
