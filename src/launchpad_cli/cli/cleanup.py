@@ -28,6 +28,7 @@ from launchpad_cli.display import (
     build_console,
     build_inline_kv,
     build_next_steps,
+    build_spinner,
     build_success_line,
     build_suggestion_line,
     build_warning_line,
@@ -182,6 +183,7 @@ async def _run_cleanup(
             targets = await _discover_cleanup_targets(
                 conn,
                 resolved.config,
+                console=console,
                 older_than_seconds=older_than_seconds,
                 now=time.time(),
             )
@@ -245,14 +247,21 @@ async def _cleanup_targets_for_job_ids(
         rows = await _query_job_rows(conn, config, job_id=job_id)
         if any(row.state.upper() not in TERMINAL_STATES for row in rows):
             raise click.ClickException(
-                f"Cleanup only supports terminal jobs. Job {job_id} still has non-terminal task state."
+                f"Cleanup only supports terminal jobs. Job {job_id} still has non-terminal task state. "
+                "Wait for the job to finish or cancel it first with: launchpad cancel"
             )
 
         remote_dirs = {row.remote_job_dir for row in rows if row.remote_job_dir}
         if not remote_dirs:
-            raise click.ClickException(f"No remote job directory was found for job {job_id}.")
+            raise click.ClickException(
+                f"No remote job directory was found for job {job_id}. "
+                "Verify the job ID with: launchpad status"
+            )
         if len(remote_dirs) != 1:
-            raise click.ClickException(f"Cleanup target for job {job_id} is ambiguous.")
+            raise click.ClickException(
+                f"Cleanup target for job {job_id} is ambiguous. "
+                "Verify the job ID with: launchpad status"
+            )
 
         remote_path = remote_dirs.pop()
         if remote_path in seen:
@@ -276,30 +285,49 @@ async def _discover_cleanup_targets(
     conn: asyncssh.SSHClientConnection,
     config: LaunchpadConfig,
     *,
+    console=None,
     older_than_seconds: int | None,
     now: float,
 ) -> tuple[CleanupTarget, ...]:
     """List candidate directories beneath the configured user root."""
 
     remote_root = _default_remote_root(config)
-    entries = await list_remote_directory(conn, remote_root, recursive=False)
+    if console is not None:
+        with build_spinner(console, "Listing remote directory..."):
+            entries = await list_remote_directory(conn, remote_root, recursive=False)
+    else:
+        entries = await list_remote_directory(conn, remote_root, recursive=False)
     cutoff = now - older_than_seconds if older_than_seconds is not None else None
 
+    candidate_entries = [
+        entry for entry in entries
+        if entry.is_dir and (cutoff is None or (entry.modified_epoch is not None and entry.modified_epoch <= cutoff))
+    ]
+
     targets: list[CleanupTarget] = []
-    for entry in entries:
-        if not entry.is_dir:
-            continue
-        if cutoff is not None and (entry.modified_epoch is None or entry.modified_epoch > cutoff):
-            continue
-        targets.append(
-            CleanupTarget(
-                label=entry.name,
-                path=entry.path,
-                size_bytes=await measure_remote_path(conn, entry.path),
-                modified_epoch=entry.modified_epoch,
-                source="root-scan",
+    if candidate_entries and console is not None:
+        with build_spinner(console, "Measuring sizes..."):
+            for entry in candidate_entries:
+                targets.append(
+                    CleanupTarget(
+                        label=entry.name,
+                        path=entry.path,
+                        size_bytes=await measure_remote_path(conn, entry.path),
+                        modified_epoch=entry.modified_epoch,
+                        source="root-scan",
+                    )
+                )
+    else:
+        for entry in candidate_entries:
+            targets.append(
+                CleanupTarget(
+                    label=entry.name,
+                    path=entry.path,
+                    size_bytes=await measure_remote_path(conn, entry.path),
+                    modified_epoch=entry.modified_epoch,
+                    source="root-scan",
+                )
             )
-        )
 
     return tuple(sorted(targets, key=lambda item: item.label))
 
@@ -356,10 +384,16 @@ def _select_targets_from_prompt(
     for part in response.split(","):
         cleaned = part.strip()
         if not cleaned.isdigit():
-            raise click.ClickException(f"Cleanup selection must use numbers, `all`, or `none`. Received `{cleaned}`.")
+            raise click.ClickException(
+                f"Cleanup selection must use numbers, `all`, or `none`. Received `{cleaned}`. "
+                "Enter comma-separated row numbers from the table above."
+            )
         index = int(cleaned)
         if index < 1 or index > len(targets):
-            raise click.ClickException(f"Cleanup selection `{index}` is out of range.")
+            raise click.ClickException(
+                f"Cleanup selection `{index}` is out of range. "
+                f"Valid range is 1–{len(targets)}."
+            )
         if index not in selected_indices:
             selected_indices.append(index)
 
@@ -418,7 +452,10 @@ async def _query_job_rows(
         return tuple(sorted(merged.values(), key=_row_sort_key))
     if errors:
         raise RuntimeError(" ; ".join(errors))
-    raise click.ClickException(f"No SLURM job data found for {job_id}.")
+    raise click.ClickException(
+        f"No SLURM job data found for {job_id}. "
+        "Verify the job ID with: launchpad status"
+    )
 
 
 def _row_from_status(job: JobStatus) -> CleanupJobRow:

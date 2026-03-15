@@ -27,6 +27,7 @@ from launchpad_cli.display import (
     build_console,
     build_inline_kv,
     build_next_steps,
+    build_spinner,
     build_warning_line,
     make_table,
 )
@@ -92,6 +93,7 @@ def command(
                 env=os.environ,
                 remote_path=remote_path,
                 long_format=long_format,
+                console=console,
             )
         )
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
@@ -109,6 +111,7 @@ async def _run_ls(
     env: Mapping[str, str],
     remote_path: str | None,
     long_format: bool,
+    console=None,
 ) -> ListingResult:
     """Resolve config, fetch the remote listing, and apply any glob filter."""
 
@@ -120,11 +123,19 @@ async def _run_ls(
     logger.trace("Listing remote path {} (base={}, pattern={})", requested_path, base_path, pattern)
 
     async with ssh_session(resolved.config.ssh) as conn:
-        entries = await list_remote_directory(
-            conn,
-            base_path,
-            recursive=pattern is not None,
-        )
+        if console is not None:
+            with build_spinner(console, "Listing remote directory..."):
+                entries = await list_remote_directory(
+                    conn,
+                    base_path,
+                    recursive=pattern is not None,
+                )
+        else:
+            entries = await list_remote_directory(
+                conn,
+                base_path,
+                recursive=pattern is not None,
+            )
 
     if pattern is not None:
         entries = tuple(entry for entry in entries if fnmatch.fnmatch(entry.path, pattern))

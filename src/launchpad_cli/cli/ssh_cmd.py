@@ -45,7 +45,10 @@ async def _open_interactive_shell(config) -> int:
     """Open the remote login shell and pass the local terminal through to it."""
 
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        raise click.ClickException("`launchpad ssh` requires an interactive terminal.")
+        raise click.ClickException(
+            "`launchpad ssh` requires an interactive terminal. "
+            "Run this command directly in a terminal, not from a script or pipe."
+        )
 
     if sys.platform == "win32":
         return _open_windows_ssh_subprocess(config)

@@ -165,7 +165,10 @@ def command(
 
     json_output = _json_output(ctx)
     if watch and json_output:
-        raise click.ClickException("`launchpad status --watch` does not support `--json` output.")
+        raise click.ClickException(
+            "`launchpad status --watch` does not support `--json` output. "
+            "Use --json without --watch for a one-shot status snapshot."
+        )
 
     no_color = not _colorize_output(ctx)
     console = build_console(no_color=no_color)
@@ -204,7 +207,7 @@ def command(
                 )
             )
     except KeyboardInterrupt:
-        click.echo("Interrupted.")
+        console.print("  Interrupted.", style="lp.text.tertiary")
         raise click.exceptions.Exit(130) from None
     except (asyncssh.Error, RuntimeError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -428,7 +431,10 @@ def _build_detail_snapshot(
         merged[key] = _merge_rows(merged.get(key), status_row)
 
     if not merged:
-        raise click.ClickException(f"No SLURM job data found for {requested_job_id}.")
+        raise click.ClickException(
+            f"No SLURM job data found for {requested_job_id}. "
+            "Verify the job ID with: launchpad status"
+        )
 
     ordered_rows = tuple(sorted(merged.values(), key=_row_sort_key))
     ordered_rows = _attach_runtime_stats(ordered_rows, runtime_stats)
