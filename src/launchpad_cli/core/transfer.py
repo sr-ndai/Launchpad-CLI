@@ -237,6 +237,7 @@ async def download_many(
     *,
     streams: int,
     resume: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ) -> TransferExecution:
     """Download many files concurrently using a bounded worker pool."""
 
@@ -249,9 +250,29 @@ async def download_many(
         streams,
     )
 
+    progress_by_item: dict[str, int] = {}
+    transferred_total = 0
+
     async def runner(effective_streams: int) -> None:
         async def worker(conn: asyncssh.SSHClientConnection, item: DownloadItem) -> None:
-            await download(conn, item.remote_path, item.local_path, resume=resume)
+            if progress_callback is None:
+                await download(conn, item.remote_path, item.local_path, resume=resume)
+                return
+
+            def on_progress(transferred: int) -> None:
+                nonlocal transferred_total
+                previous = progress_by_item.get(item.remote_path, 0)
+                progress_by_item[item.remote_path] = transferred
+                transferred_total += max(transferred - previous, 0)
+                _emit_progress(progress_callback, transferred_total)
+
+            await download(
+                conn,
+                item.remote_path,
+                item.local_path,
+                resume=resume,
+                progress_callback=on_progress,
+            )
 
         await _run_worker_pool(
             ssh_config=ssh_config,
@@ -336,6 +357,7 @@ async def striped_download(
     streams: int,
     chunk_size: int,
     resume: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ) -> TransferExecution:
     """Download one logical payload through deterministic local temporary parts."""
 
@@ -358,13 +380,33 @@ async def striped_download(
         len(parts),
     )
 
+    part_progress: dict[Path, int] = {}
+    transferred_total = 0
+
     async def runner(effective_streams: int) -> None:
         async def worker(conn: asyncssh.SSHClientConnection, part: _LocalPart) -> None:
+            if progress_callback is None:
+                await _download_remote_part(
+                    conn,
+                    remote_path=remote_target,
+                    part=part,
+                    resume=resume,
+                )
+                return
+
+            def on_progress(transferred: int) -> None:
+                nonlocal transferred_total
+                previous = part_progress.get(part.path, 0)
+                part_progress[part.path] = transferred
+                transferred_total += max(transferred - previous, 0)
+                _emit_progress(progress_callback, transferred_total)
+
             await _download_remote_part(
                 conn,
                 remote_path=remote_target,
                 part=part,
                 resume=resume,
+                progress_callback=on_progress,
             )
 
         await _run_worker_pool(
@@ -565,6 +607,7 @@ async def _download_remote_part(
     remote_path: str,
     part: _LocalPart,
     resume: bool,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     """Download one byte range into its deterministic local part file."""
 
@@ -587,6 +630,7 @@ async def _download_remote_part(
                     local_file.seek(local_size)
 
                 transferred = local_size
+                _emit_progress(progress_callback, transferred)
                 while transferred < part.size_bytes:
                     chunk = await remote_file.read(
                         min(TRANSFER_CHUNK_SIZE, part.size_bytes - transferred),
@@ -596,6 +640,7 @@ async def _download_remote_part(
                         break
                     local_file.write(chunk)
                     transferred += len(chunk)
+                    _emit_progress(progress_callback, transferred)
 
     final_size = part.path.stat().st_size
     if final_size != part.size_bytes:

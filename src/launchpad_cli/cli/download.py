@@ -17,6 +17,7 @@ import asyncssh
 import click
 from loguru import logger
 from rich.console import Group
+from rich.text import Text
 
 from launchpad_cli.core.compress import (
     create_remote_archive,
@@ -45,9 +46,13 @@ from launchpad_cli.core.transfer import (
 )
 from launchpad_cli.display import (
     build_console,
-    build_detail_panel,
-    build_next_steps_panel,
-    build_summary_table,
+    build_inline_kv,
+    build_next_steps,
+    build_progress,
+    build_spinner,
+    build_status_line,
+    build_success_line,
+    build_warning_line,
 )
 
 TERMINAL_STATES = {
@@ -105,6 +110,7 @@ class DownloadPlan:
     exclude_patterns: tuple[str, ...]
     compression_level: int
     verify_checksums: bool
+    local_free_bytes: int
     effective_streams: int | None = None
     local_archive_path: Path | None = None
     remote_archive_path: str | None = None
@@ -154,6 +160,9 @@ class DownloadResult:
     selected_tasks: tuple[str, ...]
     partial: bool
     cancelled: bool = False
+    checksums_verified: bool = False
+    result_size_bytes: int = 0
+    source_count: int = 0
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the result for future machine-readable output."""
@@ -289,7 +298,7 @@ def command(
     if json_output:
         click.echo(json.dumps(result.as_dict(), indent=2))
     else:
-        console.print(_build_completion_panel(result))
+        console.print(_build_completion_renderable(result, no_color=console.no_color))
 
 
 async def _run_download(
@@ -356,19 +365,21 @@ async def _run_download(
             requested_tasks=requested_tasks,
             exclude_patterns=exclude_patterns,
         )
-        console.print(_build_summary_panel(plan))
-        if not click.confirm(f"Start download for job {job_id}?", default=True, err=json_output):
+        console.print(_build_summary_renderable(plan, no_color=console.no_color))
+        if not click.confirm("Proceed?", default=True, err=json_output):
             raise click.Abort()
 
         if plan.transfer_mode == "single-file":
             return await _execute_single_file_download(
                 conn=conn,
                 config=resolved.config,
+                console=console,
                 plan=plan,
             )
         return await _execute_multi_file_download(
             conn=conn,
             config=resolved.config,
+            console=console,
             plan=plan,
         )
 
@@ -473,6 +484,7 @@ async def _build_download_plan(
         exclude_patterns=exclude_patterns,
         compression_level=compression_level,
         verify_checksums=config.transfer.verify_checksums,
+        local_free_bytes=space_report.bytes_available,
         local_archive_path=local_archive_path,
         remote_archive_path=remote_archive_path,
     )
@@ -482,6 +494,7 @@ async def _execute_single_file_download(
     *,
     conn: asyncssh.SSHClientConnection,
     config: LaunchpadConfig,
+    console,
     plan: DownloadPlan,
 ) -> DownloadResult:
     """Create a remote archive, striped-download it, verify it, and unpack locally."""
@@ -492,20 +505,31 @@ async def _execute_single_file_download(
     ensure_directory(plan.destination_dir)
     archive_downloaded = False
     actual_archive_size = 0
+    no_color = bool(getattr(console, "no_color", False))
 
-    await create_remote_archive(
-        conn,
-        source_paths=[source.relative_path for source in plan.source_roots],
-        archive_path=plan.remote_archive_path,
-        base_dir=plan.remote_job_dir,
-        exclude_patterns=plan.exclude_patterns,
-        tar_binary=config.remote_binaries.tar,
-        zstd_binary=config.remote_binaries.zstd,
-        compression_level=plan.compression_level,
-        compression_threads=config.transfer.compression_threads,
-    )
+    with build_spinner(console, "Compressing on remote..."):
+        await create_remote_archive(
+            conn,
+            source_paths=[source.relative_path for source in plan.source_roots],
+            archive_path=plan.remote_archive_path,
+            base_dir=plan.remote_job_dir,
+            exclude_patterns=plan.exclude_patterns,
+            tar_binary=config.remote_binaries.tar,
+            zstd_binary=config.remote_binaries.zstd,
+            compression_level=plan.compression_level,
+            compression_threads=config.transfer.compression_threads,
+        )
 
     actual_archive_size = await measure_remote_path(conn, plan.remote_archive_path)
+    console.print(
+        build_status_line(
+            "success",
+            "Compressing on remote...",
+            f"done ({_format_bytes(actual_archive_size)})",
+            label_width=24,
+            no_color=no_color,
+        )
+    )
     if not plan.force:
         report = inspect_disk_space(
             plan.destination_dir,
@@ -518,14 +542,20 @@ async def _execute_single_file_download(
                 f"available {_format_bytes(report.bytes_available)}."
             )
 
-    transfer_execution = await striped_download(
-        conn,
-        config.ssh,
-        plan.remote_archive_path,
-        plan.local_archive_path,
-        streams=plan.requested_streams,
-        chunk_size=config.transfer.chunk_size_bytes,
-        resume=config.transfer.resume_enabled,
+    transfer_execution = await _run_with_download_progress(
+        console,
+        total_bytes=actual_archive_size,
+        description="Downloading",
+        operation=lambda progress_callback: striped_download(
+            conn,
+            config.ssh,
+            plan.remote_archive_path,
+            plan.local_archive_path,
+            streams=plan.requested_streams,
+            chunk_size=config.transfer.chunk_size_bytes,
+            resume=config.transfer.resume_enabled,
+            progress_callback=progress_callback,
+        ),
     )
     archive_downloaded = True
 
@@ -570,6 +600,9 @@ async def _execute_single_file_download(
         selected_tasks=plan.selected_tasks,
         partial=plan.partial,
         cancelled=plan.cancelled,
+        checksums_verified=plan.verify_checksums,
+        result_size_bytes=plan.raw_size_bytes,
+        source_count=len(plan.source_roots),
     )
 
 
@@ -577,12 +610,14 @@ async def _execute_multi_file_download(
     *,
     conn: asyncssh.SSHClientConnection,
     config: LaunchpadConfig,
+    console,
     plan: DownloadPlan,
 ) -> DownloadResult:
     """Transfer the selected remote files directly through a worker pool."""
 
     ensure_directory(plan.destination_dir)
     expected_file_count = 0
+    total_download_bytes = 0
     download_items: list[DownloadItem] = []
     checksum_pairs: list[tuple[str, Path]] = []
 
@@ -607,12 +642,19 @@ async def _execute_multi_file_download(
             download_items.append(DownloadItem(remote_path=entry.path, local_path=local_path))
             checksum_pairs.append((entry.path, local_path))
             expected_file_count += 1
+            total_download_bytes += entry.size_bytes
 
-    transfer_execution = await download_many(
-        config.ssh,
-        download_items,
-        streams=plan.requested_streams,
-        resume=config.transfer.resume_enabled,
+    transfer_execution = await _run_with_download_progress(
+        console,
+        total_bytes=total_download_bytes,
+        description="Downloading",
+        operation=lambda progress_callback: download_many(
+            config.ssh,
+            download_items,
+            streams=plan.requested_streams,
+            resume=config.transfer.resume_enabled,
+            progress_callback=progress_callback,
+        ),
     )
 
     if plan.verify_checksums:
@@ -648,6 +690,9 @@ async def _execute_multi_file_download(
         selected_tasks=plan.selected_tasks,
         partial=plan.partial,
         cancelled=plan.cancelled,
+        checksums_verified=plan.verify_checksums,
+        result_size_bytes=plan.raw_size_bytes,
+        source_count=len(plan.source_roots),
     )
 
 
@@ -977,77 +1022,157 @@ def _sort_int(value: str | None) -> int:
         return 10**9
 
 
-def _build_summary_panel(plan: DownloadPlan):
-    """Render the pre-download summary shown before confirmation."""
+async def _run_with_download_progress(
+    console,
+    *,
+    total_bytes: int,
+    description: str,
+    operation,
+):
+    """Run a transfer operation under the shared minimal progress surface."""
 
-    summary = build_summary_table()
-    summary.add_row("Job", f"{plan.job_id} ({plan.run_name})")
-    summary.add_row("Tasks", _format_selected_tasks(plan.selected_tasks))
-    summary.add_row("States", _format_state_counts(plan.state_counts))
-    summary.add_row("Destination", str(plan.destination_dir))
-    summary.add_row("Remote job dir", plan.remote_job_dir)
-    summary.add_row("Transfer mode", plan.transfer_mode)
-    summary.add_row("Streams", f"requested {plan.requested_streams}")
-    summary.add_row("Remote results", _format_bytes(plan.raw_size_bytes))
-    if plan.transfer_mode == "single-file":
-        summary.add_row("Compressed estimate", f"~{_format_bytes(plan.transfer_size_estimate_bytes)}")
-    summary.add_row("Local required", _format_bytes(plan.required_local_bytes))
-    if plan.cleanup:
-        summary.add_row("Cleanup", "remote job directory will be deleted after success")
-    if plan.partial:
-        summary.add_row("Warning", "selection includes non-terminal tasks; results may be partial")
-    elif plan.cancelled:
-        summary.add_row("Warning", "selection includes cancelled tasks; results may be incomplete")
-    if plan.exclude_patterns:
-        summary.add_row("Excludes", ", ".join(plan.exclude_patterns))
+    if total_bytes <= 0:
+        return await operation(None)
 
-    steps = [
-        "Confirm the prompt to start the transfer.",
-        "Wait for checksum verification before trusting the local copy.",
+    with build_progress(console=console) as progress:
+        task_id = progress.add_task(description, total=total_bytes)
+
+        def on_progress(transferred: int) -> None:
+            progress.update(task_id, completed=min(transferred, total_bytes))
+
+        return await operation(on_progress)
+
+
+def _build_summary_renderable(plan: DownloadPlan, *, no_color: bool) -> Group:
+    """Render the restrained pre-download summary shown before confirmation."""
+
+    renderables: list[object] = [
+        _build_job_line(plan.job_id, plan.run_name, no_color=no_color),
+        _build_task_summary_line(plan, no_color=no_color),
+        Text(),
+        build_inline_kv("Remote results", _format_remote_results(plan), label_width=18),
     ]
-    if not plan.cleanup:
-        steps.append(f"Run `launchpad cleanup {plan.job_id} --yes` after verifying the download.")
 
-    return Group(
-        build_detail_panel(
-            summary,
-            title="Download Preview",
-            tone="warn" if plan.partial or plan.cancelled else "neutral",
-        ),
-        build_next_steps_panel(steps, title="What Happens Next"),
+    if plan.transfer_mode == "single-file":
+        renderables.append(
+            build_inline_kv(
+                "Compressed est.",
+                f"~{_format_bytes(plan.transfer_size_estimate_bytes)} (zstd level {plan.compression_level})",
+                label_width=18,
+            )
+        )
+
+    renderables.extend(
+        [
+            build_inline_kv(
+                "Local free space",
+                f"{_format_bytes(plan.local_free_bytes)} at {plan.destination_dir}",
+                label_width=18,
+            ),
+            build_inline_kv("Remote path", plan.remote_job_dir, label_width=18),
+        ]
     )
 
+    if plan.cleanup:
+        renderables.append(
+            build_inline_kv("Remote cleanup", "delete job directory after success", label_width=18)
+        )
+    if plan.exclude_patterns:
+        renderables.append(
+            build_inline_kv("Excludes", ", ".join(plan.exclude_patterns), label_width=18)
+        )
+    if plan.partial:
+        renderables.append(Text())
+        renderables.append(
+            build_warning_line(
+                "Selection includes non-terminal tasks; downloaded results may be partial.",
+                no_color=no_color,
+            )
+        )
+    elif plan.cancelled:
+        renderables.append(Text())
+        renderables.append(
+            build_warning_line(
+                "Selection includes cancelled tasks; verify the local copy before cleanup.",
+                no_color=no_color,
+            )
+        )
 
-def _build_completion_panel(result: DownloadResult):
-    """Render the final success summary after a completed download."""
+    return Group(*renderables)
 
-    summary = build_summary_table()
-    summary.add_row("Job", f"{result.job_id} ({result.run_name})")
-    summary.add_row("Destination", str(result.destination_dir))
-    summary.add_row("Transfer mode", result.transfer_mode)
-    summary.add_row("Streams", f"requested {result.requested_streams}, effective {result.effective_streams}")
-    summary.add_row("Files", str(result.file_count))
-    summary.add_row("Transferred", _format_bytes(result.downloaded_bytes))
-    summary.add_row("Tasks", _format_selected_tasks(result.selected_tasks))
-    summary.add_row("Remote cleanup", "completed" if result.cleaned_up else "not requested")
-    if result.cancelled:
-        summary.add_row("Warning", "download included cancelled tasks; verify results before cleanup")
-    panel = build_detail_panel(summary, title="Download Complete", tone="success")
-    steps = ["Inspect the local results before deleting anything else."]
+
+def _build_completion_renderable(result: DownloadResult, *, no_color: bool) -> Group:
+    """Render the restrained completion summary after a successful download."""
+
+    steps = [f"launchpad status {result.job_id}"]
     if not result.cleaned_up:
-        steps.append(f"launchpad cleanup {result.job_id} --yes")
-    steps.append(f"launchpad status {result.job_id}")
-    return Group(panel, build_next_steps_panel(steps))
+        steps.insert(0, f"launchpad cleanup {result.job_id}")
+
+    renderables: list[object] = [
+        build_success_line("Download complete", no_color=no_color),
+        Text(),
+        build_inline_kv("Local path", result.destination_dir, label_width=12),
+        build_inline_kv("Size", _format_result_size(result), label_width=12),
+        build_inline_kv("Integrity", _format_integrity_status(result), label_width=12),
+    ]
+
+    if result.cancelled:
+        renderables.append(
+            build_warning_line(
+                "Cancelled tasks were included; inspect the downloaded results before deleting remote data.",
+                no_color=no_color,
+            )
+        )
+
+    renderables.extend([Text(), build_next_steps(steps, no_color=no_color)])
+    return Group(*renderables)
 
 
-def _format_state_counts(counts: Mapping[str, int]) -> str:
-    return ", ".join(f"{state.lower()}={count}" for state, count in counts.items())
+def _build_job_line(job_id: str, run_name: str, *, no_color: bool) -> Text:
+    """Return the preflight job identity line."""
+
+    text = Text("  Job ")
+    text.append(job_id, style="lp.label" if not no_color else None)
+    text.append(f"  {run_name}", style="lp.value" if not no_color else None)
+    return text
 
 
-def _format_selected_tasks(task_ids: tuple[str, ...]) -> str:
-    if not task_ids:
-        return "all"
-    return ", ".join(task_ids)
+def _build_task_summary_line(plan: DownloadPlan, *, no_color: bool) -> Text:
+    """Return the selected-task summary line beneath the preflight job heading."""
+
+    total_tasks = len(plan.selected_rows)
+    noun = "task" if total_tasks == 1 else "tasks"
+    counts = plan.state_counts
+    if len(counts) == 1:
+        state = next(iter(counts))
+        return Text(f"  {total_tasks}/{total_tasks} {noun} {state}", style="lp.value" if not no_color else None)
+    detail = ", ".join(f"{count} {state}" for state, count in counts.items())
+    return Text(f"  {total_tasks} {noun}  {detail}", style="lp.value" if not no_color else None)
+
+
+def _format_remote_results(plan: DownloadPlan) -> str:
+    """Return the preflight remote-size summary."""
+
+    noun = "directory" if len(plan.source_roots) == 1 else "directories"
+    return f"{_format_bytes(plan.raw_size_bytes)} across {len(plan.source_roots)} {noun}"
+
+
+def _format_result_size(result: DownloadResult) -> str:
+    """Return the restrained completion size summary."""
+
+    noun = "directory" if result.source_count == 1 else "directories"
+    if result.source_count <= 0:
+        noun = "file" if result.file_count == 1 else "files"
+        return f"{_format_bytes(result.result_size_bytes)} ({result.file_count} {noun})"
+    return f"{_format_bytes(result.result_size_bytes)} ({result.source_count} {noun})"
+
+
+def _format_integrity_status(result: DownloadResult) -> str:
+    """Return the completion integrity line detail."""
+
+    if result.checksums_verified:
+        return "all files verified"
+    return "checksum verification disabled"
 
 
 def _format_bytes(size_bytes: int) -> str:
