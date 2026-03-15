@@ -12,45 +12,48 @@
 Phase 9 — CLI Visual Overhaul
 
 ## Active Task
-9.5 — Display hierarchy revision and Phase 9 retrofits
+9.6 — Logs and utility command redesign
 
 ## Queue Snapshot
-- pending: 9.6, 9.7
+- pending: 9.7
 - ready: —
-- in-progress: —
+- in-progress: 9.6
 - needs-review: —
-- revision-needed: 9.5
+- revision-needed: —
 - blocked: —
 
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/09-cli-visual-overhaul`
-- active task branch: `task/9.5-logs-and-utility-command-redesign`
-- last processed builder session: `2026-03-15-0839-builder-9.5.md`
+- active task branch: `task/9.6-logs-and-utility-command-redesign`
+- last processed builder session: `2026-03-15-0912-builder-9.5.md`
 
 ## What Changed Recently
-- Processed Builder session `2026-03-15-0839-builder-9.5.md` and moved task
-  `9.5` into Coordinator review on the phase branch.
-- Reran the revised `9.5` verification commands plus the full `uv run pytest`
-  suite while reviewing the hierarchy retrofit branch.
-- Marked `9.5` as `revision-needed` because `build_status_entry()` still fails
-  to indent every continuation line when the detail string already contains
-  embedded newlines, so the multiline hierarchy helper is not complete yet.
+- Processed Builder session `2026-03-15-0912-builder-9.5.md` after the
+  revision follow-up and confirmed the multiline status-entry fix plus
+  embedded-newline regression coverage.
+- Accepted task `9.5`, merged
+  `task/9.5-logs-and-utility-command-redesign` into
+  `phase/09-cli-visual-overhaul`, and brought the corrected hierarchy retrofit
+  plus updated review/session evidence onto the phase branch.
+- Advanced the queue to `9.6`, which now covers the remaining `logs`, `ls`,
+  `cancel`, and `cleanup` Phase 9 redesign work on top of the corrected
+  hierarchy system.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should switch to `task/9.5-logs-and-utility-command-redesign`, read
-`.ai/reviews/9.5.md`, fix `build_status_entry()` so every continuation line in
-newline-delimited detail stays indented under the status label, add regression
-coverage for that embedded-newline case, and rerun the `9.5` verification
-commands before another handoff.
+Builder should switch to `task/9.6-logs-and-utility-command-redesign`, read
+the `9.6` prompt, and redesign `logs`, `ls`, `cancel`, and `cleanup` around
+the corrected Phase 9 hierarchy without changing selectors, destructive
+semantics, or machine-readable output.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/9.5.md`
-4. `.ai/reviews/9.5.md`
+3. `.ai/tasks/prompts/9.6.md`
+4. `.ai/plans/09-cli-visual-overhaul.md`
 5. `.ai/plans/LAUNCHPAD_UI_REVISION.md`
-6. `.ai/git-rules.md`
+6. `.ai/plans/LAUNCHPAD_UI_REDESIGN_PLAN.md`
+7. `.ai/git-rules.md`
