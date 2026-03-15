@@ -96,7 +96,6 @@ Then rerun:
 ```powershell
 launchpad doctor
 ```
-
 ## `status`, `logs`, or `cancel` says a SLURM command was not found
 
 Launchpad runs `squeue`, `sacct`, and `scancel` through the cluster login

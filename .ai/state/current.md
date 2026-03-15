@@ -29,6 +29,10 @@ None.
 - last processed builder session: `2026-03-14-1723-builder-8.7.md`
 
 ## What Changed Recently
+- Merged the latest `main` into
+  `phase/08-task-references-and-solver-aware-logs` to resolve the current PR
+  conflict set, keeping the accepted `8.6` workspace-root changes and `8.7`
+  config-show highlighting intact.
 - Opened PR `#11` from `phase/08-task-references-and-solver-aware-logs` to
   `main` for the post-merge follow-ups after confirming that PR `#10` had
   already been merged into `main` on 2026-03-14.
@@ -102,9 +106,10 @@ workspace-root follow-up from task `8.6` and the syntax-highlighted
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1730-coordinator-open-phase-8-pr-11.md`
-4. `.ai/sessions/2026-03-14-1725-coordinator-accept-8.7-update-pr.md`
-5. `.ai/reviews/8.7.md`
-6. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-7. `.ai/plan.md`
-8. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1737-coordinator-resolve-phase-8-main-conflicts.md`
+4. `.ai/sessions/2026-03-14-1730-coordinator-open-phase-8-pr-11.md`
+5. `.ai/sessions/2026-03-14-1725-coordinator-accept-8.7-update-pr.md`
+6. `.ai/reviews/8.7.md`
+7. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+8. `.ai/plan.md`
+9. `.ai/git-rules.md`
