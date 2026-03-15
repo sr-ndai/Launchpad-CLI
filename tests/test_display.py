@@ -8,8 +8,11 @@ from launchpad_cli.display import (
     build_console,
     build_error_block,
     build_hero_panel,
+    build_inline_kv,
     build_next_steps,
+    build_status_entry,
     build_status_line,
+    build_suggestion_line,
     make_table,
 )
 
@@ -51,6 +54,7 @@ def test_next_steps_and_error_block_render_restrained_text_surfaces() -> None:
     assert "Next" in rendered_next
     assert "launchpad status 12345" in rendered_next
     assert "Remote root is not writable." in rendered_error
+    assert "→ Set cluster.workspace_root and retry." in rendered_error
     assert "Set cluster.workspace_root and retry." in rendered_error
 
 
@@ -66,3 +70,39 @@ def test_hero_panel_and_table_factory_cover_shared_phase_nine_layout() -> None:
     assert table.box is None
     assert table.show_edge is False
     assert table.pad_edge is False
+
+
+def test_inline_kv_uses_wider_label_column_for_values() -> None:
+    """Shared key/value rows should keep values bright and labels out of their way."""
+
+    rendered = _render(build_inline_kv("host", "cluster.example.com"))
+
+    assert "host                 cluster.example.com" in rendered
+
+
+def test_status_entry_wraps_long_detail_and_suggestions_use_action_affordance() -> None:
+    """Doctor-style status entries should drop long detail below the label."""
+
+    rendered_entry = _render(
+        build_status_entry(
+            "success",
+            "Config Resolution",
+            "config.toml -> ssh.host=cluster.example.com, ssh.username=sergey",
+        )
+    )
+    rendered_suggestion = _render(build_suggestion_line("Set ssh.key_path to a readable private key file."))
+
+    assert "✓  Config Resolution" in rendered_entry
+    assert "config.toml -> ssh.host=cluster.example.com, ssh.username=sergey" in rendered_entry
+    assert rendered_entry.count("\n") >= 2
+    assert "→ Set ssh.key_path to a readable private key file." in rendered_suggestion
+
+
+def test_status_entry_indents_every_embedded_newline_in_detail_block() -> None:
+    """Multiline detail should keep each continuation line inside the status gutter."""
+
+    rendered = _render(build_status_entry("warn", "Connectivity", "line one\nline two"))
+
+    assert "▲  Connectivity" in rendered
+    assert "\n     line one" in rendered
+    assert "\n     line two" in rendered

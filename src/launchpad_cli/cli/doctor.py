@@ -29,7 +29,8 @@ from launchpad_cli.display import (
     build_console,
     build_next_steps,
     build_section_rule,
-    build_status_line,
+    build_status_entry,
+    build_suggestion_line,
 )
 
 
@@ -106,21 +107,21 @@ async def _collect_diagnostics(
             DiagnosticResult(
                 name="ssh-connection",
                 status="skip",
-                detail="Skipped remote checks because local SSH configuration is incomplete.",
+                detail="skipped (SSH not configured)",
             )
         )
         results.append(
             DiagnosticResult(
                 name="remote-binaries",
                 status="skip",
-                detail="Skipped remote binary checks because local SSH configuration is incomplete.",
+                detail="skipped (SSH not configured)",
             )
         )
         results.append(
             DiagnosticResult(
                 name="remote-root",
                 status="skip",
-                detail="Skipped remote writable-path checks because local SSH configuration is incomplete.",
+                detail="skipped (SSH not configured)",
             )
         )
         return results
@@ -149,14 +150,14 @@ async def _collect_diagnostics(
             DiagnosticResult(
                 name="remote-binaries",
                 status="skip",
-                detail="Skipped remote binary checks because the SSH connection did not succeed.",
+                detail="skipped (SSH connection failed)",
             )
         )
         results.append(
             DiagnosticResult(
                 name="remote-root",
                 status="skip",
-                detail="Skipped remote writable-path checks because the SSH connection did not succeed.",
+                detail="skipped (SSH connection failed)",
             )
         )
 
@@ -229,7 +230,7 @@ def _ssh_key_check(config: SSHConfig) -> DiagnosticResult:
         return DiagnosticResult(
             name="ssh-key",
             status="fail",
-            detail="No SSH private key is configured.",
+            detail="not configured",
             suggestion="Run `launchpad config init` or set `LAUNCHPAD_KEY` to a valid private key path.",
         )
 
@@ -238,14 +239,14 @@ def _ssh_key_check(config: SSHConfig) -> DiagnosticResult:
         return DiagnosticResult(
             name="ssh-key",
             status="fail",
-            detail=f"SSH private key not found: {key_path}",
+            detail=f"not found: {key_path}",
             suggestion="Update `ssh.key_path` to a readable private key file.",
         )
 
     return DiagnosticResult(
         name="ssh-key",
         status="pass",
-        detail=f"SSH private key found: {key_path}",
+        detail=f"configured: {key_path}",
     )
 
 
@@ -256,13 +257,13 @@ def _shared_config_check() -> DiagnosticResult:
         return DiagnosticResult(
             name="shared-config",
             status="pass",
-            detail=f"Shared config readable: {DEFAULT_CLUSTER_CONFIG_PATH}",
+            detail=f"readable: {DEFAULT_CLUSTER_CONFIG_PATH}",
         )
 
     return DiagnosticResult(
         name="shared-config",
         status="fail",
-        detail=f"Shared config not found: {DEFAULT_CLUSTER_CONFIG_PATH}",
+        detail=f"not found: {DEFAULT_CLUSTER_CONFIG_PATH}",
         suggestion="Mount the shared `/shared` filesystem or rely on user/project/env config overrides.",
     )
 
@@ -426,20 +427,32 @@ def _print_diagnostic_result(
         "skip": "muted",
     }.get(result.status, "muted")
     console.print(
-        build_status_line(
+        build_status_entry(
             tone,
             _diagnostic_title(result.name),
-            result.detail,
+            _normalized_detail(result),
             indent=4,
             label_width=24,
             no_color=no_color,
+            inline_detail_tier="value" if result.status == "pass" else "tertiary",
         )
     )
     if result.suggestion:
         for line in result.suggestion.splitlines():
-            console.print(
-                Text(f"       {line}", style="lp.text.detail" if not no_color else None)
-            )
+            console.print(build_suggestion_line(line, indent=7, no_color=no_color))
+
+
+def _normalized_detail(result: DiagnosticResult) -> str:
+    """Collapse repeated doctor skip copy into the shorter Phase 9 wording."""
+
+    if result.status != "skip":
+        return result.detail
+
+    if "local SSH configuration is incomplete" in result.detail:
+        return "skipped (SSH not configured)"
+    if "SSH connection did not succeed" in result.detail:
+        return "skipped (SSH connection failed)"
+    return result.detail
 
 
 def _diagnostic_title(name: str) -> str:
@@ -525,11 +538,11 @@ def _build_summary_line(
         summary.append(" failed")
     if skipped:
         summary.append(", ")
-        summary.append(str(skipped), style="lp.text.detail" if not no_color else None)
+        summary.append(str(skipped), style="lp.text.tertiary" if not no_color else None)
         summary.append(" skipped")
     if not failed and not skipped:
         summary.append(
-            ", ready for the next run", style="lp.text.detail" if not no_color else None
+            ", ready for the next run", style="lp.text.tertiary" if not no_color else None
         )
     return summary
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from textwrap import indent as textwrap_indent
 from typing import Any, Mapping, Sequence
 from rich.console import Console, Group
 from rich.padding import Padding
@@ -31,6 +32,9 @@ PALETTE = {
     "ink": "#13212b",
     "slate": "#38586c",
     "mist": "#7f9aab",
+    "secondary": "#8a9bae",
+    "tertiary": "#5e6d7e",
+    "faint": "#44515e",
     "ice": "#d9edf7",
     "cyan": "#3cc5d9",
     "green": "#5cc88b",
@@ -43,19 +47,20 @@ C_ERROR = PALETTE["red"]
 C_WARN = PALETTE["amber"]
 C_INFO = PALETTE["cyan"]
 C_ACCENT = PALETTE["cyan"]
-C_MUTED = PALETTE["mist"]
-C_LABEL = f"bold {PALETTE['ice']}"
-C_VALUE = PALETTE["ice"]
+C_ACTION = PALETTE["cyan"]
+C_SECONDARY = PALETTE["secondary"]
+C_TERTIARY = PALETTE["tertiary"]
+C_FAINT = PALETTE["faint"]
 DEFAULT_INDENT = 2
-DEFAULT_LABEL_WIDTH = 16
+DEFAULT_LABEL_WIDTH = 20
 
 LAUNCHPAD_THEME = Theme(
     {
         "lp.brand.primary": f"bold {PALETTE['ice']}",
         "lp.brand.secondary": f"bold {PALETTE['cyan']}",
         "lp.brand.accent": f"bold {PALETTE['amber']}",
-        "lp.brand.subtle": f"dim {PALETTE['mist']}",
-        "lp.rule": f"dim {PALETTE['mist']}",
+        "lp.brand.subtle": C_TERTIARY,
+        "lp.rule": C_FAINT,
         "lp.panel.border": PALETTE["cyan"],
         "lp.panel.border.success": PALETTE["green"],
         "lp.panel.border.warn": PALETTE["amber"],
@@ -67,14 +72,17 @@ LAUNCHPAD_THEME = Theme(
         "lp.badge.danger": f"bold {PALETTE['ice']} on {PALETTE['red']}",
         "lp.badge.neutral": f"bold {PALETTE['ink']} on {PALETTE['mist']}",
         "lp.label": f"bold {PALETTE['ice']}",
-        "lp.value": PALETTE["ice"],
-        "lp.text.label": f"bold {PALETTE['mist']}",
-        "lp.text.detail": f"dim {PALETTE['mist']}",
+        "lp.value": "default",
+        "lp.text.secondary": C_SECONDARY,
+        "lp.text.tertiary": C_TERTIARY,
+        "lp.text.faint": C_FAINT,
+        "lp.text.label": C_SECONDARY,
+        "lp.text.detail": C_TERTIARY,
         "lp.status.success": f"bold {PALETTE['green']}",
         "lp.status.error": f"bold {PALETTE['red']}",
         "lp.status.warn": f"bold {PALETTE['amber']}",
         "lp.status.info": f"bold {PALETTE['cyan']}",
-        "lp.status.pending": f"dim {PALETTE['mist']}",
+        "lp.status.pending": C_TERTIARY,
     }
 )
 STATUS_TONES = {
@@ -166,7 +174,7 @@ def _status_style(name: str, *, no_color: bool = False) -> str | None:
         "running": "lp.status.success",
         "pending": "lp.status.pending",
         "warn": "lp.status.warn",
-        "muted": "lp.brand.subtle",
+        "muted": "lp.text.tertiary",
         "next": "lp.status.info",
     }
     return mapping.get(name)
@@ -175,7 +183,7 @@ def _status_style(name: str, *, no_color: bool = False) -> str | None:
 def build_section_rule(title: str) -> Rule:
     """Return the restrained ruled section header introduced for Phase 9."""
 
-    return Rule(title, style="lp.rule", align="left")
+    return Rule(Text(title, style="lp.section"), style="lp.rule", align="left")
 
 
 def build_inline_kv(
@@ -188,8 +196,8 @@ def build_inline_kv(
     """Return an aligned key/value line suitable for hero cards and summaries."""
 
     text = Text(" " * indent)
-    text.append(f"{label:<{label_width}}", style="lp.text.label")
-    text.append(f" {value}", style="lp.value")
+    text.append(f"{label:<{label_width}}", style="lp.text.secondary")
+    text.append(f" {value}")
     return text
 
 
@@ -226,8 +234,64 @@ def build_status_line(
     if detail:
         if label:
             text.append(" ")
-        text.append(detail, style="lp.text.detail" if not no_color else None)
+        detail_style = "lp.text.tertiary" if label and not no_color else None
+        text.append(detail, style=detail_style)
     return text
+
+
+def build_suggestion_line(
+    message: str,
+    *,
+    indent: int = DEFAULT_INDENT + 3,
+    no_color: bool = False,
+) -> Text:
+    """Return a tertiary recovery hint with the shared action affordance."""
+
+    text = Text(" " * indent)
+    text.append(_symbol("next", no_color=no_color), style=_status_style("next", no_color=no_color))
+    text.append(" ")
+    text.append(message, style="lp.text.tertiary" if not no_color else None)
+    return text
+
+
+def build_status_entry(
+    tone: str,
+    label: str,
+    detail: str | None = None,
+    *,
+    indent: int = DEFAULT_INDENT,
+    label_width: int = 22,
+    no_color: bool = False,
+    inline_detail_tier: str = "value",
+    max_inline_detail: int = 45,
+) -> Group | Text:
+    """Return a doctor-style status entry with multiline fallback for long detail."""
+
+    line = Text(" " * indent)
+    line.append(_symbol(tone, no_color=no_color), style=_status_style(tone, no_color=no_color))
+    line.append("  ")
+    rendered_label = f"{label:<{label_width}}" if label_width is not None and label else label
+    line.append(rendered_label, style="lp.label" if not no_color else None)
+
+    if not detail:
+        return line
+
+    inline_style = {
+        "value": None,
+        "secondary": "lp.text.secondary" if not no_color else None,
+        "tertiary": "lp.text.tertiary" if not no_color else None,
+    }.get(inline_detail_tier)
+    if "\n" not in detail and len(detail) <= max_inline_detail:
+        if label:
+            line.append(" ")
+        line.append(detail, style=inline_style)
+        return line
+
+    indented_detail = textwrap_indent(detail, " " * (indent + 3), lambda _: True)
+    return Group(
+        line,
+        Text(indented_detail, style="lp.text.tertiary" if not no_color else None),
+    )
 
 
 def build_action_line(
@@ -244,7 +308,7 @@ def build_action_line(
     text.append(" ")
     text.append(command, style="lp.label" if not no_color else None)
     if detail:
-        text.append(f"  {detail}", style="lp.text.detail" if not no_color else None)
+        text.append(f"  {detail}", style="lp.text.tertiary" if not no_color else None)
     return text
 
 
@@ -311,7 +375,7 @@ def build_error_block(
     renderables: list[Any] = [build_status_line("error", "", message, no_color=no_color, emphasize_label=False)]
     if suggestion:
         for line in suggestion.splitlines():
-            renderables.append(Text(f"     {line}", style="lp.text.detail" if not no_color else None))
+            renderables.append(build_suggestion_line(line, no_color=no_color))
     return Group(*renderables)
 
 
@@ -368,7 +432,7 @@ def prompt_text(message: str, *, default: str | None = None) -> str:
 def build_root_help_footer() -> Text:
     """Return the restrained root help footer."""
 
-    return Text(ROOT_HELP_FOOTER, style="lp.text.detail")
+    return Text(ROOT_HELP_FOOTER, style="lp.text.tertiary")
 
 
 def build_get_started_text(*, subdued: bool = False) -> Text:
@@ -396,7 +460,7 @@ def build_welcome_screen(
     if not renderables:
         title = Text()
         title.append("Launchpad", style="lp.brand.secondary" if not no_color else None)
-        title.append(f"  v{__version__}", style="lp.text.detail" if not no_color else None)
+        title.append(f"  v{__version__}", style="lp.text.tertiary" if not no_color else None)
         renderables.append(title)
 
     renderables.append(Text())
@@ -410,7 +474,7 @@ def build_welcome_screen(
     for command, detail in WELCOME_COMMANDS:
         renderables.append(build_action_line(command, detail, no_color=no_color))
     renderables.append(Text())
-    renderables.append(Text("Run launchpad -h for all commands.", style="lp.text.detail" if not no_color else None))
+    renderables.append(Text("Run launchpad -h for all commands.", style="lp.text.tertiary" if not no_color else None))
     return Group(*renderables)
 
 
@@ -445,7 +509,7 @@ def build_state_text(state: object, *, no_color: bool = False) -> Text:
     }.get(text, "warn")
     style = {
         "RUNNING": "lp.status.success",
-        "COMPLETED": "lp.status.info",
+        "COMPLETED": "lp.status.success",
         "PENDING": "lp.status.pending",
         "FAILED": "lp.status.error",
         "CANCELLED": "lp.status.error",
@@ -472,7 +536,7 @@ def build_summary_table() -> Table:
     """Return the shared two-column summary grid."""
 
     table = Table.grid(padding=(0, 2))
-    table.add_column(style="lp.label")
+    table.add_column(style="lp.text.secondary")
     table.add_column(style="lp.value")
     return table
 
@@ -519,7 +583,7 @@ def build_logs_picker_panel(
     intro.append("Multiple task logs match this request. ", style="lp.brand.secondary")
     intro.append(
         "Choose one task before Launchpad reads or follows the remote file.",
-        style="lp.brand.subtle",
+        style="lp.text.tertiary",
     )
 
     summary = build_summary_table()
@@ -566,9 +630,9 @@ def render_submit_dry_run(
     console.print()
     console.print(Text("  Tasks", style="lp.label" if not no_color else None))
     manifest = make_table()
-    manifest.add_column("Alias", style="lp.text.label")
+    manifest.add_column("Alias", style="lp.text.secondary")
     manifest.add_column("Label", style="lp.label")
-    manifest.add_column("Input", style="lp.text.detail")
+    manifest.add_column("Input", style="lp.text.tertiary")
     for task_ref, item in zip(task_references, primary_inputs, strict=True):
         manifest.add_row(
             task_ref.alias,
@@ -594,7 +658,7 @@ def render_submit_dry_run(
         console.print()
         console.print(Text("  Payload", style="lp.label" if not no_color else None))
         package_table = make_table(show_header=False)
-        package_table.add_column("Path", style="lp.text.detail")
+        package_table.add_column("Path", style="lp.text.tertiary")
         for path in package_files:
             package_table.add_row(str(path))
         console.print(Padding(package_table, (0, 0, 0, 2)))
@@ -645,9 +709,9 @@ def render_submit_confirmation(
     console.print()
     console.print(Text("  Tasks", style="lp.label" if not no_color else None))
     references = make_table()
-    references.add_column("Alias", style="lp.text.label")
+    references.add_column("Alias", style="lp.text.secondary")
     references.add_column("Label", style="lp.label")
-    references.add_column("Input", style="lp.text.detail")
+    references.add_column("Input", style="lp.text.tertiary")
     for task_ref in task_references:
         references.add_row(
             task_ref.alias,
@@ -828,20 +892,20 @@ def _build_job_detail_renderable(
     header = Text("  ")
     header.append(f"Job {requested_job_id}", style="lp.label" if not no_color else None)
     if run_name:
-        header.append(f"  {run_name}", style="lp.status.info" if not no_color else None)
+        header.append(f"  {run_name}", style="lp.value" if not no_color else None)
     renderables.append(header)
 
     detail_line = Text("  ")
-    detail_line.append(f"Array {array_range or '—'}", style="lp.text.label" if not no_color else None)
-    detail_line.append(f"  Partition {partition or '—'}", style="lp.text.label" if not no_color else None)
-    detail_line.append(f"  Updated {generated_at}", style="lp.text.detail" if not no_color else None)
+    detail_line.append(f"Array {array_range or '—'}", style="lp.text.secondary" if not no_color else None)
+    detail_line.append(f"  Partition {partition or '—'}", style="lp.text.secondary" if not no_color else None)
+    detail_line.append(f"  Updated {generated_at}", style="lp.text.tertiary" if not no_color else None)
     renderables.append(detail_line)
     if remote_job_dir:
         renderables.append(build_inline_kv("remote", remote_job_dir, indent=2, label_width=12))
     renderables.append(Text())
 
     table = make_table()
-    table.add_column("Alias", style="lp.text.label")
+    table.add_column("Alias", style="lp.text.secondary")
     table.add_column("Label", style="lp.label")
     table.add_column("State")
     table.add_column("Node")
@@ -891,7 +955,7 @@ def _format_state_counts(counts: Mapping[str, int]) -> str:
 def _build_summary_text(counts: Mapping[str, int], *, no_color: bool) -> Text:
     summary = Text("  Summary: ")
     if not counts:
-        summary.append("no jobs", style="lp.text.detail" if not no_color else None)
+        summary.append("no jobs", style="lp.text.tertiary" if not no_color else None)
         return summary
 
     segments: list[Text] = []
@@ -899,7 +963,7 @@ def _build_summary_text(counts: Mapping[str, int], *, no_color: bool) -> Text:
         part = Text()
         style = {
             "RUNNING": "lp.status.success",
-            "COMPLETED": "lp.status.info",
+            "COMPLETED": "lp.status.success",
             "PENDING": "lp.status.pending",
             "FAILED": "lp.status.error",
             "CANCELLED": "lp.status.error",
