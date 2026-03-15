@@ -223,7 +223,9 @@ def _normalize_task_refs(task_refs: tuple[str, ...]) -> tuple[str, ...]:
     for task_ref in task_refs:
         cleaned = task_ref.strip()
         if not cleaned:
-            raise click.ClickException("Task references must not be empty.")
+            raise click.ClickException(
+                "Task references must not be empty. Provide a valid SLURM task ID or alias."
+            )
         normalized.append(cleaned)
     return tuple(dict.fromkeys(normalized))
 

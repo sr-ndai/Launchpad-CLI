@@ -445,9 +445,15 @@ def _build_submit_plan(
 
     resolved_input_dir = input_dir.expanduser().resolve()
     if not resolved_input_dir.exists():
-        raise click.ClickException(f"Input directory does not exist: {resolved_input_dir}")
+        raise click.ClickException(
+            f"Input directory does not exist: {resolved_input_dir}. "
+            "Run from your solver input folder or pass the path explicitly."
+        )
     if not resolved_input_dir.is_dir():
-        raise click.ClickException(f"Input path is not a directory: {resolved_input_dir}")
+        raise click.ClickException(
+            f"Input path is not a directory: {resolved_input_dir}. "
+            "Pass a directory path or run from your solver input folder."
+        )
 
     resolved_config = resolve_config(
         cwd=resolved_input_dir,
@@ -479,7 +485,8 @@ def _build_submit_plan(
 
     if not primary_inputs:
         raise click.ClickException(
-            f"No supported {solver_key} input files were found in {resolved_input_dir}."
+            f"No supported {solver_key} input files were found in {resolved_input_dir}. "
+            "Use --include-all to transfer everything, or check solver detection with --solver."
         )
 
     package_files = tuple(
@@ -607,7 +614,10 @@ def _collect_package_files(
     for extra_file in extra_files:
         resolved = (input_dir / extra_file).resolve() if not extra_file.is_absolute() else extra_file.resolve()
         if not resolved.exists() or not resolved.is_file():
-            raise click.ClickException(f"Extra file does not exist: {resolved}")
+            raise click.ClickException(
+                f"Extra file does not exist: {resolved}. "
+                "Check the path is relative to the input directory or use an absolute path."
+            )
         try:
             resolved.relative_to(input_dir)
         except ValueError as exc:
