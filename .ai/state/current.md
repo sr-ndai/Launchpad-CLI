@@ -26,9 +26,27 @@ None.
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
 - active task branch: `none`
-- last processed builder session: `2026-03-14-1723-builder-8.7.md`
+- last processed builder session: `2026-03-14-1805-builder-8.8.md`
 
 ## What Changed Recently
+- Merged the latest `origin/main` into
+  `phase/08-task-references-and-solver-aware-logs` to resolve the current PR
+  conflict set while preserving the accepted `8.8` planning, queue, routing,
+  and decision state.
+- Opened PR `#12` from `phase/08-task-references-and-solver-aware-logs` to
+  `main` for the post-merge `8.8` follow-up after confirming that PR `#11`
+  had already been merged into `main` on 2026-03-15.
+- Accepted task `8.8` after review and prompt verification, then merged
+  `task/8.8-slurm-parser-hardening` into the phase branch.
+- Phase 8 now also includes the shared SLURM parser hardening for the
+  reported Slurm 23.11 payload shape and the related regression coverage from
+  `8.8`.
+- Reopened Phase 8 with task `8.8` after field debugging showed that
+  `launchpad status` can crash on cluster-specific SLURM JSON when a host-like
+  scheduler field is parsed as an integer.
+- Assigned task `8.8` on branch `task/8.8-slurm-parser-hardening` to harden
+  the shared SLURM parser and add regression coverage for the reported payload
+  shape.
 - Merged the latest `main` into
   `phase/08-task-references-and-solver-aware-logs` to resolve the current PR
   conflict set, keeping the accepted `8.6` workspace-root changes and `8.7`
@@ -98,18 +116,19 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review PR `#11` from
+Human should review PR `#12` from
 `phase/08-task-references-and-solver-aware-logs` to `main`, now including the
-workspace-root follow-up from task `8.6` and the syntax-highlighted
-`config show` follow-up from task `8.7`.
+workspace-root follow-up from task `8.6`, the syntax-highlighted `config show`
+follow-up from task `8.7`, and the shared SLURM parser hardening from
+task `8.8`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1737-coordinator-resolve-phase-8-main-conflicts.md`
-4. `.ai/sessions/2026-03-14-1730-coordinator-open-phase-8-pr-11.md`
-5. `.ai/sessions/2026-03-14-1725-coordinator-accept-8.7-update-pr.md`
-6. `.ai/reviews/8.7.md`
+3. `.ai/sessions/2026-03-14-1905-coordinator-resolve-phase-8-main-conflicts.md`
+4. `.ai/sessions/2026-03-14-1808-coordinator-open-phase-8-pr-12.md`
+5. `.ai/sessions/2026-03-14-1807-coordinator-accept-8.8-update-pr.md`
+6. `.ai/reviews/8.8.md`
 7. `.ai/plans/08-task-references-and-solver-aware-logs.md`
 8. `.ai/plan.md`
 9. `.ai/git-rules.md`

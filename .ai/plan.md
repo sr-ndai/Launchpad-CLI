@@ -1313,6 +1313,8 @@ design gate.
   `ssh.username`
 - [ ] Reopen Phase 8 again with a config-show follow-up which adds Rich TOML
   syntax highlighting to the human-readable resolved config output
+- [ ] Reopen Phase 8 again with a SLURM parser follow-up which stops treating
+  host-style scheduler fields as integers in shared status/accounting parsing
 
 **Milestone:** Multi-file jobs remain one SLURM array submit, but every task is
 addressable by a human-friendly reference and every solver-log lookup is driven

@@ -195,3 +195,33 @@ lookup and an interactive multi-task log selection flow.
   machine-friendly and copy/paste-friendly config surfaces that already work.
 - If the implementation bypasses the shared console/no-color behavior, it can
   produce inconsistent output under `--no-color` or `NO_COLOR`.
+
+## Revision 2026-03-14 (SLURM Numeric Parsing Follow-up)
+
+### Follow-up Scope
+
+- Reopen Phase 8 with task `8.8` after field debugging showed that `launchpad status`
+  can crash while parsing SLURM JSON when a scheduler field that Launchpad
+  assumes is numeric actually contains a hostname-like string on the cluster.
+- Harden the shared SLURM JSON parser so numeric fields ignore or safely skip
+  non-numeric string payloads instead of raising `ValueError`.
+- Narrow the status/accounting field mapping so host-style fields such as
+  `nodes_alloc` continue to contribute to displayable node names without being
+  reused as integer sources.
+- Add regression coverage for the reported cluster shape and keep the change in
+  the shared parser layer so `status`, `logs`, `download`, `cancel`, and
+  cleanup-adjacent scheduler consumers stay aligned.
+
+### Task Breakdown Addendum
+
+| Task ID | Title | Why It Exists | Depends On |
+|---------|-------|---------------|------------|
+| 8.8 | Harden SLURM numeric field parsing | Field debugging showed that `launchpad status` can try to parse a host-style SLURM field such as `nodes_alloc` as an integer, crashing on values like `simulation-r61-8x-dy-r6i-8xlarge7-2`. | 8.7 |
+
+### Additional Risks
+
+- Fixing only `status` would leave the same parser crash reachable through any
+  command that consumes shared `squeue` or `sacct` parsing.
+- Relaxing numeric parsing too broadly without targeted tests could silently
+  hide real malformed numeric fields; the parser should skip non-numeric host
+  strings only where that behavior is intentional and covered.
