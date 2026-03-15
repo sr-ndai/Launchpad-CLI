@@ -12,6 +12,7 @@ it.
 | Preview a submit without changing anything | `launchpad submit --dry-run .` |
 | Include extra files in a submit | `launchpad submit --extra-files FILE ...` |
 | Package the whole directory | `launchpad submit --include-all` |
+| Set a per-project environment variable (e.g. license server) | `.launchpad.toml` with `[solvers.nastran] environment = { VAR = "value" }` |
 | Watch all current jobs | `launchpad status --watch` |
 | Inspect a specific job | `launchpad status <JOB_ID>` |
 | Follow the live log for one task | `launchpad logs <JOB_ID> <TASK_REF> -f` |

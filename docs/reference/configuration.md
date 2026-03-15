@@ -156,9 +156,40 @@ Controls default submit behavior:
 Holds solver-specific defaults. Nastran is implemented. ANSYS settings exist in
 the schema, but the submit workflow is not implemented yet.
 
-For Nastran, `solvers.nastran.environment` lets one project export extra
-environment variables into the generated SLURM script. Use that for
-license-server settings or other per-project cluster requirements.
+For Nastran, the key sub-settings are:
+
+- `executable_path` — absolute path to the Nastran binary on the cluster
+- `input_extension` — file extension Launchpad looks for when discovering inputs (default `.dat`)
+- `memory`, `buffpool`, `buffsize`, `smemory`, `memorymaximum` — Nastran memory arguments written into the SLURM script
+- `default_cpus` — CPUs requested when `--cpus` is not passed to `launchpad submit`
+- `logs` — maps log kinds (`solver`, `telemetry`) to file extensions for `launchpad logs`
+- `environment` — extra environment variables to export in every generated SLURM job script
+
+#### `solvers.nastran.environment`
+
+Use this to export per-project variables into the SLURM job script without
+hardcoding them in your user config. The most common use case is a license
+server that varies by project or cluster:
+
+```toml
+[solvers.nastran]
+environment = { SPLM_LICENSE_SERVER = "29001@license-server.example.com" }
+```
+
+Launchpad merges these variables with the scratch-directory variables it always
+sets (`NASTRAN_SCRATCH`, `TMPDIR`, `TMP`, `TEMP`). If a key overlaps, your
+configured value wins.
+
+Put this in `.launchpad.toml` in your project directory and commit it to version
+control so every team member gets the same environment automatically.
+
+Verify the variable appears in the generated script before submitting:
+
+```powershell
+launchpad submit --dry-run .
+```
+
+Look for `export SPLM_LICENSE_SERVER=...` in the script preview.
 
 ## Project-Local Overrides
 
@@ -175,7 +206,7 @@ solver = "nastran"
 default_partition = "nightly"
 
 [solvers.nastran]
-environment = { SPLM_LICENSE_SERVER = "29001@eng-apps-license-01.rs.corp" }
+environment = { SPLM_LICENSE_SERVER = "29001@license-server.example.com" }
 ```
 
 That file only affects commands run from that project directory.

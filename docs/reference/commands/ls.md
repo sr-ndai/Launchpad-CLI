@@ -35,8 +35,9 @@ launchpad ls "results_*"
 
 ## Behavior Notes
 
-- human-readable mode prints the requested path as a restrained header, then
-  renders the matched entries in a clean borderless table
+- Launchpad shows a spinner while fetching the remote directory listing
+- output prints the requested path as a header, then the matched entries in a
+  borderless table
 - if you omit `REMOTE_PATH`, Launchpad uses `cluster.workspace_root` when set
   and otherwise falls back to `<shared_root>/<ssh.username>`
 - relative paths are resolved beneath that default root

@@ -36,14 +36,15 @@ launchpad cleanup --older-than 30d --yes
 
 ## Behavior Notes
 
-- Launchpad shows numbered cleanup candidates for root scans and asks for one
-  final confirmation before deletion
-- human-readable mode uses the Phase 9 utility-command style: restrained
-  warnings/success lines, aligned metadata, and a borderless candidate table
+- Launchpad shows a spinner while listing candidate remote directories and
+  another while measuring their sizes
+- numbered cleanup candidates are shown for root scans; one final confirmation
+  is required before deletion
+- output uses restrained warning and success lines with aligned metadata
 - with `JOB_IDS`, Launchpad resolves the remote job directory from scheduler
   metadata
 - without `JOB_IDS`, Launchpad discovers cleanup candidates under
   `cluster.workspace_root` when set and otherwise under the legacy remote user
   root fallback
-- cleanup only supports terminal jobs
+- cleanup only supports terminal jobs (finished or cancelled)
 - root `--json` is supported

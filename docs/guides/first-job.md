@@ -36,7 +36,9 @@ If a referenced file is missing, either add it with `--extra-files` or use
 launchpad submit .
 ```
 
-Launchpad prints the SLURM job ID when submission succeeds. Keep that job ID.
+Launchpad shows a spinner while compressing, a progress bar during upload, and
+a spinner while the cluster extracts the archive. When submission succeeds, the
+SLURM job ID is highlighted. Keep that job ID.
 
 ## 4. Check Progress
 
@@ -67,8 +69,9 @@ aliases, filenames, and relative paths on new manifest-backed jobs.
 launchpad download <JOB_ID> .\results
 ```
 
-Launchpad checks local space first, transfers the results, verifies them, and
-extracts them locally when needed.
+Launchpad checks local space first, then shows a progress bar during transfer
+and a spinner while extracting locally. A summary with next-step hints appears
+when the download completes.
 
 ## 7. Optional Cleanup
 

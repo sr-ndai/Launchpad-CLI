@@ -119,6 +119,7 @@ Then rerun:
 ```powershell
 launchpad doctor
 ```
+
 ## `status`, `logs`, or `cancel` says a SLURM command was not found
 
 Launchpad runs `squeue`, `sacct`, `sstat`, and `scancel` through the cluster
@@ -141,6 +142,33 @@ Check:
 - you are in the correct folder
 - the Nastran input file extension matches the configured value
 - you are not trying to use the ANSYS workflow yet
+
+## Job starts but the solver fails with a license error
+
+The SLURM job ran but the solver process could not acquire a license. This
+happens when the license server address is not in the environment of the
+generated job script.
+
+Fix: add a `.launchpad.toml` file in your project directory:
+
+```toml
+[solvers.nastran]
+environment = { SPLM_LICENSE_SERVER = "29001@license-server.example.com" }
+```
+
+Replace `29001@license-server.example.com` with the actual address for your
+cluster. Verify the variable is present in the generated script before
+submitting:
+
+```powershell
+launchpad submit --dry-run .
+```
+
+Look for `export SPLM_LICENSE_SERVER=...` in the script preview. If the
+variable is there, the configuration is correct.
+
+Commit `.launchpad.toml` to your project repository so every team member gets
+the same environment automatically.
 
 ## ANSYS does not work
 
