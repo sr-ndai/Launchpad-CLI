@@ -1350,6 +1350,23 @@ intact, but every human-readable surface now feels like one coherent, modern
 CLI with welcome-only branding, corrected text hierarchy, and consistent
 display primitives.
 
+### Phase 10: Cluster Environment and Live Metrics (Week 15)
+
+- [ ] Add project-configurable Nastran environment exports so submit scripts can
+  include cluster-specific variables such as license-server settings
+- [ ] Extend SLURM config and command helpers with `sstat` support for live
+  running-job resource metrics
+- [ ] Update `status` to show live CPU, memory, and disk I/O for running jobs
+  while preserving existing JSON payloads
+- [ ] Keep clusters without SLURM accounting supported in degraded mode instead
+  of failing `status --all` or `doctor`
+- [ ] Update diagnostics, docs, and regression coverage for the new config and
+  observability behavior
+
+**Milestone:** Launchpad can export per-project Nastran environment variables
+into batch scripts and can surface live running-job metrics via `sstat`,
+without regressing clusters that lack SLURM accounting.
+
 ---
 
 ## 12. Testing Strategy
