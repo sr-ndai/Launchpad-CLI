@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-8.7 — Syntax-highlighted config show output
+None.
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 8.7
+- in-progress: —
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,15 @@ Phase 8 — Task References and Solver-Aware Logs
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `task/8.7-config-show-syntax-highlighting`
-- last processed builder session: `2026-03-14-1711-builder-8.6.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-14-1723-builder-8.7.md`
 
 ## What Changed Recently
+- Accepted task `8.7` after review and prompt verification, then merged
+  `task/8.7-config-show-syntax-highlighting` into the phase branch.
+- Phase 8 now also includes syntax-highlighted human-readable
+  `launchpad config show` output, the shared syntax helper, and the related
+  docs/tests from `8.7`.
 - Reopened Phase 8 with task `8.7` after field feedback showed that
   `launchpad config show` still renders resolved TOML as plain text instead of
   using Rich syntax highlighting in the primary human-readable path.
@@ -86,17 +91,15 @@ Phase 8 — Task References and Solver-Aware Logs
 - None.
 
 ## Next Recommended Action
-Builder should implement task `8.7` on
-`task/8.7-config-show-syntax-highlighting`, then record a Builder session note
-with verification results and `Outcome: READY_FOR_REVIEW`.
+Human should review PR `#10` from
+`phase/08-task-references-and-solver-aware-logs` to `main`, now including the
+syntax-highlighted `config show` follow-up from task `8.7`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/8.7.md`
-4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/plan.md`
-6. `src/launchpad_cli/cli/config_cmd.py`
-7. `src/launchpad_cli/display.py`
-8. `tests/test_config.py`
-9. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1725-coordinator-accept-8.7-update-pr.md`
+4. `.ai/reviews/8.7.md`
+5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+6. `.ai/plan.md`
+7. `.ai/git-rules.md`
