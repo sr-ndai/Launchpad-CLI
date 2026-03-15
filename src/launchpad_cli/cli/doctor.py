@@ -5,16 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import shlex
-import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Mapping
 
 import asyncssh
 import click
-from rich.table import Table
 from rich.text import Text
 
 from launchpad_cli.core.config import DEFAULT_CLUSTER_CONFIG_PATH, LaunchpadConfig, SSHConfig, resolve_config
@@ -23,12 +20,10 @@ from launchpad_cli.core.slurm import resolve_slurm_executable
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
-    build_badge,
     build_console,
-    build_detail_panel,
-    build_launchpad_wordmark,
-    build_next_steps_panel,
-    build_summary_table,
+    build_next_steps,
+    build_section_rule,
+    build_status_line,
 )
 
 
@@ -373,59 +368,44 @@ def _render_results(results: list[DiagnosticResult], *, no_color: bool) -> None:
     passed = sum(result.status == "pass" for result in results)
     failed = sum(result.status == "fail" for result in results)
     skipped = sum(result.status == "skip" for result in results)
-    all_passed = failed == 0 and skipped == 0
 
-    if all_passed:
-        wordmark = build_launchpad_wordmark(width=_detect_terminal_width())
-        if wordmark is not None and not no_color and _stdout_supports_branding():
-            console.print(wordmark)
-        console.print(Text("Doctor checks passed. Launchpad is ready for the next run.", style="lp.brand.secondary"))
-
-    summary = build_summary_table()
-    summary.add_row("Checks", str(len(results)))
-    summary.add_row("Passed", str(passed))
-    summary.add_row("Failed", str(failed))
-    summary.add_row("Skipped", str(skipped))
-    summary.add_row("Overall", "ready" if all_passed else "needs attention")
-    console.print(
-        build_detail_panel(
-            summary,
-            title="Doctor Summary",
-            tone="success" if all_passed else ("danger" if failed else "warn"),
-        )
-    )
-
+    console.print(build_section_rule("Doctor"))
     local_results, remote_results = _partition_results(results)
     if local_results:
-        console.print(_build_diagnostic_panel("Local Setup", local_results))
+        console.print(Text("  Local Setup", style="lp.label" if not no_color else None))
+        for result in local_results:
+            _print_diagnostic_result(console, result, no_color=no_color)
+        console.print()
     if remote_results:
-        console.print(_build_diagnostic_panel("Cluster Access", remote_results))
+        console.print(Text("  Cluster Access", style="lp.label" if not no_color else None))
+        for result in remote_results:
+            _print_diagnostic_result(console, result, no_color=no_color)
+        console.print()
 
-    console.print(build_next_steps_panel(_doctor_next_steps(results)))
-
-
-def _build_diagnostic_panel(title: str, results: list[DiagnosticResult]):
-    table = Table.grid(expand=True, padding=(0, 1))
-    table.add_column(width=10)
-    table.add_column()
-    for result in results:
-        body = Text(_diagnostic_title(result.name), style="lp.label")
-        body.append(f"\n{result.detail}", style="lp.value")
-        if result.suggestion:
-            body.append("\nNext: ", style="lp.brand.subtle")
-            body.append(result.suggestion, style="lp.brand.subtle")
-        table.add_row(_diagnostic_badge(result.status), body)
-    return build_detail_panel(table, title=title, tone=_panel_tone(results))
+    console.print(_build_summary_line(len(results), passed=passed, failed=failed, skipped=skipped, no_color=no_color))
+    console.print()
+    console.print(build_next_steps(_doctor_next_steps(results), no_color=no_color))
 
 
-def _diagnostic_badge(status: str) -> Text:
-    mapping = {
-        "pass": ("pass", "success"),
-        "fail": ("fail", "danger"),
-        "skip": ("skip", "warn"),
-    }
-    label, tone = mapping.get(status, (status, "neutral"))
-    return build_badge(label, tone=tone)
+def _print_diagnostic_result(console, result: DiagnosticResult, *, no_color: bool) -> None:
+    tone = {
+        "pass": "success",
+        "fail": "error",
+        "skip": "muted",
+    }.get(result.status, "muted")
+    console.print(
+        build_status_line(
+            tone,
+            _diagnostic_title(result.name),
+            result.detail,
+            indent=4,
+            label_width=24,
+            no_color=no_color,
+        )
+    )
+    if result.suggestion:
+        for line in result.suggestion.splitlines():
+            console.print(Text(f"       {line}", style="lp.text.detail" if not no_color else None))
 
 
 def _diagnostic_title(name: str) -> str:
@@ -439,14 +419,6 @@ def _diagnostic_title(name: str) -> str:
         "remote-root": "Remote Writable Root",
     }
     return titles.get(name, name.replace("-", " ").title())
-
-
-def _panel_tone(results: list[DiagnosticResult]) -> str:
-    if any(result.status == "fail" for result in results):
-        return "danger"
-    if any(result.status == "skip" for result in results):
-        return "warn"
-    return "success"
 
 
 def _partition_results(results: list[DiagnosticResult]) -> tuple[list[DiagnosticResult], list[DiagnosticResult]]:
@@ -497,15 +469,28 @@ def _doctor_next_steps(results: list[DiagnosticResult]) -> list[str]:
     return ["launchpad doctor"]
 
 
-def _stdout_supports_branding() -> bool:
-    return "NO_COLOR" not in os.environ and hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-
-
-def _detect_terminal_width() -> int | None:
-    try:
-        return shutil.get_terminal_size(fallback=(80, 24)).columns
-    except OSError:
-        return None
+def _build_summary_line(
+    total: int,
+    *,
+    passed: int,
+    failed: int,
+    skipped: int,
+    no_color: bool,
+) -> Text:
+    summary = Text(f"  {total} checks: ")
+    summary.append(str(passed), style="lp.status.success" if not no_color else None)
+    summary.append(" passed")
+    if failed:
+        summary.append(", ")
+        summary.append(str(failed), style="lp.status.error" if not no_color else None)
+        summary.append(" failed")
+    if skipped:
+        summary.append(", ")
+        summary.append(str(skipped), style="lp.text.detail" if not no_color else None)
+        summary.append(" skipped")
+    if not failed and not skipped:
+        summary.append(", ready for the next run", style="lp.text.detail" if not no_color else None)
+    return summary
 
 
 def _verbosity(ctx: click.Context) -> int:

@@ -211,6 +211,7 @@ def build_status_line(
     detail: str | None = None,
     *,
     indent: int = DEFAULT_INDENT,
+    label_width: int | None = None,
     no_color: bool = False,
     emphasize_label: bool = True,
 ) -> Text:
@@ -219,7 +220,8 @@ def build_status_line(
     text = Text(" " * indent)
     text.append(_symbol(tone, no_color=no_color), style=_status_style(tone, no_color=no_color))
     text.append("  ")
-    text.append(label, style="lp.label" if emphasize_label and not no_color else None)
+    rendered_label = f"{label:<{label_width}}" if label_width is not None and label else label
+    text.append(rendered_label, style="lp.label" if emphasize_label and not no_color else None)
     if detail:
         if label:
             text.append(" ")

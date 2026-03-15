@@ -7,11 +7,17 @@ from pathlib import Path
 import json
 from click.testing import CliRunner
 from loguru import logger
-from rich.syntax import Syntax
 
 from launchpad_cli.cli import cli
 from launchpad_cli.cli import config_cmd as config_cmd_module
-from launchpad_cli.core.config import LaunchpadConfig, SSHConfig, dumps_toml, render_config_docs, resolve_config
+from launchpad_cli.core.config import (
+    ConfigLayer,
+    LaunchpadConfig,
+    ResolvedConfig,
+    SSHConfig,
+    render_config_docs,
+    resolve_config,
+)
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.workspace import resolve_remote_workspace_root
 
@@ -186,6 +192,7 @@ def test_config_init_writes_user_config_non_interactively(tmp_path: Path, monkey
     assert 'host = "headnode.example.com"' in contents
     assert 'username = "sergey"' in contents
     assert "Config Ready" in result.output
+    assert "Saved user config" in result.output
     assert "launchpad doctor" in result.output
 
 
@@ -203,10 +210,12 @@ def test_config_init_interactive_flow_prompts_with_guided_copy(tmp_path: Path, m
 
     assert result.exit_code == 0
     assert "Guided Setup" in result.output
+    assert "Set up Launchpad for your cluster." in result.output
     assert "Cluster SSH host or IP" in result.output
     assert "Cluster username" in result.output
     assert "Path to SSH private key" in result.output
     assert "Config Ready" in result.output
+    assert "____ ___  ______" not in result.output
 
 
 def test_config_init_existing_file_has_actionable_error(tmp_path: Path, monkeypatch) -> None:
@@ -236,47 +245,57 @@ def test_config_show_supports_docs_output() -> None:
     assert "submit.solver" in result.output
 
 
-def test_config_show_renders_syntax_highlighted_toml(monkeypatch) -> None:
-    """Human-readable config show should print a Rich TOML syntax renderable."""
-
-    printed: dict[str, object] = {}
-    expected = {"ssh": {"host": "cluster.example.com", "username": "sergey"}}
-
-    class FakeConsole:
-        def print(self, renderable) -> None:  # type: ignore[no-untyped-def]
-            printed["renderable"] = renderable
+def test_config_show_renders_sectioned_summary(monkeypatch) -> None:
+    """Human-readable config show should render the restrained grouped summary."""
 
     monkeypatch.setattr(config_cmd_module, "configure_logging", lambda **kwargs: None)
     monkeypatch.setattr(
         config_cmd_module,
         "resolve_config",
-        lambda **kwargs: type("Resolved", (), {"as_dict": lambda self: expected})(),
+        lambda **kwargs: ResolvedConfig(
+            config=LaunchpadConfig(
+                ssh=SSHConfig(host="cluster.example.com", username="sergey", key_path="/tmp/id_ed25519"),
+            ),
+            layers=(
+                ConfigLayer("cluster", {}, path=Path("/shared/config/launchpad.toml"), loaded=False),
+                ConfigLayer("user", {"ssh": {"host": "cluster.example.com"}}, path=Path("/tmp/user.toml"), loaded=True),
+                ConfigLayer("project", {}, path=Path("/tmp/project/.launchpad.toml"), loaded=False),
+                ConfigLayer("environment", {"ssh": {"username": "sergey"}}, loaded=True),
+                ConfigLayer("cli", {}, loaded=False),
+            ),
+        ),
     )
-    monkeypatch.setattr(config_cmd_module, "build_console", lambda **kwargs: FakeConsole())
 
     result = CliRunner().invoke(cli, ["config", "show"])
 
     assert result.exit_code == 0
-    renderable = printed["renderable"]
-    assert isinstance(renderable, Syntax)
-    assert renderable.lexer.name.lower() == "toml"
-    assert renderable.code == dumps_toml(expected)
+    assert "Resolved Configuration" in result.output
+    assert "Sources (highest to lowest priority)" in result.output
+    assert "1. CLI flags" in result.output
+    assert "Environment variables" in result.output
+    assert "SSH" in result.output
+    assert "cluster.example.com" in result.output
+    assert "Transfer" in result.output
+    assert "parallel_streams" in result.output
 
 
 def test_config_show_honors_existing_no_color_behavior(monkeypatch) -> None:
-    """The highlighted config path should still rely on the existing no-color console flag."""
+    """The human config summary should still rely on the existing no-color console flag."""
 
     captured: dict[str, object] = {}
 
     class FakeConsole:
-        def print(self, renderable) -> None:  # type: ignore[no-untyped-def]
-            captured["renderable"] = renderable
+        def print(self, *renderables) -> None:  # type: ignore[no-untyped-def]
+            captured.setdefault("renderables", []).extend(renderables or [""])
 
     monkeypatch.setattr(config_cmd_module, "configure_logging", lambda **kwargs: None)
     monkeypatch.setattr(
         config_cmd_module,
         "resolve_config",
-        lambda **kwargs: type("Resolved", (), {"as_dict": lambda self: {"ssh": {"host": "cluster"}}})(),
+        lambda **kwargs: ResolvedConfig(
+            config=LaunchpadConfig(ssh=SSHConfig(host="cluster")),
+            layers=(ConfigLayer("cluster", {}, path=Path("/shared/config/launchpad.toml"), loaded=False),),
+        ),
     )
 
     def fake_build_console(**kwargs):  # type: ignore[no-untyped-def]
@@ -289,7 +308,7 @@ def test_config_show_honors_existing_no_color_behavior(monkeypatch) -> None:
 
     assert result.exit_code == 0
     assert captured["no_color"] is True
-    assert isinstance(captured["renderable"], Syntax)
+    assert captured["renderables"]
 
 
 def test_config_show_preserves_json_output(monkeypatch) -> None:
