@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-None.
+8.8 — Harden SLURM numeric field parsing
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: —
+- in-progress: 8.8
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,16 @@ None.
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `none`
+- active task branch: `task/8.8-slurm-parser-hardening`
 - last processed builder session: `2026-03-14-1723-builder-8.7.md`
 
 ## What Changed Recently
+- Reopened Phase 8 with task `8.8` after field debugging showed that
+  `launchpad status` can crash on cluster-specific SLURM JSON when a host-like
+  scheduler field is parsed as an integer.
+- Assigned task `8.8` on branch `task/8.8-slurm-parser-hardening` to harden
+  the shared SLURM parser and add regression coverage for the reported payload
+  shape.
 - Merged the latest `main` into
   `phase/08-task-references-and-solver-aware-logs` to resolve the current PR
   conflict set, keeping the accepted `8.6` workspace-root changes and `8.7`
@@ -98,18 +104,18 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review PR `#11` from
-`phase/08-task-references-and-solver-aware-logs` to `main`, now including the
-workspace-root follow-up from task `8.6` and the syntax-highlighted
-`config show` follow-up from task `8.7`.
+Builder should implement task `8.8` on `task/8.8-slurm-parser-hardening`,
+then record a Builder session note with verification results and
+`Outcome: READY_FOR_REVIEW`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1737-coordinator-resolve-phase-8-main-conflicts.md`
-4. `.ai/sessions/2026-03-14-1730-coordinator-open-phase-8-pr-11.md`
-5. `.ai/sessions/2026-03-14-1725-coordinator-accept-8.7-update-pr.md`
-6. `.ai/reviews/8.7.md`
-7. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-8. `.ai/plan.md`
-9. `.ai/git-rules.md`
+3. `.ai/tasks/prompts/8.8.md`
+4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+5. `.ai/plan.md`
+6. `src/launchpad_cli/core/slurm.py`
+7. `src/launchpad_cli/cli/status.py`
+8. `tests/test_slurm.py`
+9. `tests/test_status.py`
+10. `.ai/git-rules.md`
