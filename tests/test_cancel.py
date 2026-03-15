@@ -29,8 +29,8 @@ def test_cancel_command_cancels_entire_job_with_yes(monkeypatch: pytest.MonkeyPa
     result = CliRunner().invoke(cli, ["cancel", "12345", "--yes"])
 
     assert result.exit_code == 0
-    assert "Cancellation Requested" in result.output
     assert "Cancelled job 12345." in result.output
+    assert "target       12345" in result.output
 
 
 def test_cancel_command_prompts_and_cancels_selected_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,9 +49,9 @@ def test_cancel_command_prompts_and_cancels_selected_tasks(monkeypatch: pytest.M
     result = CliRunner().invoke(cli, ["cancel", "12345", "2", "4"])
 
     assert result.exit_code == 0
-    assert "Cancel Preview" in result.output
-    assert "Cancellation Requested" in result.output
+    assert "Cancellation sends scancel immediately once you confirm." in result.output
     assert "Cancelled job 12345 task(s): 2, 4." in result.output
+    assert "tasks        2, 4" in result.output
 
 
 def test_cancel_command_resolves_manifest_task_refs_before_cancelling(

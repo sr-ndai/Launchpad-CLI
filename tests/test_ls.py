@@ -47,8 +47,9 @@ def test_ls_command_renders_short_listing(monkeypatch: pytest.MonkeyPatch) -> No
     result = CliRunner().invoke(cli, ["ls"])
 
     assert result.exit_code == 0
-    assert "Remote Listing" in result.output
-    assert "Entries" in result.output
+    assert "/shared/sergey" in result.output
+    assert "Type" in result.output
+    assert "Name" in result.output
     assert "tank_v3/" in result.output
     assert "notes.txt" in result.output
 
@@ -196,5 +197,5 @@ def test_ls_command_renders_empty_state_when_no_entries(monkeypatch: pytest.Monk
     result = CliRunner().invoke(cli, ["ls", "missing*"])
 
     assert result.exit_code == 0
-    assert "Nothing To Show" in result.output
+    assert "No remote entries matched" in result.output
     assert "/shared/sergey/missing*" in result.output
