@@ -52,7 +52,7 @@ def test_status_command_renders_overview_snapshot(monkeypatch: pytest.MonkeyPatc
     assert "tank_v3" in result.output
     assert "RUNNING" in result.output
     assert "12345" in result.output
-    assert "Status Overview" in result.output
+    assert "Summary:" in result.output
 
 
 def test_status_command_emits_json_for_specific_job(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,9 +204,9 @@ def test_status_command_falls_back_to_sacct_when_squeue_query_fails(
 
     assert result.exit_code == 0
     assert "tank_v3" in result.output
-    assert "completed=1" in result.output
+    assert "Summary: 1 completed" in result.output
     assert "178G" in result.output
-    assert "Next Commands" in result.output
+    assert "launchpad download 12345" in result.output
 
 
 def test_status_command_falls_back_to_squeue_when_sacct_query_fails(

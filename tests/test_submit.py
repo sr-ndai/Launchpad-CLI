@@ -53,8 +53,10 @@ def test_submit_dry_run_previews_detected_inputs(monkeypatch, tmp_path: Path) ->
     assert "002" in result.output
     assert "fuselage" in result.output
     assert "wing" in result.output
-    assert "Generated SLURM Script" in result.output
-    assert "If This Looks Right" in result.output
+    assert "Tasks" in result.output
+    assert "Transfer" in result.output
+    assert "Generated Script" in result.output
+    assert "Next" in result.output
 
 
 def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_path: Path) -> None:
@@ -104,8 +106,9 @@ def test_submit_executes_remote_flow_and_shows_confirmation(monkeypatch, tmp_pat
         f"{tmp_path.name}/wing.dat",
     )
     assert captured_plan["plan"].job_manifest.logs == {"solver": ".f06", "telemetry": ".f04"}
-    assert "Submission Complete" in result.output
-    assert "Task References" in result.output
+    assert "Submitted" in result.output
+    assert "Tasks" in result.output
+    assert "Transfer" in result.output
     assert "12345" in result.output
     assert "001" in result.output
     assert "002" in result.output
