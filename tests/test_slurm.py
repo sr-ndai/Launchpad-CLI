@@ -126,6 +126,55 @@ SACCT_SAMPLE = json.dumps(
     }
 )
 
+SQUEUE_TYPED_WRAPPER_SAMPLE = json.dumps(
+    {
+        "meta": {"plugin": "test"},
+        "jobs": [
+            {
+                "job_id": 67890,
+                "name": "tank_v3",
+                "partition": "simulation-r6i-8x",
+                "user_name": "sergey",
+                "state": {"current": "RUNNING", "reason": "None"},
+                "array_job_id": {"set": True, "number": 67890},
+                "array_task_id": {"set": True, "number": 7},
+                "nodes_alloc": "simulation-r61-8x-dy-r6i-8xlarge7-2",
+                "node_count": {"set": True, "number": 1},
+                "cpus": {"set": True, "number": 12},
+                "cpus_per_task": {"set": True, "number": 12},
+                "time": {
+                    "elapsed": "00:10:00",
+                    "limit": "99:00:00",
+                    "submission": "2026-03-14T10:00:00",
+                    "start": "2026-03-14T10:01:00",
+                },
+                "comment": "/shared/launchpad/tank_v3",
+            }
+        ],
+    }
+)
+
+SACCT_TYPED_WRAPPER_SAMPLE = json.dumps(
+    {
+        "meta": {"plugin": "test"},
+        "jobs": [
+            {
+                "job_id": "67890_7",
+                "name": "tank_v3",
+                "partition": "simulation-r6i-8x",
+                "state": "COMPLETED",
+                "array_job_id": {"set": True, "number": 67890},
+                "array_task_id": {"set": True, "number": 7},
+                "nodes_alloc": "simulation-r61-8x-dy-r6i-8xlarge7-2",
+                "elapsed": "00:12:00",
+                "total_cpu": "02:24.000",
+                "max_rss": "12G",
+                "comment": "/shared/launchpad/tank_v3",
+            }
+        ],
+    }
+)
+
 
 def test_build_submit_script_includes_expected_slurm_and_solver_content() -> None:
     """Submit script generation should preserve the documented Phase 2 decisions."""
@@ -205,6 +254,35 @@ def test_parse_sacct_output_returns_structured_job_accounting() -> None:
     assert jobs[0].derived_exit_code == "0:0"
     assert jobs[0].max_rss == "178G"
     assert jobs[0].remote_job_dir == "/shared/sergey/nastran-20260312-1947-abcd"
+
+
+def test_parse_squeue_output_handles_typed_wrappers_and_host_style_nodes_alloc() -> None:
+    """Wrapper objects and host-style node strings should parse without crashing."""
+
+    jobs = parse_squeue_output(SQUEUE_TYPED_WRAPPER_SAMPLE)
+
+    assert len(jobs) == 1
+    assert jobs[0].job_id == "67890"
+    assert jobs[0].array_job_id == "67890"
+    assert jobs[0].array_task_id == "7"
+    assert jobs[0].node_list == "simulation-r61-8x-dy-r6i-8xlarge7-2"
+    assert jobs[0].nodes == 1
+    assert jobs[0].cpus == 12
+    assert jobs[0].remote_job_dir == "/shared/launchpad/tank_v3"
+
+
+def test_parse_sacct_output_handles_typed_wrappers_and_host_style_nodes_alloc() -> None:
+    """Accounting parsing should accept typed wrappers and preserve host-style node names."""
+
+    jobs = parse_sacct_output(SACCT_TYPED_WRAPPER_SAMPLE)
+
+    assert len(jobs) == 1
+    assert jobs[0].job_id == "67890_7"
+    assert jobs[0].array_job_id == "67890"
+    assert jobs[0].array_task_id == "7"
+    assert jobs[0].node_list == "simulation-r61-8x-dy-r6i-8xlarge7-2"
+    assert jobs[0].total_cpu == "02:24.000"
+    assert jobs[0].remote_job_dir == "/shared/launchpad/tank_v3"
 
 
 @pytest.mark.asyncio

@@ -453,8 +453,8 @@ def _parse_job_status(job: dict[str, Any]) -> JobStatus:
         array_task_id=_optional_string(job, "array.task_id", "array_task_id") or derived_array_task_id,
         user_name=_optional_string(job, "user_name", "user"),
         partition=_optional_string(job, "partition"),
-        node_list=_optional_string(job, "node_list", "nodes", "nodes_alloc"),
-        nodes=_optional_int(job, "nodes", "nodes_alloc"),
+        node_list=_optional_string(job, "node_list", "nodes_alloc"),
+        nodes=_optional_int(job, "node_count", "nodes"),
         cpus=_optional_int(job, "cpus", "cpus_per_task", "num_cpus"),
         elapsed=_optional_string(job, "time.elapsed", "elapsed", "elapsed_time"),
         time_limit=_optional_string(job, "time.limit", "time_limit", "limit"),
@@ -483,7 +483,7 @@ def _parse_job_accounting(job: dict[str, Any]) -> JobAccounting:
         array_job_id=_optional_string(job, "array.job_id", "array_job_id") or derived_array_job_id,
         array_task_id=_optional_string(job, "array.task_id", "array_task_id") or derived_array_task_id,
         partition=_optional_string(job, "partition"),
-        node_list=_optional_string(job, "node_list", "nodes", "nodes_alloc"),
+        node_list=_optional_string(job, "node_list", "nodes_alloc"),
         elapsed=_optional_string(job, "elapsed", "time.elapsed", "elapsed_time"),
         total_cpu=_optional_string(job, "total_cpu"),
         max_rss=_optional_string(job, "max_rss"),
@@ -513,7 +513,7 @@ def _lookup(record: dict[str, Any], path: str) -> Any:
 
 def _coalesce(record: dict[str, Any], *paths: str) -> Any:
     for path in paths:
-        value = _lookup(record, path)
+        value = _normalize_slurm_value(_lookup(record, path))
         if value is _MISSING or value is None:
             continue
         if isinstance(value, str) and not value.strip():
@@ -536,7 +536,7 @@ def _optional_string(record: dict[str, Any], *paths: str) -> str | None:
 
 
 def _optional_int(record: dict[str, Any], *paths: str) -> int | None:
-    value = _coalesce(record, *paths)
+    value = _normalize_slurm_value(_coalesce(record, *paths))
     if value is _MISSING:
         return None
     if isinstance(value, bool):
@@ -549,7 +549,10 @@ def _optional_int(record: dict[str, Any], *paths: str) -> int | None:
         text = value.strip()
         if not text:
             return None
-        return int(text)
+        try:
+            return int(text)
+        except ValueError:
+            return None
     return None
 
 
@@ -568,6 +571,7 @@ def _optional_exit_code(record: dict[str, Any], *paths: str) -> str | None:
 
 
 def _render_string(value: Any) -> str | None:
+    value = _normalize_slurm_value(value)
     if value is _MISSING or value is None:
         return None
     if isinstance(value, str):
@@ -578,6 +582,20 @@ def _render_string(value: Any) -> str | None:
     if isinstance(value, list):
         rendered_items = [item for item in (_render_string(item) for item in value) if item]
         return ",".join(rendered_items) or None
+    return None
+
+
+def _normalize_slurm_value(value: Any) -> Any:
+    if value is _MISSING:
+        return _MISSING
+    if not isinstance(value, dict) or "set" not in value:
+        return value
+    if not bool(value.get("set")):
+        return None
+
+    for key in ("number", "string", "value", "boolean", "bool", "float", "data", "name"):
+        if key in value:
+            return _normalize_slurm_value(value[key])
     return None
 
 
