@@ -327,7 +327,11 @@ def build_warning_line(message: str, *, no_color: bool = False) -> Text:
     return build_status_line("warn", "", message, no_color=no_color, emphasize_label=False)
 
 
-def build_progress() -> Progress:
+def build_progress(
+    *,
+    console: Console | None = None,
+    transient: bool = True,
+) -> Progress:
     """Return the shared minimal progress bar configuration for later tasks."""
 
     return Progress(
@@ -336,6 +340,8 @@ def build_progress() -> Progress:
         TaskProgressColumn(),
         TransferSpeedColumn(),
         TimeRemainingColumn(),
+        console=console,
+        transient=transient,
     )
 
 

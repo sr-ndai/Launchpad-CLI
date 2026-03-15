@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
+from rich.console import Console
 
 from launchpad_cli.cli import cli
 from launchpad_cli.cli import download as download_module
@@ -16,7 +17,13 @@ from launchpad_cli.core.compress import ArchiveEntry, ArchiveInspection
 from launchpad_cli.core.config import LaunchpadConfig, ResolvedConfig, SSHConfig
 from launchpad_cli.core.job_manifest import JobManifest, TaskReference
 from launchpad_cli.core.remote_ops import RemotePathEntry
-from launchpad_cli.display import build_console
+from launchpad_cli.display import LAUNCHPAD_THEME, build_console
+
+
+def _recording_console(*, no_color: bool = True) -> Console:
+    """Return a Rich console that captures rendered download output for assertions."""
+
+    return Console(record=True, no_color=no_color, theme=LAUNCHPAD_THEME, width=120)
 
 
 def test_download_command_passes_documented_options_to_async_runner(
@@ -44,6 +51,9 @@ def test_download_command_passes_documented_options_to_async_runner(
             cleaned_up=True,
             selected_tasks=("0", "2"),
             partial=False,
+            checksums_verified=True,
+            result_size_bytes=4096,
+            source_count=2,
         )
 
     monkeypatch.setattr(download_module, "_run_download", fake_run_download)
@@ -83,7 +93,9 @@ def test_download_command_passes_documented_options_to_async_runner(
     assert captured["exclude_patterns"] == ("*.tmp",)
     assert captured["local_dir"] == tmp_path / "custom-output"
     assert captured["json_output"] is False
-    assert "Download Complete" in result.output
+    assert "Download complete" in result.output
+    assert "Local path" in result.output
+    assert "Integrity" in result.output
     assert "launchpad status 12345" in result.output
 
 
@@ -135,9 +147,16 @@ async def test_run_download_executes_single_file_flow_and_cleanup(
     )
     resolved = ResolvedConfig(config=config, layers=())
     recorded: dict[str, object] = {"deleted": []}
+    confirm_prompts: list[str] = []
+    console = _recording_console()
 
     monkeypatch.setattr(download_module, "resolve_config", lambda **kwargs: resolved)
-    monkeypatch.setattr(download_module.click, "confirm", lambda *args, **kwargs: True)
+
+    def fake_confirm(message: str, *args, **kwargs) -> bool:  # type: ignore[no-untyped-def]
+        confirm_prompts.append(message)
+        return True
+
+    monkeypatch.setattr(download_module.click, "confirm", fake_confirm)
 
     @asynccontextmanager
     async def fake_ssh_session(_config: SSHConfig):  # type: ignore[no-untyped-def]
@@ -222,7 +241,7 @@ async def test_run_download_executes_single_file_flow_and_cleanup(
     result = await download_module._run_download(
         cwd=tmp_path,
         env={},
-        console=build_console(no_color=True),
+        console=console,
         json_output=False,
         job_id="12345",
         local_dir=tmp_path / "results_tank_v3",
@@ -249,6 +268,15 @@ async def test_run_download_executes_single_file_flow_and_cleanup(
     assert recorded["striped_kwargs"]["streams"] == 8
     assert recorded["deleted"] == [("/shared/sergey/tank_v3", {})]
     assert (tmp_path / "results_tank_v3" / "results_wing_0" / "summary.txt").exists()
+    assert confirm_prompts == ["Proceed?"]
+
+    output = console.export_text()
+    assert "Job 12345  tank_v3" in output
+    assert "1/1 task COMPLETED" in output
+    assert "Remote results" in output
+    assert "Compressed est." in output
+    assert "Local free space" in output
+    assert "Compressing on remote..." in output
 
 
 @pytest.mark.asyncio
@@ -599,6 +627,42 @@ async def test_build_download_plan_resolves_manifest_task_references(
             relative_path="results_wing_1",
         ),
     )
+
+
+def test_download_completion_renderable_surfaces_integrity_and_next_steps(tmp_path: Path) -> None:
+    """The final human-readable summary should use the restrained Phase 9 layout."""
+
+    console = _recording_console()
+    renderable = download_module._build_completion_renderable(
+        download_module.DownloadResult(
+            job_id="12345",
+            run_name="tank_v3",
+            destination_dir=tmp_path / "results_tank_v3",
+            remote_job_dir="/shared/sergey/tank_v3",
+            transfer_mode="single-file",
+            requested_streams=8,
+            effective_streams=4,
+            downloaded_bytes=1024,
+            file_count=3,
+            cleaned_up=False,
+            selected_tasks=("0",),
+            partial=False,
+            checksums_verified=True,
+            result_size_bytes=4096,
+            source_count=1,
+        ),
+        no_color=True,
+    )
+
+    console.print(renderable)
+    output = console.export_text()
+
+    assert "Download complete" in output
+    assert "Local path" in output
+    assert "Size" in output
+    assert "Integrity" in output
+    assert "all files verified" in output
+    assert "launchpad cleanup 12345" in output
 
 
 @pytest.mark.asyncio
