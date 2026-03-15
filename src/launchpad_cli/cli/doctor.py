@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import shlex
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Mapping
@@ -14,7 +15,12 @@ import asyncssh
 import click
 from rich.text import Text
 
-from launchpad_cli.core.config import DEFAULT_CLUSTER_CONFIG_PATH, LaunchpadConfig, SSHConfig, resolve_config
+from launchpad_cli.core.config import (
+    DEFAULT_CLUSTER_CONFIG_PATH,
+    LaunchpadConfig,
+    SSHConfig,
+    resolve_config,
+)
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.slurm import resolve_slurm_executable
 from launchpad_cli.core.ssh import ssh_session
@@ -176,10 +182,16 @@ def _python_version_check() -> DiagnosticResult:
     )
 
 
-def _config_resolution_check(loaded_files: tuple[Path, ...], config: LaunchpadConfig) -> DiagnosticResult:
+def _config_resolution_check(
+    loaded_files: tuple[Path, ...], config: LaunchpadConfig
+) -> DiagnosticResult:
     """Summarize the resolved configuration inputs relevant to operator commands."""
 
-    source_text = ", ".join(str(path) for path in loaded_files) if loaded_files else "defaults only"
+    source_text = (
+        ", ".join(str(path) for path in loaded_files)
+        if loaded_files
+        else "defaults only"
+    )
     missing_fields: list[str] = []
     if not config.ssh.host:
         missing_fields.append("ssh.host")
@@ -255,7 +267,9 @@ def _shared_config_check() -> DiagnosticResult:
     )
 
 
-async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: LaunchpadConfig) -> DiagnosticResult:
+async def _remote_binaries_check(
+    conn: asyncssh.SSHClientConnection, config: LaunchpadConfig
+) -> DiagnosticResult:
     """Ensure the configured remote binaries resolve to executables."""
 
     resolved_paths: list[str] = []
@@ -263,7 +277,9 @@ async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: Lau
     missing_exec: list[str] = []
     scheduler_binaries = {"sbatch", "squeue", "sacct"}
 
-    for name, configured_value in config.remote_binaries.model_dump(mode="python").items():
+    for name, configured_value in config.remote_binaries.model_dump(
+        mode="python"
+    ).items():
         if name in scheduler_binaries:
             result = await resolve_slurm_executable(conn, str(configured_value))
         else:
@@ -314,12 +330,16 @@ async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: Lau
     )
 
 
-async def _remote_root_check(conn: asyncssh.SSHClientConnection, config: LaunchpadConfig) -> DiagnosticResult:
+async def _remote_root_check(
+    conn: asyncssh.SSHClientConnection, config: LaunchpadConfig
+) -> DiagnosticResult:
     """Verify that the user's shared remote root exists and is writable."""
 
     remote_root = resolve_remote_workspace_root(config)
     quoted_root = shlex.quote(remote_root)
-    result = await conn.run(f"test -d {quoted_root} && test -w {quoted_root}", check=False)
+    result = await conn.run(
+        f"test -d {quoted_root} && test -w {quoted_root}", check=False
+    )
 
     if result.exit_status == 0:
         return DiagnosticResult(
@@ -377,17 +397,29 @@ def _render_results(results: list[DiagnosticResult], *, no_color: bool) -> None:
             _print_diagnostic_result(console, result, no_color=no_color)
         console.print()
     if remote_results:
-        console.print(Text("  Cluster Access", style="lp.label" if not no_color else None))
+        console.print(
+            Text("  Cluster Access", style="lp.label" if not no_color else None)
+        )
         for result in remote_results:
             _print_diagnostic_result(console, result, no_color=no_color)
         console.print()
 
-    console.print(_build_summary_line(len(results), passed=passed, failed=failed, skipped=skipped, no_color=no_color))
+    console.print(
+        _build_summary_line(
+            len(results),
+            passed=passed,
+            failed=failed,
+            skipped=skipped,
+            no_color=no_color,
+        )
+    )
     console.print()
     console.print(build_next_steps(_doctor_next_steps(results), no_color=no_color))
 
 
-def _print_diagnostic_result(console, result: DiagnosticResult, *, no_color: bool) -> None:
+def _print_diagnostic_result(
+    console, result: DiagnosticResult, *, no_color: bool
+) -> None:
     tone = {
         "pass": "success",
         "fail": "error",
@@ -405,7 +437,9 @@ def _print_diagnostic_result(console, result: DiagnosticResult, *, no_color: boo
     )
     if result.suggestion:
         for line in result.suggestion.splitlines():
-            console.print(Text(f"       {line}", style="lp.text.detail" if not no_color else None))
+            console.print(
+                Text(f"       {line}", style="lp.text.detail" if not no_color else None)
+            )
 
 
 def _diagnostic_title(name: str) -> str:
@@ -421,7 +455,9 @@ def _diagnostic_title(name: str) -> str:
     return titles.get(name, name.replace("-", " ").title())
 
 
-def _partition_results(results: list[DiagnosticResult]) -> tuple[list[DiagnosticResult], list[DiagnosticResult]]:
+def _partition_results(
+    results: list[DiagnosticResult],
+) -> tuple[list[DiagnosticResult], list[DiagnosticResult]]:
     local_names = {"python", "config", "ssh-key", "shared-config"}
     local_results = [result for result in results if result.name in local_names]
     remote_results = [result for result in results if result.name not in local_names]
@@ -452,7 +488,10 @@ def _doctor_next_steps(results: list[DiagnosticResult]) -> list[str]:
             "launchpad doctor",
         ]
 
-    if statuses.get("remote-binaries") == "fail" or statuses.get("remote-root") == "fail":
+    if (
+        statuses.get("remote-binaries") == "fail"
+        or statuses.get("remote-root") == "fail"
+    ):
         return [
             "Fix the cluster-side prerequisite listed above.",
             "launchpad doctor",
@@ -489,7 +528,9 @@ def _build_summary_line(
         summary.append(str(skipped), style="lp.text.detail" if not no_color else None)
         summary.append(" skipped")
     if not failed and not skipped:
-        summary.append(", ready for the next run", style="lp.text.detail" if not no_color else None)
+        summary.append(
+            ", ready for the next run", style="lp.text.detail" if not no_color else None
+        )
     return summary
 
 
