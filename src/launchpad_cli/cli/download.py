@@ -568,7 +568,8 @@ async def _execute_single_file_download(
             )
 
     inspection = inspect_archive(plan.local_archive_path)
-    decompress_path(plan.local_archive_path, plan.destination_dir)
+    with build_spinner(console, "Extracting..."):
+        await asyncio.to_thread(decompress_path, plan.local_archive_path, plan.destination_dir)
 
     extracted_files = _count_local_files(plan.destination_dir)
     if extracted_files != inspection.file_count:
