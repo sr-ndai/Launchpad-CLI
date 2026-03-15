@@ -51,13 +51,13 @@ launchpad logs 12345 001 --log-kind telemetry
 
 ## Behavior Notes
 
-- human-readable mode renders a summary panel, the selected tail output, and
-  suggested follow-up commands
+- human-readable mode prints a minimal job/task/log header and path line, then
+  shows raw log content with almost no wrapper chrome
 - Launchpad resolves the scheduler metadata behind `logs` through the cluster
   login shell because some head nodes expose `squeue` and `sacct` only there
-- `--follow` starts with a live-tail banner and then streams the remote log
-  until you interrupt it; follow mode uses retry-by-name semantics so a newly
-  created log file can appear shortly after you start following
+- `--follow` prints that header once and then streams the remote log until you
+  interrupt it; follow mode uses retry-by-name semantics so a newly created log
+  file can appear shortly after you start following
 - `TASK_REF` is optional
 - new manifest-backed jobs accept raw task IDs, aliases, exact filenames,
   exact relative paths, and exact input stems as task references

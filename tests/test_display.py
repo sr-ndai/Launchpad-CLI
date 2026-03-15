@@ -9,6 +9,7 @@ from launchpad_cli.display import (
     build_error_block,
     build_hero_panel,
     build_inline_kv,
+    build_logs_picker_panel,
     build_next_steps,
     build_status_entry,
     build_status_line,
@@ -106,3 +107,14 @@ def test_status_entry_indents_every_embedded_newline_in_detail_block() -> None:
     assert "▲  Connectivity" in rendered
     assert "\n     line one" in rendered
     assert "\n     line two" in rendered
+
+
+def test_logs_picker_panel_uses_restrained_text_guidance() -> None:
+    """The interactive logs picker helper should stay on the corrected Phase 9 text hierarchy."""
+
+    rendered = _render(build_logs_picker_panel(job_id="12345", log_kind="stdout", task_count=3))
+
+    assert "Multiple task logs match this request." in rendered
+    assert "job          12345" in rendered
+    assert "log kind     stdout" in rendered
+    assert "choices      3" in rendered

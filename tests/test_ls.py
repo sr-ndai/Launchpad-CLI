@@ -179,7 +179,7 @@ async def test_run_ls_uses_configured_workspace_root(monkeypatch: pytest.MonkeyP
 
 
 def test_ls_command_renders_empty_state_when_no_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Empty remote listings should produce a visible empty-state panel."""
+    """Empty remote listings should produce a visible empty-state warning."""
 
     monkeypatch.setattr(ls_module, "configure_logging", lambda **kwargs: None)
 

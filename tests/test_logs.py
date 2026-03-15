@@ -367,7 +367,7 @@ def test_build_log_picker_options_include_manifest_metadata() -> None:
 
 
 def test_logs_command_renders_empty_state_for_blank_log_content(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Blank log content should use the shared empty-state panel instead of silent output."""
+    """Blank log content should use the restrained empty-state warning instead of silent output."""
 
     monkeypatch.setattr(logs_module, "configure_logging", lambda **kwargs: None)
 
