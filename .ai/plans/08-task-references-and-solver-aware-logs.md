@@ -167,3 +167,31 @@ lookup and an interactive multi-task log selection flow.
 - Overloading `cluster.shared_root` would blur the distinction between the
   shared filesystem mount and the Launchpad-managed writable workspace, which
   would make docs and future config harder to reason about.
+
+## Revision 2026-03-14 (Config Show Syntax Follow-up)
+
+### Follow-up Scope
+
+- Reopen Phase 8 with task `8.7` after field feedback showed that
+  `launchpad config show` still prints raw TOML text instead of using Rich
+  syntax highlighting for the human-readable resolved-config view.
+- Add real TOML syntax highlighting to the non-JSON `config show` path while
+  preserving the existing plain structured outputs for `--json` and `--docs`.
+- Keep the change scoped to the presentation layer for resolved config output;
+  do not change config resolution, serialization semantics, or machine-facing
+  output formats.
+- Add docs and regression coverage for the highlighted `config show`
+  experience.
+
+### Task Breakdown Addendum
+
+| Task ID | Title | Why It Exists | Depends On |
+|---------|-------|---------------|------------|
+| 8.7 | Syntax-highlighted config show output | Field feedback showed that `launchpad config show` still renders resolved TOML as plain text, making the primary human config-inspection path harder to scan than the rest of the Rich-based CLI. | 8.6 |
+
+### Additional Risks
+
+- If the highlighting path changes `--json` or `--docs`, it would regress the
+  machine-friendly and copy/paste-friendly config surfaces that already work.
+- If the implementation bypasses the shared console/no-color behavior, it can
+  produce inconsistent output under `--no-color` or `NO_COLOR`.

@@ -52,3 +52,4 @@
 | 8.4 | 8 | Cluster access diagnostics and Windows SSH | done | 8.3 | task/8.4-cluster-access-diagnostics | — |
 | 8.5 | 8 | SLURM login-shell execution and diagnostics | done | 8.4 | task/8.5-slurm-login-shell | — |
 | 8.6 | 8 | Configurable remote workspace root | done | 8.5 | task/8.6-configurable-workspace-root | — |
+| 8.7 | 8 | Syntax-highlighted config show output | in-progress | 8.6 | task/8.7-config-show-syntax-highlighting | Builder |

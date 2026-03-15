@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-None.
+8.7 — Syntax-highlighted config show output
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: —
+- in-progress: 8.7
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,16 @@ None.
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `none`
+- active task branch: `task/8.7-config-show-syntax-highlighting`
 - last processed builder session: `2026-03-14-1711-builder-8.6.md`
 
 ## What Changed Recently
+- Reopened Phase 8 with task `8.7` after field feedback showed that
+  `launchpad config show` still renders resolved TOML as plain text instead of
+  using Rich syntax highlighting in the primary human-readable path.
+- Assigned task `8.7` on branch `task/8.7-config-show-syntax-highlighting` to
+  add syntax-highlighted `config show` rendering while preserving the existing
+  `--json` and `--docs` outputs.
 - Accepted task `8.6` after review and prompt verification, then merged
   `task/8.6-configurable-workspace-root` into the phase branch.
 - Phase 8 now also includes the configurable `cluster.workspace_root` model,
@@ -80,15 +86,17 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review PR `#10` from
-`phase/08-task-references-and-solver-aware-logs` to `main`, now including the
-workspace-root follow-up from task `8.6`.
+Builder should implement task `8.7` on
+`task/8.7-config-show-syntax-highlighting`, then record a Builder session note
+with verification results and `Outcome: READY_FOR_REVIEW`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1714-coordinator-accept-8.6-update-pr.md`
-4. `.ai/reviews/8.6.md`
-5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-6. `.ai/plan.md`
-7. `.ai/git-rules.md`
+3. `.ai/tasks/prompts/8.7.md`
+4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+5. `.ai/plan.md`
+6. `src/launchpad_cli/cli/config_cmd.py`
+7. `src/launchpad_cli/display.py`
+8. `tests/test_config.py`
+9. `.ai/git-rules.md`
