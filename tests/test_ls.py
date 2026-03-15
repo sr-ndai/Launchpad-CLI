@@ -139,6 +139,44 @@ async def test_run_ls_uses_remote_root_for_relative_glob_patterns(
     assert [entry.path for entry in result.entries] == ["/shared/sergey/tank_v3/summary.txt"]
 
 
+@pytest.mark.asyncio
+async def test_run_ls_uses_configured_workspace_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Configured workspace roots should become the default base for relative ls paths."""
+
+    resolved = ResolvedConfig(
+        config=LaunchpadConfig(
+            cluster={"workspace_root": "/shared/launchpad"},
+            ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+        ),
+        layers=(),
+    )
+    recorded: dict[str, object] = {}
+
+    monkeypatch.setattr(ls_module, "resolve_config", lambda **kwargs: resolved)
+
+    @asynccontextmanager
+    async def fake_ssh_session(_config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield object()
+
+    async def fake_list_remote_directory(conn, path: str, *, recursive: bool, **kwargs):  # type: ignore[no-untyped-def]
+        recorded["path"] = path
+        recorded["recursive"] = recursive
+        return ()
+
+    monkeypatch.setattr(ls_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(ls_module, "list_remote_directory", fake_list_remote_directory)
+
+    result = await ls_module._run_ls(
+        cwd=tmp_path,
+        env={},
+        remote_path="tank_v3",
+        long_format=False,
+    )
+
+    assert recorded == {"path": "/shared/launchpad/tank_v3", "recursive": False}
+    assert result.requested_path == "/shared/launchpad/tank_v3"
+
+
 def test_ls_command_renders_empty_state_when_no_entries(monkeypatch: pytest.MonkeyPatch) -> None:
     """Empty remote listings should produce a visible empty-state panel."""
 

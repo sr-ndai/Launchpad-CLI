@@ -23,6 +23,7 @@ from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.remote_ops import delete_remote_path, list_remote_directory, measure_remote_path
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
     build_console,
     build_detail_panel,
@@ -378,10 +379,7 @@ def _parse_older_than(raw: str | None) -> int | None:
 
 
 def _default_remote_root(config: LaunchpadConfig) -> str:
-    username = config.ssh.username
-    if not username:
-        raise click.ClickException("Cannot resolve cleanup targets without `ssh.username`.")
-    return str(PurePosixPath(config.cluster.shared_root) / username)
+    return resolve_remote_workspace_root(config)
 
 
 async def _query_job_rows(

@@ -21,6 +21,7 @@ from launchpad_cli.core.config import DEFAULT_CLUSTER_CONFIG_PATH, LaunchpadConf
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.slurm import resolve_slurm_executable
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
     build_badge,
     build_console,
@@ -321,31 +322,25 @@ async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: Lau
 async def _remote_root_check(conn: asyncssh.SSHClientConnection, config: LaunchpadConfig) -> DiagnosticResult:
     """Verify that the user's shared remote root exists and is writable."""
 
-    username = config.ssh.username
-    if not username:
-        return DiagnosticResult(
-            name="remote-root",
-            status="fail",
-            detail="Cannot determine remote root without `ssh.username`.",
-            suggestion="Set `ssh.username` in config or `LAUNCHPAD_USER` before retrying.",
-        )
-
-    remote_root = PurePosixPath(config.cluster.shared_root) / username
-    quoted_root = shlex.quote(str(remote_root))
+    remote_root = resolve_remote_workspace_root(config)
+    quoted_root = shlex.quote(remote_root)
     result = await conn.run(f"test -d {quoted_root} && test -w {quoted_root}", check=False)
 
     if result.exit_status == 0:
         return DiagnosticResult(
             name="remote-root",
             status="pass",
-            detail=f"Remote root is present and writable: {remote_root}",
+            detail=f"Remote workspace root is present and writable: {remote_root}",
         )
 
     return DiagnosticResult(
         name="remote-root",
         status="fail",
-        detail=f"Remote root is missing or not writable: {remote_root}",
-        suggestion="Create the directory or fix permissions on the shared cluster filesystem.",
+        detail=f"Remote workspace root is missing or not writable: {remote_root}",
+        suggestion=(
+            "Create the directory, fix permissions, or set `cluster.workspace_root` if the "
+            "cluster uses a writable shared workspace different from `<cluster.shared_root>/<ssh.username>`."
+        ),
     )
 
 

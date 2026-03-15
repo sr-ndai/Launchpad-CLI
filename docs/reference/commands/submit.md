@@ -59,6 +59,8 @@ launchpad submit . --extra-files materials.txt --extra-files include.inc
 - Asking for `ansys` results in a clear "not implemented" failure.
 - `--dry-run` now renders a submit preview with the manifest, payload summary,
   generated script, and the next command to run.
+- remote job directories are created beneath `cluster.workspace_root` when set
+  and otherwise beneath the legacy `<shared_root>/<ssh.username>` fallback
 - `--transfer-mode multi-file` requires `--no-compress`.
 - Root `--json` is supported for dry runs and successful submissions.
 - successful submits highlight the job ID and point directly to the next status

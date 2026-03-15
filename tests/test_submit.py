@@ -221,6 +221,40 @@ def test_submit_emits_json_after_successful_execution(monkeypatch, tmp_path: Pat
     }
 
 
+def test_submit_uses_configured_workspace_root_for_remote_job_dir(monkeypatch, tmp_path: Path) -> None:
+    """Configured workspace roots should override the legacy username-derived remote job path."""
+
+    (tmp_path / "wing.dat").write_text("SOL 101\n", encoding="utf-8")
+    resolved = ResolvedConfig(
+        config=LaunchpadConfig(
+            cluster={"workspace_root": "/shared/launchpad"},
+            ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+        ),
+        layers=(),
+    )
+
+    monkeypatch.setattr(submit_module, "resolve_config", lambda **kwargs: resolved)
+
+    plan = submit_module._build_submit_plan(
+        input_dir=tmp_path,
+        explicit_solver=None,
+        run_name="tank_v3",
+        cpus=None,
+        max_concurrent=None,
+        partition=None,
+        time_limit=None,
+        begin=None,
+        transfer_mode=None,
+        streams=None,
+        compression_level=None,
+        no_compress=False,
+        extra_files=(),
+        include_all=False,
+    )
+
+    assert plan.remote_layout.job_dir == "/shared/launchpad/tank_v3"
+
+
 def test_submit_wraps_asyncssh_errors_as_click_exceptions(monkeypatch, tmp_path: Path) -> None:
     """Submit should surface AsyncSSH failures as normal CLI errors."""
 
