@@ -199,6 +199,7 @@ async def upload_many(
     *,
     streams: int,
     resume: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ) -> TransferExecution:
     """Upload many files concurrently using a bounded worker pool."""
 
@@ -211,9 +212,29 @@ async def upload_many(
         streams,
     )
 
+    progress_by_item: dict[str, int] = {}
+    transferred_total = 0
+
     async def runner(effective_streams: int) -> None:
         async def worker(conn: asyncssh.SSHClientConnection, item: UploadItem) -> None:
-            await upload(conn, item.local_path, item.remote_path, resume=resume)
+            if progress_callback is None:
+                await upload(conn, item.local_path, item.remote_path, resume=resume)
+                return
+
+            def on_progress(transferred: int) -> None:
+                nonlocal transferred_total
+                previous = progress_by_item.get(str(item.local_path), 0)
+                progress_by_item[str(item.local_path)] = transferred
+                transferred_total += max(transferred - previous, 0)
+                _emit_progress(progress_callback, transferred_total)
+
+            await upload(
+                conn,
+                item.local_path,
+                item.remote_path,
+                resume=resume,
+                progress_callback=on_progress,
+            )
 
         await _run_worker_pool(
             ssh_config=ssh_config,
@@ -299,6 +320,7 @@ async def striped_upload(
     streams: int,
     chunk_size: int,
     resume: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ) -> TransferExecution:
     """Upload one logical payload through deterministic temporary remote parts."""
 
@@ -336,6 +358,7 @@ async def striped_upload(
             remote_items,
             streams=min(streams, len(remote_items)),
             resume=resume,
+            progress_callback=progress_callback,
         )
 
         await _assemble_remote_parts(
