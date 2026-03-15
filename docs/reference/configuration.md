@@ -40,7 +40,9 @@ Notes:
 
 - `config init` now guides you through the required SSH values and ends with a
   config summary plus next steps
-- `config show` prints the resolved result
+- `config show` prints the resolved result as syntax-highlighted TOML in
+  human-readable mode
+- `launchpad --json config show` keeps the plain JSON payload for scripting
 - `config show --docs` prints the documented schema
 - `config edit` and `config validate` are scaffolded but not implemented yet
 
