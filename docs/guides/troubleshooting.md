@@ -80,6 +80,22 @@ Then rerun:
 launchpad doctor
 ```
 
+## `doctor` says the remote workspace root is missing or not writable
+
+Launchpad checks `cluster.workspace_root` when you set it. If that value is
+unset, Launchpad falls back to `<cluster.shared_root>/<ssh.username>`.
+
+Fixes:
+
+- set `cluster.workspace_root` to the writable shared Launchpad directory,
+  such as `/shared/launchpad`
+- or create and grant access to the legacy fallback path
+
+Then rerun:
+
+```powershell
+launchpad doctor
+```
 ## `status`, `logs`, or `cancel` says a SLURM command was not found
 
 Launchpad runs `squeue`, `sacct`, and `scancel` through the cluster login
@@ -172,7 +188,9 @@ launchpad config show
 
 ## `ls` or `cleanup` cannot resolve a default remote path
 
-Those commands need `ssh.username` when you do not pass an absolute remote
-path.
+Those commands use `cluster.workspace_root` when it is configured. Otherwise
+they fall back to `<cluster.shared_root>/<ssh.username>`, which still requires
+`ssh.username`.
 
-Fix the username in your config, or pass an explicit absolute remote path.
+Fix `cluster.workspace_root` or the username in your config, or pass an
+explicit absolute remote path.

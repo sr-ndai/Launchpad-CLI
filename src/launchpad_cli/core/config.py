@@ -100,6 +100,14 @@ class ClusterConfig(LaunchpadBaseModel):
         default="/shared",
         description="Root path of the shared cluster filesystem.",
     )
+    workspace_root: str | None = Field(
+        default=None,
+        description=(
+            "Optional writable Launchpad workspace root on the shared filesystem, "
+            "for example /shared/launchpad. Falls back to <cluster.shared_root>/<ssh.username> "
+            "when unset."
+        ),
+    )
     default_partition: str = Field(
         default="simulation-r6i-8x",
         description="Default SLURM partition for submissions.",

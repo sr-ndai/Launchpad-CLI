@@ -40,6 +40,7 @@ from launchpad_cli.core.transfer import (
     striped_upload,
     upload_many,
 )
+from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import build_console, render_submit_confirmation, render_submit_dry_run
 from launchpad_cli.solvers import AnsysAdapter, DiscoveredInput, NastranAdapter, SolverAdapter, SubmitOverrides
 
@@ -587,13 +588,7 @@ def _collect_package_files(
 def _build_remote_layout(config: LaunchpadConfig, *, run_name: str) -> RemoteJobLayout:
     """Resolve the remote job layout from the config and run name."""
 
-    username = config.ssh.username
-    if not username:
-        raise click.ClickException(
-            "Submit requires `ssh.username` to resolve the remote job directory."
-        )
-
-    remote_job_dir = str(Path(config.cluster.shared_root) / username / run_name).replace("\\", "/")
+    remote_job_dir = str(PurePosixPath(resolve_remote_workspace_root(config)) / run_name)
     return build_remote_job_layout(
         remote_job_dir=remote_job_dir,
         logs_subdir=config.cluster.logs_subdir,

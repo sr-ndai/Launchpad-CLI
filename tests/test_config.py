@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import json
 from click.testing import CliRunner
 from loguru import logger
+from rich.syntax import Syntax
 
 from launchpad_cli.cli import cli
-from launchpad_cli.core.config import render_config_docs, resolve_config
+from launchpad_cli.cli import config_cmd as config_cmd_module
+from launchpad_cli.core.config import LaunchpadConfig, SSHConfig, dumps_toml, render_config_docs, resolve_config
 from launchpad_cli.core.logging import configure_logging
+from launchpad_cli.core.workspace import resolve_remote_workspace_root
 
 
 def test_resolve_config_honors_documented_precedence(tmp_path: Path) -> None:
@@ -113,8 +117,35 @@ def test_render_config_docs_includes_key_paths() -> None:
 
     assert "ssh.host" in docs
     assert "cluster.default_partition" in docs
+    assert "cluster.workspace_root" in docs
     assert "remote_binaries.sbatch" in docs
     assert "solvers.nastran.logs.solver" in docs
+
+
+def test_resolve_remote_workspace_root_prefers_configured_root() -> None:
+    """Configured workspace roots should override the legacy username fallback."""
+
+    root = resolve_remote_workspace_root(
+        LaunchpadConfig(
+            cluster={"workspace_root": "/shared/launchpad"},
+            ssh=SSHConfig(username="sergey"),
+        )
+    )
+
+    assert root == "/shared/launchpad"
+
+
+def test_resolve_remote_workspace_root_falls_back_to_shared_root_username() -> None:
+    """Unset workspace roots should preserve the legacy shared_root/username behavior."""
+
+    root = resolve_remote_workspace_root(
+        LaunchpadConfig(
+            cluster={"shared_root": "/shared"},
+            ssh=SSHConfig(username="sergey"),
+        )
+    )
+
+    assert root == "/shared/sergey"
 
 
 def test_configure_logging_writes_debug_logs(tmp_path: Path) -> None:
@@ -203,3 +234,75 @@ def test_config_show_supports_docs_output() -> None:
     assert result.exit_code == 0
     assert "ssh.host" in result.output
     assert "submit.solver" in result.output
+
+
+def test_config_show_renders_syntax_highlighted_toml(monkeypatch) -> None:
+    """Human-readable config show should print a Rich TOML syntax renderable."""
+
+    printed: dict[str, object] = {}
+    expected = {"ssh": {"host": "cluster.example.com", "username": "sergey"}}
+
+    class FakeConsole:
+        def print(self, renderable) -> None:  # type: ignore[no-untyped-def]
+            printed["renderable"] = renderable
+
+    monkeypatch.setattr(config_cmd_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        config_cmd_module,
+        "resolve_config",
+        lambda **kwargs: type("Resolved", (), {"as_dict": lambda self: expected})(),
+    )
+    monkeypatch.setattr(config_cmd_module, "build_console", lambda **kwargs: FakeConsole())
+
+    result = CliRunner().invoke(cli, ["config", "show"])
+
+    assert result.exit_code == 0
+    renderable = printed["renderable"]
+    assert isinstance(renderable, Syntax)
+    assert renderable.lexer.name.lower() == "toml"
+    assert renderable.code == dumps_toml(expected)
+
+
+def test_config_show_honors_existing_no_color_behavior(monkeypatch) -> None:
+    """The highlighted config path should still rely on the existing no-color console flag."""
+
+    captured: dict[str, object] = {}
+
+    class FakeConsole:
+        def print(self, renderable) -> None:  # type: ignore[no-untyped-def]
+            captured["renderable"] = renderable
+
+    monkeypatch.setattr(config_cmd_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        config_cmd_module,
+        "resolve_config",
+        lambda **kwargs: type("Resolved", (), {"as_dict": lambda self: {"ssh": {"host": "cluster"}}})(),
+    )
+
+    def fake_build_console(**kwargs):  # type: ignore[no-untyped-def]
+        captured["no_color"] = kwargs["no_color"]
+        return FakeConsole()
+
+    monkeypatch.setattr(config_cmd_module, "build_console", fake_build_console)
+
+    result = CliRunner().invoke(cli, ["--no-color", "config", "show"])
+
+    assert result.exit_code == 0
+    assert captured["no_color"] is True
+    assert isinstance(captured["renderable"], Syntax)
+
+
+def test_config_show_preserves_json_output(monkeypatch) -> None:
+    """The root JSON branch for config show should remain plain JSON."""
+
+    monkeypatch.setattr(config_cmd_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        config_cmd_module,
+        "resolve_config",
+        lambda **kwargs: type("Resolved", (), {"as_dict": lambda self: {"ssh": {"host": "cluster"}}})(),
+    )
+
+    result = CliRunner().invoke(cli, ["--json", "config", "show"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {"ssh": {"host": "cluster"}}

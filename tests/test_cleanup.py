@@ -287,3 +287,48 @@ async def test_run_cleanup_rejects_non_terminal_jobs(
             yes=True,
             json_output=False,
         )
+
+
+@pytest.mark.asyncio
+async def test_run_cleanup_discovers_configured_workspace_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Cleanup discovery should scan the configured workspace root when present."""
+
+    resolved = ResolvedConfig(
+        config=LaunchpadConfig(
+            cluster={"workspace_root": "/shared/launchpad"},
+            ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+        ),
+        layers=(),
+    )
+    recorded: dict[str, object] = {}
+
+    monkeypatch.setattr(cleanup_module, "resolve_config", lambda **kwargs: resolved)
+    monkeypatch.setattr(cleanup_module.click, "prompt", lambda *args, **kwargs: "none")
+
+    @asynccontextmanager
+    async def fake_ssh_session(_config: SSHConfig):  # type: ignore[no-untyped-def]
+        yield object()
+
+    async def fake_list_remote_directory(conn, path: str, *, recursive: bool, **kwargs):  # type: ignore[no-untyped-def]
+        recorded["path"] = path
+        recorded["recursive"] = recursive
+        return ()
+
+    monkeypatch.setattr(cleanup_module, "ssh_session", fake_ssh_session)
+    monkeypatch.setattr(cleanup_module, "list_remote_directory", fake_list_remote_directory)
+
+    result = await cleanup_module._run_cleanup(
+        cwd=tmp_path,
+        env={},
+        console=cleanup_module.build_console(no_color=True),
+        job_ids=(),
+        older_than=None,
+        yes=True,
+        json_output=False,
+    )
+
+    assert recorded == {"path": "/shared/launchpad", "recursive": False}
+    assert result.deleted_paths == ()

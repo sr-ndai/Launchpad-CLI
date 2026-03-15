@@ -1308,6 +1308,11 @@ design gate.
 - [ ] Reopen Phase 8 again with a scheduler-shell follow-up which makes
   Launchpad execute SLURM commands through the same login-shell environment
   operators rely on manually
+- [ ] Reopen Phase 8 again with a workspace-root follow-up which separates
+  Launchpad's writable remote workspace from `cluster.shared_root` and
+  `ssh.username`
+- [ ] Reopen Phase 8 again with a config-show follow-up which adds Rich TOML
+  syntax highlighting to the human-readable resolved config output
 
 **Milestone:** Multi-file jobs remain one SLURM array submit, but every task is
 addressable by a human-friendly reference and every solver-log lookup is driven

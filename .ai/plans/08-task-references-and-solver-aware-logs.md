@@ -134,3 +134,64 @@ lookup and an interactive multi-task log selection flow.
   shell, from non-scheduler binaries like `tar` and `zstd`, which should keep
   the existing non-interactive exec behavior unless a later requirement says
   otherwise.
+
+## Revision 2026-03-14 (Workspace Root Follow-up)
+
+### Follow-up Scope
+
+- Reopen Phase 8 with task `8.6` after field debugging showed that Launchpad
+  still assumes the writable remote workspace lives at
+  `<cluster.shared_root>/<ssh.username>`, which is not true on the reported
+  cluster.
+- Introduce a dedicated configurable workspace-root setting so operators can
+  point Launchpad at a writable shared directory such as `/shared/launchpad`
+  without changing the SSH login username or overloading `cluster.shared_root`.
+- Reuse that shared workspace-root resolution everywhere Launchpad currently
+  derives the default remote root from `shared_root` plus `ssh.username`,
+  including submit job-directory creation, doctor writable-root checks, remote
+  listing defaults, and cleanup discovery.
+- Add docs and regression coverage for the new workspace-root model and the
+  backward-compatible fallback behavior.
+
+### Task Breakdown Addendum
+
+| Task ID | Title | Why It Exists | Depends On |
+|---------|-------|---------------|------------|
+| 8.6 | Configurable remote workspace root | Field debugging showed that Launchpad hardcodes the writable remote root as `<shared_root>/<ssh.username>`, but some clusters expose a different shared writable directory such as `/shared/launchpad`. | 8.5 |
+
+### Additional Risks
+
+- Repointing only `doctor` would leave `submit`, `ls`, and `cleanup` deriving
+  incompatible remote roots, so the workspace-root logic has to be centralized
+  and reused across commands.
+- Overloading `cluster.shared_root` would blur the distinction between the
+  shared filesystem mount and the Launchpad-managed writable workspace, which
+  would make docs and future config harder to reason about.
+
+## Revision 2026-03-14 (Config Show Syntax Follow-up)
+
+### Follow-up Scope
+
+- Reopen Phase 8 with task `8.7` after field feedback showed that
+  `launchpad config show` still prints raw TOML text instead of using Rich
+  syntax highlighting for the human-readable resolved-config view.
+- Add real TOML syntax highlighting to the non-JSON `config show` path while
+  preserving the existing plain structured outputs for `--json` and `--docs`.
+- Keep the change scoped to the presentation layer for resolved config output;
+  do not change config resolution, serialization semantics, or machine-facing
+  output formats.
+- Add docs and regression coverage for the highlighted `config show`
+  experience.
+
+### Task Breakdown Addendum
+
+| Task ID | Title | Why It Exists | Depends On |
+|---------|-------|---------------|------------|
+| 8.7 | Syntax-highlighted config show output | Field feedback showed that `launchpad config show` still renders resolved TOML as plain text, making the primary human config-inspection path harder to scan than the rest of the Rich-based CLI. | 8.6 |
+
+### Additional Risks
+
+- If the highlighting path changes `--json` or `--docs`, it would regress the
+  machine-friendly and copy/paste-friendly config surfaces that already work.
+- If the implementation bypasses the shared console/no-color behavior, it can
+  produce inconsistent output under `--no-color` or `NO_COLOR`.
