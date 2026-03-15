@@ -1381,8 +1381,16 @@ without regressing clusters that lack SLURM accounting.
 - [ ] Wire spinner for local decompression in `lp download` using
   `asyncio.to_thread()`
 
-**Milestone:** Every long-running I/O step in `lp submit` and `lp download`
-shows a spinner or progress bar; no step is silent.
+- [ ] Audit and improve all `click.ClickException` messages to include
+  actionable suggestions where warranted
+- [ ] Add spinners to slow remote operations in `ls`, `cleanup`, and `logs`
+  that currently run without user feedback
+- [ ] Replace `click.echo("Interrupted.")` in `status`, `logs`, and `download`
+  with `console.print()` calls that respect `--quiet` and `--no-color`
+
+**Milestone:** Every long-running operation shows a spinner or progress bar;
+every error message includes an actionable suggestion; no output bypasses the
+design system's quiet/color controls.
 
 ---
 
