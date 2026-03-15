@@ -63,4 +63,4 @@
 | 9.7 | 9 | Help, docs, and regression hardening | done | 9.5, 9.6 | task/9.7-help-docs-and-regression-hardening | — |
 | 10.1 | 10 | Nastran env exports and live running-job metrics | done | — | task/10.1-nastran-env-and-live-metrics | — |
 | 11.1 | 11 | Transfer progress indicators | done | — | task/11.1-transfer-progress-indicators | — |
-| 11.2 | 11 | UI consistency sweep | ready | 11.1 | task/11.2-ui-consistency-sweep | — |
+| 11.2 | 11 | UI consistency sweep | done | 11.1 | task/11.2-ui-consistency-sweep | — |
