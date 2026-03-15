@@ -1279,46 +1279,68 @@ design gate.
 - Vercel CLI for discoverable onboarding and command affordances
 - uv for terse, confidence-building completion messaging
 
-### Phase 8: Task References & Solver-Aware Logs (Week 13)
+### Phase 8: Task References & Solver-Aware Logs (Completed on `main`)
 
-- [ ] Write a remote `launchpad-manifest.json` for each submitted job that
+- [x] Write a remote `launchpad-manifest.json` for each submitted job that
   persists the solver key, the resolved solver-log catalog, and per-task
   reference metadata
-- [ ] Make filename stem the default per-task display reference while always
+- [x] Make filename stem the default per-task display reference while always
   generating a zero-padded alias such as `001`, `002`, and preserving raw
   SLURM task IDs
-- [ ] Disambiguate duplicate stems deterministically and surface label, alias,
+- [x] Disambiguate duplicate stems deterministically and surface label, alias,
   and numeric task ID together in multi-input submit/status UX
-- [ ] Add per-solver log configuration under `solvers.<solver>.logs`, with
+- [x] Add per-solver log configuration under `solvers.<solver>.logs`, with
   Nastran defaulting to `solver=.f06` and `telemetry=.f04`
-- [ ] Make `launchpad logs` resolve solver-log paths from submitted solver
+- [x] Make `launchpad logs` resolve solver-log paths from submitted solver
   metadata instead of inferring only from `run_name`
-- [ ] Add `--log-kind KIND` while keeping `--solver-log` as the primary-log
+- [x] Add `--log-kind KIND` while keeping `--solver-log` as the primary-log
   alias and preserving `--err` as the SLURM stderr path
-- [ ] Expand task selectors across `logs`, `download --tasks`, and `cancel`
+- [x] Expand task selectors across `logs`, `download --tasks`, and `cancel`
   so users can address tasks by alias, stem, filename, relative path, or raw
   task ID
-- [ ] Add a themed interactive picker for human multi-task `logs` invocations
+- [x] Add a themed interactive picker for human multi-task `logs` invocations
   when no task selector is supplied
-- [ ] Preserve backward compatibility for numeric task IDs, existing JSON
+- [x] Preserve backward compatibility for numeric task IDs, existing JSON
   payloads, and legacy jobs that predate the manifest
-- [ ] Reopen Phase 8 with a cluster-access follow-up which makes `doctor`
+- [x] Reopen Phase 8 with a cluster-access follow-up which makes `doctor`
   validate the same remote exec environment used by Launchpad commands and
   moves Windows `launchpad ssh` onto the local OpenSSH client
-- [ ] Reopen Phase 8 again with a scheduler-shell follow-up which makes
+- [x] Reopen Phase 8 again with a scheduler-shell follow-up which makes
   Launchpad execute SLURM commands through the same login-shell environment
   operators rely on manually
-- [ ] Reopen Phase 8 again with a workspace-root follow-up which separates
+- [x] Reopen Phase 8 again with a workspace-root follow-up which separates
   Launchpad's writable remote workspace from `cluster.shared_root` and
   `ssh.username`
-- [ ] Reopen Phase 8 again with a config-show follow-up which adds Rich TOML
+- [x] Reopen Phase 8 again with a config-show follow-up which adds Rich TOML
   syntax highlighting to the human-readable resolved config output
-- [ ] Reopen Phase 8 again with a SLURM parser follow-up which stops treating
+- [x] Reopen Phase 8 again with a SLURM parser follow-up which stops treating
   host-style scheduler fields as integers in shared status/accounting parsing
 
 **Milestone:** Multi-file jobs remain one SLURM array submit, but every task is
 addressable by a human-friendly reference and every solver-log lookup is driven
 by explicit submitted metadata instead of naming heuristics.
+
+### Phase 9: CLI Visual Overhaul (Week 14)
+
+- [ ] Replace the current panel-heavy Phase 7 rendering with a restrained,
+  semantic design system built on shared display primitives
+- [ ] Keep bare `launchpad` as the only branded wordmark surface while moving
+  all other human-readable output to the new visual grammar
+- [ ] Redesign the full human-facing CLI surface area except the interactive
+  `launchpad ssh` session body itself
+- [ ] Change default human `launchpad config show` from syntax-highlighted TOML
+  to a sectioned summary while preserving `--json` and `--docs`
+- [ ] Rework submit, status, and download around one-hero-panel max, borderless
+  tables, inline metadata, and shared progress/spinner helpers
+- [ ] Bring logs, ls, cancel, and cleanup into the same restrained layout,
+  especially for empty states, destructive confirmations, and live log reading
+- [ ] Preserve command names, flags, exit codes, JSON payloads, selector
+  behavior, `--quiet`, `--no-color`, and non-TTY behavior throughout
+- [ ] Refresh help, docs, and CLI regression coverage to match the new output
+
+**Milestone:** Launchpad keeps the Phase 8 behavior and machine interfaces
+intact, but every human-readable surface now feels like one coherent, modern
+CLI with welcome-only branding and consistent display primitives.
 
 ---
 
