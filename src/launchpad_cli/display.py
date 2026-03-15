@@ -3,15 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping, Sequence
-
+from typing import Any, Mapping, Sequence
 from rich.console import Console, Group
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
+from rich.prompt import Confirm, Prompt
+from rich.rule import Rule
+from rich.status import Status
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
+from launchpad_cli import __version__
 from launchpad_cli.core.job_manifest import TaskReference
 from launchpad_cli.solvers import DiscoveredInput
 
@@ -25,12 +36,25 @@ PALETTE = {
     "amber": "#f0b45a",
     "red": "#df6d57",
 }
+
+C_SUCCESS = PALETTE["green"]
+C_ERROR = PALETTE["red"]
+C_WARN = PALETTE["amber"]
+C_INFO = PALETTE["cyan"]
+C_ACCENT = PALETTE["cyan"]
+C_MUTED = PALETTE["mist"]
+C_LABEL = f"bold {PALETTE['ice']}"
+C_VALUE = PALETTE["ice"]
+DEFAULT_INDENT = 2
+DEFAULT_LABEL_WIDTH = 16
+
 LAUNCHPAD_THEME = Theme(
     {
         "lp.brand.primary": f"bold {PALETTE['ice']}",
         "lp.brand.secondary": f"bold {PALETTE['cyan']}",
         "lp.brand.accent": f"bold {PALETTE['amber']}",
         "lp.brand.subtle": f"dim {PALETTE['mist']}",
+        "lp.rule": f"dim {PALETTE['mist']}",
         "lp.panel.border": PALETTE["cyan"],
         "lp.panel.border.success": PALETTE["green"],
         "lp.panel.border.warn": PALETTE["amber"],
@@ -43,6 +67,13 @@ LAUNCHPAD_THEME = Theme(
         "lp.badge.neutral": f"bold {PALETTE['ink']} on {PALETTE['mist']}",
         "lp.label": f"bold {PALETTE['ice']}",
         "lp.value": PALETTE["ice"],
+        "lp.text.label": f"dim {PALETTE['mist']}",
+        "lp.text.detail": f"dim {PALETTE['mist']}",
+        "lp.status.success": f"bold {PALETTE['green']}",
+        "lp.status.error": f"bold {PALETTE['red']}",
+        "lp.status.warn": f"bold {PALETTE['amber']}",
+        "lp.status.info": f"bold {PALETTE['cyan']}",
+        "lp.status.pending": f"dim {PALETTE['mist']}",
     }
 )
 STATUS_TONES = {
@@ -53,14 +84,22 @@ STATUS_TONES = {
     "CANCELLED": "danger",
     "TIMEOUT": "danger",
 }
+STATUS_SYMBOLS = {
+    "success": ("✓", "PASS"),
+    "error": ("✗", "FAIL"),
+    "running": ("●", "RUN"),
+    "pending": ("○", "WAIT"),
+    "warn": ("▲", "WARN"),
+    "muted": ("—", "N/A"),
+    "next": ("→", "->"),
+}
 GET_STARTED_BREADCRUMB = (
     "Get started: launchpad config init -> doctor -> submit --dry-run ."
 )
 WELCOME_COMMANDS = (
-    ("submit", "Package a run and preview the SLURM handoff."),
-    ("status", "Watch the queue and inspect task state."),
-    ("download", "Pull completed results back to your machine."),
-    ("doctor", "Check config, SSH, and cluster readiness."),
+    ("launchpad submit", "Compress, upload, and submit a job."),
+    ("launchpad status [JOB_ID]", "Check job status."),
+    ("launchpad doctor", "Verify your setup."),
 )
 _FULL_WORDMARK_LINES = (
     "    __                           __                    __",
@@ -71,6 +110,7 @@ _FULL_WORDMARK_LINES = (
     "                                  /_/",
 )
 _COMPACT_WORDMARK = "Launchpad"
+ROOT_HELP_FOOTER = "Use launchpad <command> --help for command-specific examples."
 
 
 def build_console(*, stderr: bool = False, no_color: bool = False) -> Console:
@@ -110,38 +150,258 @@ def build_launchpad_wordmark(*, width: int | None = None) -> Text | None:
     return text
 
 
+def _symbol(name: str, *, no_color: bool = False) -> str:
+    symbol, fallback = STATUS_SYMBOLS[name]
+    return fallback if no_color else symbol
+
+
+def _status_style(name: str, *, no_color: bool = False) -> str | None:
+    if no_color:
+        return None
+
+    mapping = {
+        "success": "lp.status.success",
+        "error": "lp.status.error",
+        "running": "lp.status.success",
+        "pending": "lp.status.pending",
+        "warn": "lp.status.warn",
+        "muted": "lp.brand.subtle",
+        "next": "lp.status.info",
+    }
+    return mapping.get(name)
+
+
+def build_section_rule(title: str) -> Rule:
+    """Return the restrained ruled section header introduced for Phase 9."""
+
+    return Rule(title, style="lp.rule", align="left")
+
+
+def build_inline_kv(
+    label: str,
+    value: object,
+    *,
+    label_width: int = DEFAULT_LABEL_WIDTH,
+    indent: int = DEFAULT_INDENT,
+) -> Text:
+    """Return an aligned key/value line suitable for hero cards and summaries."""
+
+    text = Text(" " * indent)
+    text.append(f"{label:<{label_width}}", style="lp.text.label")
+    text.append(f" {value}", style="lp.value")
+    return text
+
+
+def build_kv_group(
+    rows: Sequence[tuple[str, object]],
+    *,
+    label_width: int = DEFAULT_LABEL_WIDTH,
+    indent: int = DEFAULT_INDENT,
+) -> Group:
+    """Return a stack of aligned key/value rows."""
+
+    return Group(
+        *(build_inline_kv(label, value, label_width=label_width, indent=indent) for label, value in rows)
+    )
+
+
+def build_status_line(
+    tone: str,
+    label: str,
+    detail: str | None = None,
+    *,
+    indent: int = DEFAULT_INDENT,
+    no_color: bool = False,
+    emphasize_label: bool = True,
+) -> Text:
+    """Return an inline status line with a symbol or no-color fallback token."""
+
+    text = Text(" " * indent)
+    text.append(_symbol(tone, no_color=no_color), style=_status_style(tone, no_color=no_color))
+    text.append("  ")
+    text.append(label, style="lp.label" if emphasize_label and not no_color else None)
+    if detail:
+        if label:
+            text.append(" ")
+        text.append(detail, style="lp.text.detail" if not no_color else None)
+    return text
+
+
+def build_action_line(
+    command: str,
+    detail: str | None = None,
+    *,
+    indent: int = DEFAULT_INDENT,
+    no_color: bool = False,
+) -> Text:
+    """Return a copy-friendly action line used by welcome and next-step lists."""
+
+    text = Text(" " * indent)
+    text.append(_symbol("next", no_color=no_color), style=_status_style("next", no_color=no_color))
+    text.append(" ")
+    text.append(command, style="lp.label" if not no_color else None)
+    if detail:
+        text.append(f"  {detail}", style="lp.text.detail" if not no_color else None)
+    return text
+
+
+def build_next_steps(
+    steps: Sequence[str],
+    *,
+    title: str = "Next",
+    no_color: bool = False,
+) -> Group:
+    """Return the lightweight next-step list introduced for Phase 9."""
+
+    renderables: list[Any] = [build_section_rule(title)]
+    renderables.extend(build_action_line(step, no_color=no_color) for step in steps)
+    return Group(*renderables)
+
+
+def make_table(**kwargs: object) -> Table:
+    """Create a pre-styled borderless table."""
+
+    defaults: dict[str, object] = {
+        "show_header": True,
+        "header_style": "bold",
+        "show_edge": False,
+        "show_lines": False,
+        "pad_edge": False,
+        "padding": (0, 2),
+        "box": None,
+    }
+    defaults.update(kwargs)
+    return Table(**defaults)  # type: ignore[arg-type]
+
+
+def build_hero_panel(
+    title: str,
+    rows: Sequence[tuple[str, object]],
+    *,
+    tone: str = "accent",
+    label_width: int = DEFAULT_LABEL_WIDTH,
+) -> Panel:
+    """Return the single emphasized summary panel allowed in the new grammar."""
+
+    border_style = {
+        "success": "lp.panel.border.success",
+        "warn": "lp.panel.border.warn",
+        "danger": "lp.panel.border.danger",
+    }.get(tone, "lp.panel.border")
+    return Panel(
+        build_kv_group(rows, label_width=label_width),
+        title=title,
+        title_align="left",
+        border_style=border_style,
+        padding=(1, 2),
+    )
+
+
+def build_error_block(
+    message: str,
+    suggestion: str | None = None,
+    *,
+    no_color: bool = False,
+) -> Group:
+    """Return the restrained error block used by later Phase 9 tasks."""
+
+    renderables: list[Any] = [build_status_line("error", "", message, no_color=no_color, emphasize_label=False)]
+    if suggestion:
+        for line in suggestion.splitlines():
+            renderables.append(Text(f"     {line}", style="lp.text.detail" if not no_color else None))
+    return Group(*renderables)
+
+
+def build_success_line(message: str, *, no_color: bool = False) -> Text:
+    """Return a single-line success message."""
+
+    return build_status_line("success", "", message, no_color=no_color, emphasize_label=False)
+
+
+def build_warning_line(message: str, *, no_color: bool = False) -> Text:
+    """Return a single-line warning message."""
+
+    return build_status_line("warn", "", message, no_color=no_color, emphasize_label=False)
+
+
+def build_progress() -> Progress:
+    """Return the shared minimal progress bar configuration for later tasks."""
+
+    return Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=32, complete_style=C_SUCCESS, finished_style=C_SUCCESS, style=C_ACCENT),
+        TaskProgressColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+    )
+
+
+def build_spinner(console: Console, message: str) -> Status:
+    """Return the shared spinner surface for short indeterminate work."""
+
+    return console.status(message, spinner="dots")
+
+
+def confirm_action(message: str, *, default: bool = False) -> bool:
+    """Prompt for confirmation using the shared builder-compatible surface."""
+
+    return Confirm.ask(message, default=default)
+
+
+def prompt_text(message: str, *, default: str | None = None) -> str:
+    """Prompt for a text value using the shared builder-compatible surface."""
+
+    if default is None:
+        return Prompt.ask(message)
+    return Prompt.ask(message, default=default)
+
+
+def build_root_help_footer() -> Text:
+    """Return the restrained root help footer."""
+
+    return Text(ROOT_HELP_FOOTER, style="lp.text.detail")
+
+
 def build_get_started_text(*, subdued: bool = False) -> Text:
-    """Return the shared Phase 7 onboarding breadcrumb."""
+    """Return the legacy onboarding breadcrumb for transitional compatibility."""
 
     style = "lp.brand.subtle" if subdued else "lp.brand.primary"
     return Text(GET_STARTED_BREADCRUMB, style=style)
 
 
-def build_welcome_screen(*, show_wordmark: bool, width: int | None = None) -> Group:
-    """Build the non-interactive root welcome surface."""
+def build_welcome_screen(
+    *,
+    show_wordmark: bool,
+    width: int | None = None,
+    no_color: bool = False,
+) -> Group:
+    """Build the restrained root welcome surface for bare `launchpad`."""
 
-    commands = Table.grid(padding=(0, 2))
-    commands.add_column(style="lp.label", no_wrap=True)
-    commands.add_column(style="lp.value")
-    for name, detail in WELCOME_COMMANDS:
-        commands.add_row(name, detail)
-
-    renderables = []
+    renderables: list[Any] = []
     if show_wordmark:
         wordmark = build_launchpad_wordmark(width=width)
         if wordmark is not None:
             renderables.append(wordmark)
-    renderables.append(
-        Text("From folder to cluster in one command.", style="lp.brand.secondary")
-    )
+            renderables.append(Text(f"Launchpad  v{__version__}", style="lp.brand.subtle"))
+
+    if not renderables:
+        title = Text()
+        title.append("Launchpad", style="lp.brand.secondary" if not no_color else None)
+        title.append(f"  v{__version__}", style="lp.text.detail" if not no_color else None)
+        renderables.append(title)
+
+    renderables.append(Text())
     renderables.append(
         Text(
-            "Use launchpad <command> --help for command-specific help.",
-            style="lp.brand.subtle",
+            "Submit, monitor, and retrieve solver jobs on your SLURM cluster.",
+            style="lp.value" if not no_color else None,
         )
     )
-    renderables.append(build_detail_panel(commands, title="Key Commands"))
-    renderables.append(build_get_started_text())
+    renderables.append(Text())
+    for command, detail in WELCOME_COMMANDS:
+        renderables.append(build_action_line(command, detail, no_color=no_color))
+    renderables.append(Text())
+    renderables.append(Text("Run launchpad -h for all commands.", style="lp.text.detail" if not no_color else None))
     return Group(*renderables)
 
 
