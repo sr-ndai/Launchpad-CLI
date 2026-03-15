@@ -29,6 +29,9 @@ None.
 - last processed builder session: `2026-03-14-1805-builder-8.8.md`
 
 ## What Changed Recently
+- Opened PR `#12` from `phase/08-task-references-and-solver-aware-logs` to
+  `main` for the post-merge `8.8` follow-up after confirming that PR `#11`
+  had already been merged into `main` on 2026-03-15.
 - Accepted task `8.8` after review and prompt verification, then merged
   `task/8.8-slurm-parser-hardening` into the phase branch.
 - Phase 8 now also includes the shared SLURM parser hardening for the
@@ -109,7 +112,7 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review PR `#11` from
+Human should review PR `#12` from
 `phase/08-task-references-and-solver-aware-logs` to `main`, now including the
 workspace-root follow-up from task `8.6`, the syntax-highlighted `config show`
 follow-up from task `8.7`, and the shared SLURM parser hardening from
@@ -118,8 +121,9 @@ task `8.8`.
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1807-coordinator-accept-8.8-update-pr.md`
-4. `.ai/reviews/8.8.md`
-5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-6. `.ai/plan.md`
-7. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1808-coordinator-open-phase-8-pr-12.md`
+4. `.ai/sessions/2026-03-14-1807-coordinator-accept-8.8-update-pr.md`
+5. `.ai/reviews/8.8.md`
+6. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+7. `.ai/plan.md`
+8. `.ai/git-rules.md`
