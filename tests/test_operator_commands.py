@@ -119,8 +119,10 @@ def test_doctor_command_groups_results_and_points_to_next_steps(
     assert "Local Setup" in result.output
     assert "Cluster Access" in result.output
     assert "Config Resolution" in result.output
+    assert "skipped (SSH not configured)" in result.output
     assert "3 checks:" in result.output
     assert "Next" in result.output
+    assert "Run `launchpad config init`." in result.output
     assert "launchpad config init" in result.output
     assert "launchpad doctor" in result.output
 
