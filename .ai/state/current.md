@@ -9,14 +9,14 @@
 2026-03-15
 
 ## Active Phase
-None — awaiting next planned phase
+Phase 11 — Transfer Progress Indicators
 
 ## Active Task
-None — no Builder work assigned
+11.1 — Transfer progress indicators (`ready`, available for Builder)
 
 ## Queue Snapshot
 - pending: —
-- ready: —
+- ready: 11.1
 - in-progress: —
 - needs-review: —
 - revision-needed: —
@@ -24,27 +24,25 @@ None — no Builder work assigned
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `main`
-- active task branch: `none`
+- coordination branch: `phase/11-transfer-progress-indicators`
+- active task branch: `none` (Builder must create `task/11.1-transfer-progress-indicators`)
 - last processed builder session: `2026-03-15-1228-builder-10.1.md`
 
 ## What Changed Recently
-- PR `#14` (`Phase 10: cluster env and live metrics`) was merged into `main`
-  on 2026-03-15.
-- Phase 10 landed the deferred Nastran environment-export and live
-  running-metrics follow-up on `main` with docs, diagnostics, and regression
-  coverage included.
-- The phase branch and task branch were closed after merge, and no new phase or
-  Builder task has been created yet.
+- Phase 11 opened on 2026-03-15.
+- Task 11.1 (`transfer progress indicators`) is `ready` for Builder assignment.
+- Phase plan written at `.ai/plans/11-transfer-progress-indicators.md`.
+- Task prompt written at `.ai/tasks/prompts/11.1.md`.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Coordinator should plan the next phase or the human should define the next
-priority before assigning more Builder work.
+Builder should create `task/11.1-transfer-progress-indicators` from the phase
+branch, implement per the prompt, and signal `READY_FOR_REVIEW`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
-2. `.ai/plan.md`
-3. `.ai/tasks/queue.md`
+2. `.ai/tasks/prompts/11.1.md`
+3. `.ai/plan.md`
+4. `.ai/tasks/queue.md`

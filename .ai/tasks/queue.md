@@ -62,3 +62,4 @@
 | 9.6 | 9 | Logs and utility command redesign | done | 9.5 | task/9.6-logs-and-utility-command-redesign | — |
 | 9.7 | 9 | Help, docs, and regression hardening | done | 9.5, 9.6 | task/9.7-help-docs-and-regression-hardening | — |
 | 10.1 | 10 | Nastran env exports and live running-job metrics | done | — | task/10.1-nastran-env-and-live-metrics | — |
+| 11.1 | 11 | Transfer progress indicators | ready | — | task/11.1-transfer-progress-indicators | — |
