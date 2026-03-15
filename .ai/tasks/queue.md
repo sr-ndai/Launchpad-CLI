@@ -54,9 +54,9 @@
 | 8.6 | 8 | Configurable remote workspace root | done | 8.5 | task/8.6-configurable-workspace-root | — |
 | 8.7 | 8 | Syntax-highlighted config show output | done | 8.6 | task/8.7-config-show-syntax-highlighting | — |
 | 8.8 | 8 | Harden SLURM numeric field parsing | done | 8.7 | task/8.8-slurm-parser-hardening | — |
-| 9.1 | 9 | Display foundation and root shell | in-progress | — | task/9.1-display-foundation-and-root-shell | Builder |
-| 9.2 | 9 | Onboarding, config, and diagnostics redesign | pending | 9.1 | task/9.2-onboarding-config-doctor-redesign | — |
-| 9.3 | 9 | Submit and status redesign | pending | 9.1 | task/9.3-submit-and-status-redesign | — |
+| 9.1 | 9 | Display foundation and root shell | done | — | task/9.1-display-foundation-and-root-shell | — |
+| 9.2 | 9 | Onboarding, config, and diagnostics redesign | in-progress | 9.1 | task/9.2-onboarding-config-doctor-redesign | Builder |
+| 9.3 | 9 | Submit and status redesign | ready | 9.1 | task/9.3-submit-and-status-redesign | — |
 | 9.4 | 9 | Download and transfer feedback redesign | pending | 9.1, 9.3 | task/9.4-download-and-transfer-feedback-redesign | — |
 | 9.5 | 9 | Logs and utility command redesign | pending | 9.1, 9.4 | task/9.5-logs-and-utility-command-redesign | — |
 | 9.6 | 9 | Help, docs, and regression hardening | pending | 9.2, 9.3, 9.4, 9.5 | task/9.6-help-docs-and-regression-hardening | — |
