@@ -26,6 +26,7 @@ class NastranAdapter:
     log_catalog: dict[str, str] = field(
         default_factory=lambda: {"solver": ".f06", "telemetry": ".f04"}
     )
+    configured_env: dict[str, str] = field(default_factory=dict)
 
     def discover_inputs(self, input_dir: Path) -> list[DiscoveredInput]:
         """Discover Nastran inputs using the configured extension rules."""
@@ -62,14 +63,16 @@ class NastranAdapter:
         return " ".join(arguments)
 
     def build_scratch_env(self, scratch_dir: str) -> dict[str, str]:
-        """Return shared-filesystem scratch environment variables."""
+        """Return shared-filesystem scratch variables plus configured environment."""
 
-        return {
+        env = {
             "NASTRAN_SCRATCH": scratch_dir,
             "TMPDIR": scratch_dir,
             "TMP": scratch_dir,
             "TEMP": scratch_dir,
         }
+        env.update(self.configured_env)
+        return env
 
     @classmethod
     def from_config(cls, config: LaunchpadConfig) -> NastranAdapter:
@@ -79,4 +82,5 @@ class NastranAdapter:
         return cls(
             input_extensions=(extension,),
             log_catalog=config.solvers.nastran.logs.model_dump(mode="python", exclude_none=True),
+            configured_env=dict(config.solvers.nastran.environment),
         )

@@ -101,12 +101,14 @@ Controls how Launchpad connects to the cluster:
 
 Notes:
 
-- Launchpad runs scheduler commands (`sbatch`, `squeue`, `sacct`, `scancel`)
-  through the cluster login shell because some head nodes expose SLURM only
-  there
+- Launchpad runs scheduler commands (`sbatch`, `squeue`, `sacct`, `sstat`,
+  `scancel`) through the cluster login shell because some head nodes expose
+  SLURM only there
 - `launchpad doctor` checks scheduler binaries through that same login-shell
   path, but still checks `tar`, `zstd`, and the writable shared root through
   Launchpad's normal non-interactive SSH exec environment
+- clusters without SLURM accounting are still supported, but completed-job
+  history and some resource metrics may be unavailable until `sacct` works
 - on Windows, `launchpad ssh` maps these same values onto the local OpenSSH
   client instead of using AsyncSSH stdio passthrough
 
@@ -154,6 +156,10 @@ Controls default submit behavior:
 Holds solver-specific defaults. Nastran is implemented. ANSYS settings exist in
 the schema, but the submit workflow is not implemented yet.
 
+For Nastran, `solvers.nastran.environment` lets one project export extra
+environment variables into the generated SLURM script. Use that for
+license-server settings or other per-project cluster requirements.
+
 ## Project-Local Overrides
 
 Use `.launchpad.toml` when one project needs different defaults than your
@@ -167,6 +173,9 @@ solver = "nastran"
 
 [cluster]
 default_partition = "nightly"
+
+[solvers.nastran]
+environment = { SPLM_LICENSE_SERVER = "29001@eng-apps-license-01.rs.corp" }
 ```
 
 That file only affects commands run from that project directory.

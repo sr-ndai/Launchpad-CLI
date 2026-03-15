@@ -153,6 +153,7 @@ class RemoteBinariesConfig(LaunchpadBaseModel):
     sbatch: str = Field(default="sbatch", description="Path or executable name for sbatch.")
     squeue: str = Field(default="squeue", description="Path or executable name for squeue.")
     sacct: str = Field(default="sacct", description="Path or executable name for sacct.")
+    sstat: str = Field(default="sstat", description="Path or executable name for sstat.")
     tar: str = Field(default="tar", description="Path or executable name for tar.")
     zstd: str = Field(default="zstd", description="Path or executable name for zstd.")
 
@@ -208,6 +209,10 @@ class NastranDefaults(LaunchpadBaseModel):
     logs: SolverLogsConfig = Field(
         default_factory=lambda: SolverLogsConfig(solver=".f06", telemetry=".f04"),
         description="Named Nastran log kinds captured for submitted jobs.",
+    )
+    environment: dict[str, str] = Field(
+        default_factory=dict,
+        description="Environment variables exported into Nastran SLURM scripts.",
     )
 
 

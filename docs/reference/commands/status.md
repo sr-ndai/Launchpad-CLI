@@ -45,8 +45,14 @@ launchpad status --all
 - with no `JOB_ID`, Launchpad shows the current user's jobs
 - with a `JOB_ID`, Launchpad shows detail for that job
 - Launchpad runs SLURM scheduler commands through the cluster login shell
-  because some head nodes expose `squeue` and `sacct` only through login-shell
-  initialization
+  because some head nodes expose `squeue`, `sacct`, and `sstat` only through
+  login-shell initialization
+- running jobs use `sstat` for live CPU, memory, and disk I/O metrics when the
+  cluster exposes it
+- completed and historical jobs use `sacct` when accounting is available
+- clusters without SLURM accounting are still supported; `status --all` and
+  completed-job resource totals degrade to limited or `—` output instead of
+  failing outright
 - `--watch` refreshes until you stop it and keeps a live status header instead
   of redrawing extra branding
 - root `--json` is supported for non-watch usage only

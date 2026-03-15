@@ -9,7 +9,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Awaitable, Callable, Mapping
+from typing import Awaitable, Callable, Mapping, Sequence
 
 import asyncssh
 import click
@@ -19,7 +19,14 @@ from launchpad_cli.core.config import LaunchpadConfig, resolve_config
 from launchpad_cli.core.job_manifest import JobManifest, parse_job_manifest
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.remote_ops import read_remote_text
-from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
+from launchpad_cli.core.slurm import (
+    JobAccounting,
+    JobRuntimeStats,
+    JobStatus,
+    query_sacct,
+    query_squeue,
+    query_sstat,
+)
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.display import build_console, build_status_renderable
 
@@ -39,6 +46,12 @@ class StatusRow:
     elapsed: str | None = None
     total_cpu: str | None = None
     max_rss: str | None = None
+    max_disk_read: str | None = None
+    max_disk_write: str | None = None
+    live_cpu: str | None = None
+    live_max_rss: str | None = None
+    live_disk_read: str | None = None
+    live_disk_write: str | None = None
     remote_job_dir: str | None = None
     stdout_path: str | None = None
     stderr_path: str | None = None
@@ -65,6 +78,7 @@ class StatusSnapshot:
     partition: str | None = None
     array_range: str | None = None
     remote_job_dir: str | None = None
+    notices: tuple[str, ...] = ()
 
     def state_counts(self) -> dict[str, int]:
         """Return a stable state-count mapping for display and JSON output."""
@@ -85,7 +99,7 @@ class StatusSnapshot:
             "array_range": self.array_range,
             "remote_job_dir": self.remote_job_dir,
             "state_counts": self.state_counts(),
-            "rows": [asdict(row) for row in self.rows],
+            "rows": [_row_as_json(row) for row in self.rows],
         }
 
     def to_display_payload(self) -> dict[str, object]:
@@ -101,7 +115,8 @@ class StatusSnapshot:
             "array_range": self.array_range,
             "remote_job_dir": self.remote_job_dir,
             "state_counts": self.state_counts(),
-            "rows": [asdict(row) for row in self.rows],
+            "rows": [_row_as_display(row) for row in self.rows],
+            "notices": list(self.notices),
         }
 
 
@@ -276,7 +291,9 @@ async def _collect_status_snapshot(
     if job_id:
         active_jobs: tuple[JobStatus, ...] = ()
         accounting_jobs: tuple[JobAccounting, ...] = ()
+        runtime_stats: tuple[JobRuntimeStats, ...] = ()
         errors: list[str] = []
+        notices: list[str] = []
 
         try:
             active_jobs = await query_squeue(conn, config=config, job_id=job_id)
@@ -292,8 +309,23 @@ async def _collect_status_snapshot(
             )
         except RuntimeError as exc:
             errors.append(str(exc))
+            notices.append("SLURM accounting is unavailable; completed-job history may be limited.")
+
+        if active_jobs:
+            try:
+                runtime_stats = await query_sstat(
+                    conn,
+                    config=config,
+                    job_steps=_runtime_job_steps(_running_rows_from_status(active_jobs)),
+                )
+            except RuntimeError:
+                notices.append("Live resource metrics are unavailable; showing scheduler state only.")
 
         if not active_jobs and not accounting_jobs and errors:
+            if notices:
+                raise click.ClickException(
+                    f"No live SLURM job data found for {job_id}. {' '.join(notices)}"
+                )
             raise RuntimeError(" ; ".join(errors))
 
         snapshot = _build_detail_snapshot(
@@ -301,6 +333,8 @@ async def _collect_status_snapshot(
             queried_user=config.ssh.username,
             active_jobs=active_jobs,
             accounting_jobs=accounting_jobs,
+            runtime_stats=runtime_stats,
+            notices=tuple(notices),
         )
         manifest = await _load_job_manifest(conn, snapshot.remote_job_dir)
         if manifest is not None:
@@ -309,18 +343,36 @@ async def _collect_status_snapshot(
 
     active_jobs = await query_squeue(conn, config=config)
     accounting_jobs: tuple[JobAccounting, ...] = ()
+    runtime_stats: tuple[JobRuntimeStats, ...] = ()
+    notices: list[str] = []
     if include_all:
-        accounting_jobs = await query_sacct(
-            conn,
-            config=config,
-            start_time=RECENT_ACCOUNTING_START,
-        )
+        try:
+            accounting_jobs = await query_sacct(
+                conn,
+                config=config,
+                start_time=RECENT_ACCOUNTING_START,
+            )
+        except RuntimeError:
+            notices.append("SLURM accounting is unavailable; showing active jobs only.")
+
+    running_rows = _running_rows_from_status(active_jobs)
+    if running_rows:
+        try:
+            runtime_stats = await query_sstat(
+                conn,
+                config=config,
+                job_steps=_runtime_job_steps(running_rows),
+            )
+        except RuntimeError:
+            notices.append("Live resource metrics are unavailable; showing scheduler state only.")
 
     return _build_overview_snapshot(
         queried_user=config.ssh.username,
         include_all=include_all,
         active_jobs=active_jobs,
         accounting_jobs=accounting_jobs,
+        runtime_stats=runtime_stats,
+        notices=tuple(notices),
     )
 
 
@@ -330,6 +382,8 @@ def _build_overview_snapshot(
     include_all: bool,
     active_jobs: tuple[JobStatus, ...],
     accounting_jobs: tuple[JobAccounting, ...],
+    runtime_stats: tuple[JobRuntimeStats, ...],
+    notices: tuple[str, ...] = (),
 ) -> StatusSnapshot:
     """Build the overview snapshot shown for current-user status queries."""
 
@@ -342,6 +396,7 @@ def _build_overview_snapshot(
             if _row_identity(row) not in seen:
                 rows.append(row)
 
+    rows = _attach_runtime_stats(tuple(rows), runtime_stats)
     ordered_rows = tuple(sorted(rows, key=_row_sort_key))
     return StatusSnapshot(
         requested_job_id=None,
@@ -349,6 +404,7 @@ def _build_overview_snapshot(
         include_all=include_all,
         generated_at=_timestamp_now(),
         rows=ordered_rows,
+        notices=notices,
     )
 
 
@@ -358,6 +414,8 @@ def _build_detail_snapshot(
     queried_user: str | None,
     active_jobs: tuple[JobStatus, ...],
     accounting_jobs: tuple[JobAccounting, ...],
+    runtime_stats: tuple[JobRuntimeStats, ...],
+    notices: tuple[str, ...] = (),
 ) -> StatusSnapshot:
     """Build the detailed job snapshot shown for a specific job ID."""
 
@@ -373,6 +431,7 @@ def _build_detail_snapshot(
         raise click.ClickException(f"No SLURM job data found for {requested_job_id}.")
 
     ordered_rows = tuple(sorted(merged.values(), key=_row_sort_key))
+    ordered_rows = _attach_runtime_stats(ordered_rows, runtime_stats)
     task_rows = tuple(row for row in ordered_rows if row.task_id is not None)
     display_rows = task_rows or ordered_rows
     primary_row = next((row for row in ordered_rows if row.task_id is None), None) or display_rows[0]
@@ -387,6 +446,7 @@ def _build_detail_snapshot(
         partition=primary_row.partition,
         array_range=_array_range(display_rows),
         remote_job_dir=primary_row.remote_job_dir,
+        notices=notices,
     )
 
 
@@ -422,6 +482,8 @@ def _row_from_accounting(job: JobAccounting) -> StatusRow:
         elapsed=job.elapsed,
         total_cpu=job.total_cpu,
         max_rss=job.max_rss,
+        max_disk_read=job.max_disk_read,
+        max_disk_write=job.max_disk_write,
         remote_job_dir=job.remote_job_dir,
         stdout_path=job.standard_output,
         stderr_path=job.standard_error,
@@ -443,6 +505,10 @@ def _merge_rows(existing: StatusRow | None, incoming: StatusRow) -> StatusRow:
         partition=incoming.partition or existing.partition,
         node=incoming.node or existing.node,
         elapsed=incoming.elapsed or existing.elapsed,
+        total_cpu=existing.total_cpu or incoming.total_cpu,
+        max_rss=existing.max_rss or incoming.max_rss,
+        max_disk_read=existing.max_disk_read or incoming.max_disk_read,
+        max_disk_write=existing.max_disk_write or incoming.max_disk_write,
         remote_job_dir=incoming.remote_job_dir or existing.remote_job_dir,
         stdout_path=incoming.stdout_path or existing.stdout_path,
         stderr_path=incoming.stderr_path or existing.stderr_path,
@@ -488,6 +554,55 @@ def _array_range(rows: tuple[StatusRow, ...]) -> str | None:
     return ",".join(sorted(task_ids))
 
 
+def _running_rows_from_status(active_jobs: tuple[JobStatus, ...]) -> tuple[StatusRow, ...]:
+    """Return normalized rows for running live-status records only."""
+
+    rows = tuple(_row_from_status(item) for item in active_jobs)
+    return tuple(row for row in rows if row.state == "RUNNING")
+
+
+def _runtime_job_steps(rows: Sequence[StatusRow]) -> tuple[str, ...]:
+    """Build stable sstat job-step targets from running status rows."""
+
+    steps: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        target = f"{row.job_id}_{row.task_id}.batch" if row.task_id else f"{row.job_id}.batch"
+        if target in seen:
+            continue
+        seen.add(target)
+        steps.append(target)
+    return tuple(steps)
+
+
+def _attach_runtime_stats(
+    rows: tuple[StatusRow, ...],
+    runtime_stats: tuple[JobRuntimeStats, ...],
+) -> tuple[StatusRow, ...]:
+    """Merge parsed sstat metrics onto matching status rows."""
+
+    if not runtime_stats:
+        return rows
+
+    stats_by_key = {(item.job_id, item.task_id): item for item in runtime_stats}
+    attached: list[StatusRow] = []
+    for row in rows:
+        stats = stats_by_key.get((row.job_id, row.task_id))
+        if stats is None:
+            attached.append(row)
+            continue
+        attached.append(
+            replace(
+                row,
+                live_cpu=stats.ave_cpu,
+                live_max_rss=stats.max_rss,
+                live_disk_read=stats.max_disk_read,
+                live_disk_write=stats.max_disk_write,
+            )
+        )
+    return tuple(attached)
+
+
 async def _load_job_manifest(
     conn: asyncssh.SSHClientConnection,
     remote_job_dir: str | None,
@@ -511,6 +626,25 @@ def _attach_task_references(snapshot: StatusSnapshot, manifest: JobManifest) -> 
     references = {item.task_id: item for item in manifest.tasks}
     rows = tuple(_attach_row_reference(row, references.get(row.task_id or "")) for row in snapshot.rows)
     return replace(snapshot, rows=rows)
+
+
+def _row_as_json(row: StatusRow) -> dict[str, object]:
+    """Serialize a status row without the live-metrics-only display fields."""
+
+    payload = asdict(row)
+    payload.pop("max_disk_read", None)
+    payload.pop("max_disk_write", None)
+    payload.pop("live_cpu", None)
+    payload.pop("live_max_rss", None)
+    payload.pop("live_disk_read", None)
+    payload.pop("live_disk_write", None)
+    return payload
+
+
+def _row_as_display(row: StatusRow) -> dict[str, object]:
+    """Serialize a status row for display helpers, including live metric fields."""
+
+    return asdict(row)
 
 
 def _attach_row_reference(row: StatusRow, task_ref) -> StatusRow:

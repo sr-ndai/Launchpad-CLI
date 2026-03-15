@@ -46,22 +46,45 @@ launchpad config init --force
 
 ## `doctor` says scheduler binaries are missing but manual SSH works
 
-Launchpad checks `sbatch`, `squeue`, and `sacct` through the same login-shell
-environment it uses for scheduler commands. If those commands work in a manual
-SSH session but fail in Launchpad, the head node is probably loading SLURM
-only during login-shell initialization.
+Launchpad checks `sbatch`, `squeue`, `sacct`, and `sstat` through the same
+login-shell environment it uses for scheduler commands. If those commands work
+in a manual SSH session but fail in Launchpad, the head node is probably
+loading SLURM only during login-shell initialization.
 
 Fixes:
 
 - update the cluster's login-shell initialization so SLURM is on PATH
 - or set `remote_binaries.sbatch`, `remote_binaries.squeue`, and
-  `remote_binaries.sacct` to absolute paths in config
+  `remote_binaries.sacct` / `remote_binaries.sstat` to absolute paths in config
 
 Then rerun:
 
 ```powershell
 launchpad doctor
 ```
+
+## `status --all` warns that accounting is unavailable
+
+That cluster can still run Launchpad jobs, but `sacct` is missing or SLURM
+accounting is disabled.
+
+What still works:
+
+- `launchpad submit`
+- `launchpad status` for active jobs
+- live running-job metrics when `sstat` is available
+
+What is limited:
+
+- `launchpad status --all`
+- completed-job history
+- completed-job CPU, memory, and disk totals
+
+Fixes:
+
+- enable SLURM accounting on the cluster
+- or configure `remote_binaries.sacct` to the correct absolute path if the
+  binary exists but is not on the login-shell PATH
 
 ## `doctor` says `tar` or `zstd` is missing but manual SSH works
 
@@ -98,15 +121,16 @@ launchpad doctor
 ```
 ## `status`, `logs`, or `cancel` says a SLURM command was not found
 
-Launchpad runs `squeue`, `sacct`, and `scancel` through the cluster login
-shell. If those commands are missing there, operator commands fail even when
-raw SSH connectivity works.
+Launchpad runs `squeue`, `sacct`, `sstat`, and `scancel` through the cluster
+login shell. If those commands are missing there, operator commands fail even
+when raw SSH connectivity works.
 
 Fixes:
 
 - update the head-node login-shell initialization so SLURM is loaded
-- or set `remote_binaries.squeue`, `remote_binaries.sacct`, and
-  `remote_binaries.sbatch` to absolute paths where applicable
+- or set `remote_binaries.squeue`, `remote_binaries.sacct`,
+  `remote_binaries.sstat`, and `remote_binaries.sbatch` to absolute paths
+  where applicable
 
 ## `submit` says no supported solver inputs were found
 

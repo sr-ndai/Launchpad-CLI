@@ -13,7 +13,7 @@ from launchpad_cli.cli import cli
 from launchpad_cli.cli import status as status_module
 from launchpad_cli.core.config import LaunchpadConfig, SSHConfig
 from launchpad_cli.core.job_manifest import TaskReference, build_job_manifest, render_job_manifest
-from launchpad_cli.core.slurm import JobAccounting, JobStatus
+from launchpad_cli.core.slurm import JobAccounting, JobRuntimeStats, JobStatus
 
 
 def test_status_command_renders_overview_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,6 +96,8 @@ def test_status_command_emits_json_for_specific_job(monkeypatch: pytest.MonkeyPa
     assert payload["run_name"] == "tank_v3"
     assert payload["state_counts"] == {"COMPLETED": 1}
     assert payload["rows"][0]["max_rss"] == "178G"
+    assert "max_disk_read" not in payload["rows"][0]
+    assert "live_cpu" not in payload["rows"][0]
 
 
 def test_status_command_watch_passes_interval_to_async_runner(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -247,9 +249,13 @@ def test_status_command_falls_back_to_squeue_when_sacct_query_fails(
     async def fake_query_sacct(*args, **kwargs) -> tuple[JobAccounting, ...]:  # type: ignore[no-untyped-def]
         raise RuntimeError("SLURM sacct query failed: accounting disabled")
 
+    async def fake_query_sstat(*args, **kwargs) -> tuple[JobRuntimeStats, ...]:  # type: ignore[no-untyped-def]
+        return ()
+
     monkeypatch.setattr(status_module, "ssh_session", fake_ssh_session)
     monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
     monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
+    monkeypatch.setattr(status_module, "query_sstat", fake_query_sstat)
 
     async def fake_read_remote_text(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
         raise FileNotFoundError("missing")
@@ -263,6 +269,7 @@ def test_status_command_falls_back_to_squeue_when_sacct_query_fails(
     assert "RUNNING" in result.output
     assert "CPU" not in result.output
     assert "Max RSS" not in result.output
+    assert "accounting is unavailable" in result.output
 
 
 def test_status_command_renders_manifest_backed_task_references(
@@ -314,6 +321,9 @@ def test_status_command_renders_manifest_backed_task_references(
     async def fake_query_sacct(*args, **kwargs) -> tuple[JobAccounting, ...]:  # type: ignore[no-untyped-def]
         return ()
 
+    async def fake_query_sstat(*args, **kwargs) -> tuple[JobRuntimeStats, ...]:  # type: ignore[no-untyped-def]
+        return ()
+
     async def fake_read_remote_text(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
         return render_job_manifest(
             build_job_manifest(
@@ -345,6 +355,7 @@ def test_status_command_renders_manifest_backed_task_references(
     monkeypatch.setattr(status_module, "ssh_session", fake_ssh_session)
     monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
     monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
+    monkeypatch.setattr(status_module, "query_sstat", fake_query_sstat)
     monkeypatch.setattr(status_module, "read_remote_text", fake_read_remote_text)
 
     result = CliRunner().invoke(cli, ["status", "12345"])
@@ -354,6 +365,121 @@ def test_status_command_renders_manifest_backed_task_references(
     assert "fuselage" in result.output
     assert "001" in result.output
     assert "002" in result.output
+
+
+@pytest.mark.asyncio
+async def test_collect_status_snapshot_attaches_live_running_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Running specific-job snapshots should prefer live `sstat` metrics when present."""
+
+    async def fake_query_squeue(*args, **kwargs) -> tuple[JobStatus, ...]:  # type: ignore[no-untyped-def]
+        return (
+            JobStatus(
+                job_id="12345_0",
+                job_name="tank_v3",
+                state="RUNNING",
+                array_job_id="12345",
+                array_task_id="0",
+                partition="simulation-r6i-8x",
+                node_list="compute-dy-1",
+                elapsed="00:12:00",
+                comment="/shared/sergey/tank_v3",
+            ),
+        )
+
+    async def fake_query_sacct(*args, **kwargs) -> tuple[JobAccounting, ...]:  # type: ignore[no-untyped-def]
+        return ()
+
+    async def fake_query_sstat(*args, **kwargs) -> tuple[JobRuntimeStats, ...]:  # type: ignore[no-untyped-def]
+        return (
+            JobRuntimeStats(
+                job_id="12345",
+                task_id="0",
+                step="batch",
+                ave_cpu="03:15:30",
+                max_rss="142G",
+                max_disk_read="45G",
+                max_disk_write="18G",
+            ),
+        )
+
+    async def fake_read_remote_text(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
+        raise FileNotFoundError("missing")
+
+    monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
+    monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
+    monkeypatch.setattr(status_module, "query_sstat", fake_query_sstat)
+    monkeypatch.setattr(status_module, "read_remote_text", fake_read_remote_text)
+
+    snapshot = await status_module._collect_status_snapshot(
+        conn=object(),  # type: ignore[arg-type]
+        config=LaunchpadConfig(ssh=SSHConfig(host="cluster.example.com", username="sergey")),
+        job_id="12345",
+        include_all=False,
+    )
+
+    assert snapshot.requested_job_id == "12345"
+    assert snapshot.rows[0].live_cpu == "03:15:30"
+    assert snapshot.rows[0].live_max_rss == "142G"
+    assert snapshot.rows[0].live_disk_read == "45G"
+    assert snapshot.rows[0].live_disk_write == "18G"
+    assert snapshot.notices == ()
+
+
+@pytest.mark.asyncio
+async def test_collect_status_snapshot_overview_degrades_gracefully_without_accounting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`status --all` snapshots should still show active jobs when accounting is disabled."""
+
+    async def fake_query_squeue(*args, **kwargs) -> tuple[JobStatus, ...]:  # type: ignore[no-untyped-def]
+        return (
+            JobStatus(
+                job_id="12345",
+                job_name="tank_v3",
+                state="RUNNING",
+                partition="simulation-r6i-8x",
+                node_list="compute-dy-1",
+                elapsed="00:12:00",
+                comment="/shared/sergey/tank_v3",
+            ),
+        )
+
+    async def fake_query_sacct(*args, **kwargs) -> tuple[JobAccounting, ...]:  # type: ignore[no-untyped-def]
+        raise RuntimeError("SLURM sacct query failed: accounting disabled")
+
+    async def fake_query_sstat(*args, **kwargs) -> tuple[JobRuntimeStats, ...]:  # type: ignore[no-untyped-def]
+        return (
+            JobRuntimeStats(
+                job_id="12345",
+                task_id=None,
+                step="batch",
+                ave_cpu="00:10:00",
+                max_rss="5M",
+                max_disk_read="11G",
+                max_disk_write="11G",
+            ),
+        )
+
+    monkeypatch.setattr(status_module, "query_squeue", fake_query_squeue)
+    monkeypatch.setattr(status_module, "query_sacct", fake_query_sacct)
+    monkeypatch.setattr(status_module, "query_sstat", fake_query_sstat)
+
+    snapshot = await status_module._collect_status_snapshot(
+        conn=object(),  # type: ignore[arg-type]
+        config=LaunchpadConfig(ssh=SSHConfig(host="cluster.example.com", username="sergey")),
+        job_id=None,
+        include_all=True,
+    )
+
+    assert snapshot.requested_job_id is None
+    assert snapshot.rows[0].job_id == "12345"
+    assert snapshot.rows[0].state == "RUNNING"
+    assert snapshot.rows[0].live_cpu == "00:10:00"
+    assert snapshot.rows[0].live_max_rss == "5M"
+    assert snapshot.rows[0].live_disk_read == "11G"
+    assert "accounting is unavailable" in snapshot.notices[0]
 
 
 @pytest.mark.asyncio

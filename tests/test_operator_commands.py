@@ -151,6 +151,29 @@ def test_doctor_render_results_uses_restrained_success_path(
     assert "____ ___  ______" not in captured.out
 
 
+def test_doctor_render_results_summarizes_warnings_without_failing(
+    capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Warn-only doctor output should stay actionable without using the failure path."""
+
+    results = [
+        doctor_module.DiagnosticResult("python", "pass", "Python 3.12.13"),
+        doctor_module.DiagnosticResult(
+            "remote-binaries",
+            "warn",
+            "Optional scheduler observability commands could not be resolved: sstat=sstat",
+            "Set `remote_binaries.sstat` to an absolute path if you need live metrics.",
+        ),
+    ]
+
+    doctor_module._render_results(results, no_color=False)
+    captured = capsys.readouterr()
+
+    assert "2 checks: 1 passed, 1 warned" in captured.out
+    assert "ready for the next run" not in captured.out
+    assert "Optional scheduler observability commands" in captured.out
+
+
 def test_doctor_ssh_key_check_requires_existing_key(tmp_path: Path) -> None:
     """Local SSH key validation should fail for missing key files."""
 
@@ -229,19 +252,52 @@ async def test_doctor_remote_binary_check_reports_missing_tools() -> None:
     assert result.status == "fail"
     assert "scheduler login-shell environment" in result.detail
     assert "squeue" in result.detail
+    assert "Optional scheduler observability commands" in result.detail
+    assert "sstat" in result.detail
     assert "zstd" in result.detail
     assert "head-node login-shell initialization" in (result.suggestion or "")
     assert "non-interactive SSH exec sessions" in (result.suggestion or "")
     scheduler_commands = [
         command
         for command in commands
-        if "candidate=sbatch" in command or "candidate=squeue" in command or "candidate=sacct" in command
+        if "candidate=sbatch" in command
+        or "candidate=squeue" in command
+        or "candidate=sacct" in command
+        or "candidate=sstat" in command
     ]
     nonscheduler_commands = [command for command in commands if "candidate=tar" in command or "candidate=zstd" in command]
     assert scheduler_commands
     assert all("bash -lc" in command for command in scheduler_commands)
     assert nonscheduler_commands
     assert all("bash -lc" not in command for command in nonscheduler_commands)
+
+
+@pytest.mark.asyncio
+async def test_doctor_remote_binary_check_warns_when_only_optional_observability_is_missing() -> None:
+    """Missing `sacct`/`sstat` should degrade observability without failing doctor."""
+
+    commands: list[str] = []
+
+    class FakeConnection:
+        async def run(self, command: str, check: bool = False) -> SimpleNamespace:
+            commands.append(command)
+            if "candidate=sbatch" in command or "candidate=squeue" in command:
+                return SimpleNamespace(exit_status=0, stdout="/usr/bin/sbatch", stderr="")
+            if "candidate=tar" in command or "candidate=zstd" in command:
+                return SimpleNamespace(exit_status=0, stdout="/usr/bin/tool", stderr="")
+            return SimpleNamespace(exit_status=1, stdout="", stderr="")
+
+    config = LaunchpadConfig(
+        ssh=SSHConfig(host="cluster.example.com", username="sergey"),
+    )
+
+    result = await doctor_module._remote_binaries_check(FakeConnection(), config)
+
+    assert result.status == "warn"
+    assert "Optional scheduler observability commands" in result.detail
+    assert "sacct" in result.detail
+    assert "sstat" in result.detail
+    assert "completed-job history or live resource metrics" in (result.suggestion or "")
 
 
 @pytest.mark.asyncio

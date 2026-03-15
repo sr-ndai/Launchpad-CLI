@@ -10,12 +10,15 @@ import pytest
 from launchpad_cli.core.config import LaunchpadConfig, SSHConfig
 from launchpad_cli.core.slurm import (
     SubmitRequest,
+    build_sstat_command,
     build_slurm_login_shell_command,
     build_submit_script,
     parse_sacct_output,
+    parse_sstat_output,
     parse_squeue_output,
     query_sacct,
     query_squeue,
+    query_sstat,
     submit_job,
 )
 from launchpad_cli.solvers import NastranAdapter, SubmitOverrides
@@ -175,6 +178,13 @@ SACCT_TYPED_WRAPPER_SAMPLE = json.dumps(
     }
 )
 
+SSTAT_SAMPLE = "\n".join(
+    [
+        "12345_2.batch|178G|17:33.221|12001.66M|12000.01M",
+        "12346.batch|||N/A|",
+    ]
+)
+
 
 def test_build_submit_script_includes_expected_slurm_and_solver_content() -> None:
     """Submit script generation should preserve the documented Phase 2 decisions."""
@@ -204,6 +214,42 @@ def test_build_submit_script_includes_expected_slurm_and_solver_content() -> Non
     assert 'export NASTRAN_SCRATCH="${SCRATCH_ROOT}/task_${SLURM_ARRAY_TASK_ID}"' in script
     assert "smp=24" in script
     assert "memory=128Gb" in script
+
+
+def test_build_submit_script_includes_configured_solver_environment_exports() -> None:
+    """Configured solver env vars should be exported into the generated SLURM script."""
+
+    config = LaunchpadConfig(
+        solvers={
+            "nastran": {
+                "environment": {
+                    "SPLM_LICENSE_SERVER": "29001@eng-apps-license-01.rs.corp",
+                }
+            }
+        }
+    )
+    request = SubmitRequest(
+        run_name="nastran-20260312-1947-abcd",
+        remote_job_dir="/shared/sergey/nastran-20260312-1947-abcd",
+        script_path="/shared/sergey/nastran-20260312-1947-abcd/submit.sbatch",
+        input_files=("wing.dat",),
+    )
+
+    script = build_submit_script(NastranAdapter.from_config(config), request, config)
+
+    assert 'export SPLM_LICENSE_SERVER="29001@eng-apps-license-01.rs.corp"' in script
+    assert 'export NASTRAN_SCRATCH="${SCRATCH_ROOT}/task_${SLURM_ARRAY_TASK_ID}"' in script
+
+
+def test_build_sstat_command_targets_batch_steps() -> None:
+    """Live-metric queries should use parsable batch-step targets."""
+
+    command = build_sstat_command(job_steps=("12345.batch", "12345_2.batch"))
+
+    assert command == (
+        "sstat --noheader --parsable2 --format=JobID,MaxRSS,AveCPU,MaxDiskRead,MaxDiskWrite "
+        "--jobs 12345.batch,12345_2.batch"
+    )
 
 
 def test_build_submit_script_requires_inputs() -> None:
@@ -283,6 +329,25 @@ def test_parse_sacct_output_handles_typed_wrappers_and_host_style_nodes_alloc() 
     assert jobs[0].node_list == "simulation-r61-8x-dy-r6i-8xlarge7-2"
     assert jobs[0].total_cpu == "02:24.000"
     assert jobs[0].remote_job_dir == "/shared/launchpad/tank_v3"
+
+
+def test_parse_sstat_output_returns_structured_runtime_stats() -> None:
+    """`sstat --parsable2` parsing should normalize job-step identifiers and blanks."""
+
+    rows = parse_sstat_output(SSTAT_SAMPLE)
+
+    assert len(rows) == 2
+    assert rows[0].job_id == "12345"
+    assert rows[0].task_id == "2"
+    assert rows[0].step == "batch"
+    assert rows[0].max_rss == "178G"
+    assert rows[0].ave_cpu == "17:33.221"
+    assert rows[0].max_disk_read == "12001.66M"
+    assert rows[0].max_disk_write == "12000.01M"
+    assert rows[1].job_id == "12346"
+    assert rows[1].task_id is None
+    assert rows[1].ave_cpu is None
+    assert rows[1].max_disk_read is None
 
 
 @pytest.mark.asyncio
@@ -375,6 +440,29 @@ async def test_query_sacct_builds_job_specific_command_and_parses_results() -> N
     ]
     assert jobs[0].job_id == "12345_2"
     assert jobs[0].state == "COMPLETED"
+
+
+@pytest.mark.asyncio
+async def test_query_sstat_builds_job_step_command_and_parses_results() -> None:
+    """Remote `sstat` queries should target the requested batch steps."""
+
+    connection = FakeConnection()
+    connection.run_result = SimpleNamespace(exit_status=0, stdout=SSTAT_SAMPLE, stderr="")
+
+    rows = await query_sstat(
+        connection,
+        config=LaunchpadConfig(),
+        job_steps=("12345.batch", "12345_2.batch"),
+    )
+
+    assert connection.commands == [
+        build_slurm_login_shell_command(
+            "sstat --noheader --parsable2 --format=JobID,MaxRSS,AveCPU,MaxDiskRead,MaxDiskWrite "
+            "--jobs 12345.batch,12345_2.batch"
+        )
+    ]
+    assert rows[0].job_id == "12345"
+    assert rows[0].task_id == "2"
 
 
 @pytest.mark.asyncio

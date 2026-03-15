@@ -6,7 +6,7 @@ import json
 import shlex
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Sequence
 
 import asyncssh
 
@@ -88,6 +88,8 @@ class JobAccounting:
     elapsed: str | None = None
     total_cpu: str | None = None
     max_rss: str | None = None
+    max_disk_read: str | None = None
+    max_disk_write: str | None = None
     exit_code: str | None = None
     derived_exit_code: str | None = None
     comment: str | None = None
@@ -103,6 +105,19 @@ class JobAccounting:
         """Return the tracked remote job directory when stored in the comment."""
 
         return self.comment
+
+
+@dataclass(frozen=True, slots=True)
+class JobRuntimeStats:
+    """Structured runtime stats parsed from `sstat` output."""
+
+    job_id: str
+    task_id: str | None
+    step: str
+    ave_cpu: str | None = None
+    max_rss: str | None = None
+    max_disk_read: str | None = None
+    max_disk_write: str | None = None
 
 
 def build_submit_script(
@@ -232,6 +247,28 @@ def build_sacct_command(
     return " ".join(command)
 
 
+def build_sstat_command(
+    *,
+    job_steps: Sequence[str],
+    sstat_binary: str = "sstat",
+) -> str:
+    """Build the remote `sstat` command for running-job resource metrics."""
+
+    if not job_steps:
+        raise ValueError("At least one SLURM job step is required for sstat queries.")
+
+    return " ".join(
+        [
+            shlex.quote(sstat_binary),
+            "--noheader",
+            "--parsable2",
+            "--format=JobID,MaxRSS,AveCPU,MaxDiskRead,MaxDiskWrite",
+            "--jobs",
+            shlex.quote(",".join(job_steps)),
+        ]
+    )
+
+
 def build_slurm_login_shell_command(command: str) -> str:
     """Wrap a scheduler command so the remote login-shell environment is loaded."""
 
@@ -252,6 +289,33 @@ def parse_sacct_output(raw: str) -> tuple[JobAccounting, ...]:
     payload = _load_slurm_json(raw, command_name="sacct")
     jobs = _extract_jobs(payload, command_name="sacct")
     return tuple(_parse_job_accounting(job) for job in jobs)
+
+
+def parse_sstat_output(raw: str) -> tuple[JobRuntimeStats, ...]:
+    """Parse `sstat --parsable2` output into structured runtime stats."""
+
+    rows: list[JobRuntimeStats] = []
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        columns = line.split("|")
+        if len(columns) != 5:
+            raise ValueError("Invalid sstat output: expected 5 parsable columns.")
+        job_id, max_rss, ave_cpu, max_disk_read, max_disk_write = columns
+        normalized_job_id, task_id, step = _parse_sstat_job_id(job_id)
+        rows.append(
+            JobRuntimeStats(
+                job_id=normalized_job_id,
+                task_id=task_id,
+                step=step,
+                ave_cpu=_normalize_sstat_value(ave_cpu),
+                max_rss=_normalize_sstat_value(max_rss),
+                max_disk_read=_normalize_sstat_value(max_disk_read),
+                max_disk_write=_normalize_sstat_value(max_disk_write),
+            )
+        )
+    return tuple(rows)
 
 
 async def query_squeue(
@@ -310,6 +374,30 @@ async def query_sacct(
         config_field="sacct",
     )
     return parse_sacct_output(result.stdout)
+
+
+async def query_sstat(
+    conn: asyncssh.SSHClientConnection,
+    *,
+    config: LaunchpadConfig,
+    job_steps: Sequence[str],
+    sstat_binary: str | None = None,
+) -> tuple[JobRuntimeStats, ...]:
+    """Run `sstat` remotely and parse the returned live runtime metrics."""
+
+    if not job_steps:
+        return ()
+
+    resolved_sstat = sstat_binary or config.remote_binaries.sstat
+    command = build_sstat_command(job_steps=job_steps, sstat_binary=resolved_sstat)
+    result = await run_slurm_command(
+        conn,
+        command,
+        failure_prefix="SLURM sstat query failed",
+        executable=resolved_sstat,
+        config_field="sstat",
+    )
+    return parse_sstat_output(result.stdout)
 
 
 async def submit_job(
@@ -487,6 +575,8 @@ def _parse_job_accounting(job: dict[str, Any]) -> JobAccounting:
         elapsed=_optional_string(job, "elapsed", "time.elapsed", "elapsed_time"),
         total_cpu=_optional_string(job, "total_cpu"),
         max_rss=_optional_string(job, "max_rss"),
+        max_disk_read=_optional_string(job, "max_disk_read"),
+        max_disk_write=_optional_string(job, "max_disk_write"),
         exit_code=_optional_exit_code(job, "exit_code"),
         derived_exit_code=_optional_exit_code(job, "derived_exit_code"),
         comment=_optional_string(job, "comment"),
@@ -583,6 +673,22 @@ def _render_string(value: Any) -> str | None:
         rendered_items = [item for item in (_render_string(item) for item in value) if item]
         return ",".join(rendered_items) or None
     return None
+
+
+def _normalize_sstat_value(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned or cleaned.upper() == "N/A":
+        return None
+    return cleaned
+
+
+def _parse_sstat_job_id(job_id: str) -> tuple[str, str | None, str]:
+    base, _, step = job_id.partition(".")
+    if not step:
+        raise ValueError("Invalid sstat output: missing job step suffix.")
+
+    array_job_id, array_task_id = _derive_array_ids(base)
+    return array_job_id or base, array_task_id, step
 
 
 def _normalize_slurm_value(value: Any) -> Any:
