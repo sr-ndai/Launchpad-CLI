@@ -29,6 +29,10 @@ None.
 - last processed builder session: `2026-03-14-1805-builder-8.8.md`
 
 ## What Changed Recently
+- Merged the latest `origin/main` into
+  `phase/08-task-references-and-solver-aware-logs` to resolve the current PR
+  conflict set while preserving the accepted `8.8` planning, queue, routing,
+  and decision state.
 - Opened PR `#12` from `phase/08-task-references-and-solver-aware-logs` to
   `main` for the post-merge `8.8` follow-up after confirming that PR `#11`
   had already been merged into `main` on 2026-03-15.
@@ -121,9 +125,10 @@ task `8.8`.
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1808-coordinator-open-phase-8-pr-12.md`
-4. `.ai/sessions/2026-03-14-1807-coordinator-accept-8.8-update-pr.md`
-5. `.ai/reviews/8.8.md`
-6. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-7. `.ai/plan.md`
-8. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1905-coordinator-resolve-phase-8-main-conflicts.md`
+4. `.ai/sessions/2026-03-14-1808-coordinator-open-phase-8-pr-12.md`
+5. `.ai/sessions/2026-03-14-1807-coordinator-accept-8.8-update-pr.md`
+6. `.ai/reviews/8.8.md`
+7. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+8. `.ai/plan.md`
+9. `.ai/git-rules.md`
