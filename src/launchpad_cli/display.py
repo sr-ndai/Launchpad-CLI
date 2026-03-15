@@ -748,6 +748,7 @@ def build_status_renderable(
     remote_job_dir: str | None,
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
+    notices: Sequence[str] = (),
     watch_mode: bool = False,
     refresh_interval: int | None = None,
     no_color: bool = False,
@@ -764,6 +765,7 @@ def build_status_renderable(
             remote_job_dir=remote_job_dir,
             state_counts=state_counts,
             rows=rows,
+            notices=notices,
             watch_mode=watch_mode,
             refresh_interval=refresh_interval,
             no_color=no_color,
@@ -775,6 +777,7 @@ def build_status_renderable(
         generated_at=generated_at,
         state_counts=state_counts,
         rows=rows,
+        notices=notices,
         watch_mode=watch_mode,
         refresh_interval=refresh_interval,
         no_color=no_color,
@@ -788,6 +791,7 @@ def _build_status_overview_renderable(
     generated_at: str,
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
+    notices: Sequence[str],
     watch_mode: bool,
     refresh_interval: int | None,
     no_color: bool,
@@ -816,6 +820,8 @@ def _build_status_overview_renderable(
         )
     )
     renderables.append(build_inline_kv("updated", generated_at, indent=2, label_width=12))
+    for notice in notices:
+        renderables.append(build_warning_line(notice, no_color=no_color))
 
     if not rows:
         renderables.append(Text())
@@ -838,9 +844,22 @@ def _build_status_overview_renderable(
     table.add_column("Partition")
     table.add_column("Node")
     table.add_column("Elapsed")
+    include_live_metrics = any(
+        row.get("state") == "RUNNING"
+        and any(
+            row.get(field)
+            for field in ("live_cpu", "live_max_rss", "live_disk_read", "live_disk_write")
+        )
+        for row in rows
+    )
+    if include_live_metrics:
+        table.add_column("CPU")
+        table.add_column("Max RSS")
+        table.add_column("Disk Read")
+        table.add_column("Disk Write")
 
     for row in rows:
-        table.add_row(
+        columns = [
             str(row.get("job_id") or "—"),
             str(row.get("task_id") or "—"),
             str(row.get("run_name") or "—"),
@@ -848,7 +867,17 @@ def _build_status_overview_renderable(
             str(row.get("partition") or "—"),
             str(row.get("node") or "—"),
             str(row.get("elapsed") or "—"),
-        )
+        ]
+        if include_live_metrics:
+            columns.extend(
+                [
+                    _status_metric(row, live_key="live_cpu", fallback_key="total_cpu"),
+                    _status_metric(row, live_key="live_max_rss", fallback_key="max_rss"),
+                    _status_metric(row, live_key="live_disk_read", fallback_key="max_disk_read"),
+                    _status_metric(row, live_key="live_disk_write", fallback_key="max_disk_write"),
+                ]
+            )
+        table.add_row(*columns)
 
     renderables.append(Padding(table, (0, 0, 0, 2)))
     renderables.append(Text())
@@ -868,6 +897,7 @@ def _build_job_detail_renderable(
     remote_job_dir: str | None,
     state_counts: Mapping[str, int],
     rows: Sequence[Mapping[str, object]],
+    notices: Sequence[str],
     watch_mode: bool,
     refresh_interval: int | None,
     no_color: bool,
@@ -897,6 +927,8 @@ def _build_job_detail_renderable(
     renderables.append(detail_line)
     if remote_job_dir:
         renderables.append(build_inline_kv("remote", remote_job_dir, indent=2, label_width=12))
+    for notice in notices:
+        renderables.append(build_warning_line(notice, no_color=no_color))
     renderables.append(Text())
 
     table = make_table()
@@ -906,12 +938,18 @@ def _build_job_detail_renderable(
     table.add_column("Node")
     table.add_column("Elapsed")
 
-    include_cpu = any(row.get("total_cpu") for row in rows)
-    include_mem = any(row.get("max_rss") for row in rows)
+    include_cpu = any(row.get("live_cpu") or row.get("total_cpu") for row in rows)
+    include_mem = any(row.get("live_max_rss") or row.get("max_rss") for row in rows)
+    include_disk_read = any(row.get("live_disk_read") or row.get("max_disk_read") for row in rows)
+    include_disk_write = any(row.get("live_disk_write") or row.get("max_disk_write") for row in rows)
     if include_cpu:
         table.add_column("CPU")
     if include_mem:
         table.add_column("Max RSS")
+    if include_disk_read:
+        table.add_column("Disk Read")
+    if include_disk_write:
+        table.add_column("Disk Write")
 
     for row in rows:
         columns = [
@@ -922,9 +960,13 @@ def _build_job_detail_renderable(
             str(row.get("elapsed") or "—"),
         ]
         if include_cpu:
-            columns.append(str(row.get("total_cpu") or "—"))
+            columns.append(_status_metric(row, live_key="live_cpu", fallback_key="total_cpu"))
         if include_mem:
-            columns.append(str(row.get("max_rss") or "—"))
+            columns.append(_status_metric(row, live_key="live_max_rss", fallback_key="max_rss"))
+        if include_disk_read:
+            columns.append(_status_metric(row, live_key="live_disk_read", fallback_key="max_disk_read"))
+        if include_disk_write:
+            columns.append(_status_metric(row, live_key="live_disk_write", fallback_key="max_disk_write"))
         table.add_row(*columns)
 
     renderables.append(Padding(table, (0, 0, 0, 2)))
@@ -945,6 +987,16 @@ def _format_state_counts(counts: Mapping[str, int]) -> str:
     if not counts:
         return "no jobs"
     return ", ".join(f"{count} {state.lower()}" for state, count in counts.items())
+
+
+def _status_metric(
+    row: Mapping[str, object],
+    *,
+    live_key: str,
+    fallback_key: str,
+) -> str:
+    value = row.get(live_key) or row.get(fallback_key)
+    return str(value) if value else "—"
 
 
 def _build_summary_text(counts: Mapping[str, int], *, no_color: bool) -> Text:

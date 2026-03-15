@@ -15,7 +15,7 @@ launchpad doctor
 - SSH key presence
 - shared cluster config visibility
 - SSH connectivity
-- required remote binaries
+- remote binary and scheduler capability checks
 - remote writable path
 
 Human-readable output groups those checks into `Local Setup` and
@@ -38,16 +38,25 @@ launchpad --json doctor
 ## Behavior Notes
 
 - a failing check exits non-zero
+- warning-only degraded checks still exit zero
 - if local SSH config is incomplete, the remote checks are skipped
-- scheduler binary checks for `sbatch`, `squeue`, and `sacct` run through the
-  same login-shell environment Launchpad uses for scheduler commands
+- scheduler binary checks for `sbatch`, `squeue`, `sacct`, and `sstat` run
+  through the same login-shell environment Launchpad uses for scheduler
+  commands
 - non-scheduler remote checks such as `tar`, `zstd`, and the writable-root
   probe still run through Launchpad's normal non-interactive SSH exec path
 - the writable-root probe checks `cluster.workspace_root` when configured and
   otherwise falls back to `<cluster.shared_root>/<ssh.username>`
-- if scheduler binaries fail, Launchpad points you toward head-node
+- `sbatch` and `squeue` are required for core operation
+- `sacct` and `sstat` are optional observability capabilities; missing or
+  degraded accounting surfaces as a warning so clusters without SLURM
+  accounting remain supported
+- if required scheduler binaries fail, Launchpad points you toward head-node
   login-shell initialization or `remote_binaries.sbatch` /
-  `remote_binaries.squeue` / `remote_binaries.sacct` absolute paths
+  `remote_binaries.squeue` absolute paths
+- if optional scheduler observability commands fail, Launchpad points you
+  toward `remote_binaries.sacct` / `remote_binaries.sstat` and explains the
+  degraded behavior
 - if non-scheduler binaries fail, Launchpad points you toward `remote_binaries.*`
   absolute paths or fixing the PATH seen by non-interactive SSH exec sessions
 - branding is reserved for the all-pass success path
