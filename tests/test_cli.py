@@ -27,7 +27,7 @@ def test_root_command_shows_welcome_screen_when_invoked_without_subcommand() -> 
 
 
 def test_root_help_is_a_compact_reference_card() -> None:
-    """`launchpad --help` should stay dry and grouped into the four root panels."""
+    """`launchpad --help` should stay dry and grouped into the root help sections."""
 
     runner = CliRunner()
 
@@ -139,3 +139,33 @@ def test_logs_help_mentions_task_refs_and_log_kind() -> None:
     assert "--log-kind" in result.output
     assert "launchpad logs 12345 --follow" in result.output
     assert "launchpad logs 12345 001 --log-kind telemetry" in result.output
+
+
+def test_cancel_help_mentions_task_refs_and_examples() -> None:
+    """Cancel help should expose task-ref syntax and final examples."""
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["cancel", "--help"], prog_name="launchpad")
+
+    assert result.exit_code == 0
+    assert "TASK_REFS" in result.output
+    assert "--yes" in result.output
+    assert "launchpad cancel 12345 002 wing.dat --yes" in result.output
+
+
+def test_ls_and_cleanup_help_keep_final_examples() -> None:
+    """The remaining utility-command help surfaces should stay aligned with Phase 9 examples."""
+
+    runner = CliRunner()
+
+    ls_result = runner.invoke(cli, ["ls", "--help"], prog_name="launchpad")
+    cleanup_result = runner.invoke(cli, ["cleanup", "--help"], prog_name="launchpad")
+
+    assert ls_result.exit_code == 0
+    assert "launchpad ls tank_v3/*.txt --long" in ls_result.output
+    assert "--long" in ls_result.output
+
+    assert cleanup_result.exit_code == 0
+    assert "--older-than" in cleanup_result.output
+    assert "launchpad cleanup --older-than 30d" in cleanup_result.output

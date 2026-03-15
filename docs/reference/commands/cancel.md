@@ -5,7 +5,7 @@ Use `cancel` to stop a whole SLURM job or selected array tasks.
 ## Syntax
 
 ```text
-launchpad cancel [OPTIONS] JOB_ID [TASK_IDS]...
+launchpad cancel [OPTIONS] JOB_ID [TASK_REFS]...
 ```
 
 ## Common Uses
@@ -36,7 +36,9 @@ launchpad cancel 12345 --yes
 
 - without `--yes`, Launchpad shows a cancellation preview before the final
   confirmation prompt
-- human-readable mode finishes with a cancellation summary and next-step hints
+- human-readable mode keeps destructive feedback terse: a warning line before
+  confirmation, then a compact success summary with aligned target metadata and
+  next-step hints
 - if you pass no task IDs, Launchpad cancels the whole job
 - if you pass task refs, Launchpad resolves raw task IDs and manifest-backed
   selectors before invoking `scancel`

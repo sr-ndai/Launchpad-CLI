@@ -47,11 +47,12 @@ Launchpad now has three help surfaces:
 - `launchpad --help` shows the compact root command reference.
 - `launchpad <command> --help` shows command-specific flags and examples.
 
-Human-readable command flows now follow the same Phase 7 terminal language
+Human-readable command flows now follow the final Phase 9 terminal language
 across `submit`, `status`, `download`, `logs`, `ls`, `cancel`, `cleanup`, and
-`doctor`: summary panels up front, explicit empty-state copy, and concrete
-follow-up commands. Root `--json` still keeps the machine-readable payloads for
-the commands that support it.
+`doctor`: restrained headers, aligned inline metadata, borderless listings, raw
+log streaming with minimal chrome, and concrete follow-up commands. Root
+`--json` still keeps the machine-readable payloads for the commands that
+support it.
 
 For new manifest-backed jobs, task-oriented commands also accept richer task
 references such as aliases, filenames, relative paths, and stems. `launchpad

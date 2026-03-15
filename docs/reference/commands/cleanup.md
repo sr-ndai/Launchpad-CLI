@@ -38,8 +38,8 @@ launchpad cleanup --older-than 30d --yes
 
 - Launchpad shows numbered cleanup candidates for root scans and asks for one
   final confirmation before deletion
-- human-readable mode renders empty states and cleanup summaries in the shared
-  panel layout
+- human-readable mode uses the Phase 9 utility-command style: restrained
+  warnings/success lines, aligned metadata, and a borderless candidate table
 - with `JOB_IDS`, Launchpad resolves the remote job directory from scheduler
   metadata
 - without `JOB_IDS`, Launchpad discovers cleanup candidates under
