@@ -24,11 +24,11 @@ from launchpad_cli.core.remote_ops import RemotePathEntry, list_remote_directory
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
-    build_badge,
     build_console,
-    build_detail_panel,
-    build_next_steps_panel,
-    build_summary_table,
+    build_inline_kv,
+    build_next_steps,
+    build_warning_line,
+    make_table,
 )
 
 GLOB_CHARS = "*?[]"
@@ -170,70 +170,68 @@ def _glob_base_path(pattern: str) -> str:
 
 
 def _build_listing_renderable(result: ListingResult):
-    """Render either a short or long listing view."""
+    """Render a restrained remote listing without panel chrome."""
 
-    intro = Text()
-    intro.append("Remote directory view", style="lp.brand.secondary")
-    intro.append(
-        " for the configured cluster workspace.",
-        style="lp.brand.subtle",
-    )
+    renderables = [_build_listing_header(result)]
+    if result.pattern is not None:
+        renderables.append(build_inline_kv("base", result.base_path, label_width=8))
 
-    renderables = [
-        build_detail_panel(
-            Group(intro, _build_listing_summary(result)),
-            title="Remote Listing",
-        )
-    ]
+    renderables.append(Text())
     if not result.entries:
-        renderables.append(
-            build_detail_panel(
-                f"No remote entries matched `{result.requested_path}`.",
-                title="Nothing To Show",
-                tone="warn",
-            )
+        renderables.extend(
+            [
+                build_warning_line(f"No remote entries matched `{result.requested_path}`."),
+                Text(),
+                build_next_steps(_listing_next_steps(result), title="Try Next"),
+            ]
         )
-        renderables.append(build_next_steps_panel(_listing_next_steps(result), title="Try Next"))
         return Group(*renderables)
 
     if result.long_format:
         listing = _build_long_listing(result)
     else:
         listing = _build_short_listing(result)
-    renderables.append(build_detail_panel(listing, title="Entries"))
-    renderables.append(build_next_steps_panel(_listing_next_steps(result), title="Next Commands"))
+    renderables.extend([listing, Text(), build_next_steps(_listing_next_steps(result), title="Next")])
     return Group(*renderables)
 
 
 def _build_short_listing(result: ListingResult) -> Table:
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("Kind", no_wrap=True)
-    table.add_column("Entry")
+    table = make_table()
+    table.add_column("Type", no_wrap=True)
+    table.add_column("Name")
 
     for entry in result.entries:
-        path_text = _display_path(entry, result=result)
-        suffix = "/" if entry.is_dir else ""
-        table.add_row(_entry_badge(entry), f"{path_text}{suffix}")
+        table.add_row(_entry_kind_text(entry), _entry_name_text(entry, result=result))
 
     return table
 
 
 def _build_long_listing(result: ListingResult) -> Table:
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("Kind", no_wrap=True)
+    table = make_table()
+    table.add_column("Type", no_wrap=True)
+    table.add_column("Name")
     table.add_column("Size", justify="right")
     table.add_column("Modified")
-    table.add_column("Path")
 
     for entry in result.entries:
         table.add_row(
-            _entry_badge(entry),
+            _entry_kind_text(entry),
+            _entry_name_text(entry, result=result),
             _format_bytes(entry.size_bytes),
             _format_timestamp(entry.modified_epoch),
-            _display_path(entry, result=result),
         )
 
     return table
+
+
+def _build_listing_header(result: ListingResult) -> Text:
+    """Return the requested remote path line shown above every listing."""
+
+    header = Text("  ")
+    header.append(result.requested_path, style="lp.label")
+    if result.long_format:
+        header.append("  long listing", style="lp.text.tertiary")
+    return header
 
 
 def _display_path(entry: RemotePathEntry, *, result: ListingResult) -> str:
@@ -291,12 +289,25 @@ def _build_listing_summary(result: ListingResult):
     return summary
 
 
-def _entry_badge(entry: RemotePathEntry):
+def _entry_kind_text(entry: RemotePathEntry) -> Text:
+    """Return the restrained entry-type token used by the listing table."""
+
     if entry.is_dir:
-        return build_badge("dir", tone="info")
+        return Text("dir", style="lp.status.info")
     if entry.entry_type.lower() == "symlink":
-        return build_badge("link", tone="warn")
-    return build_badge("file", tone="neutral")
+        return Text("link", style="lp.status.warn")
+    return Text("file", style="lp.text.tertiary")
+
+
+def _entry_name_text(entry: RemotePathEntry, *, result: ListingResult) -> Text:
+    """Return the display name for a listing row with subtle file-type emphasis."""
+
+    label = _display_path(entry, result=result)
+    if entry.is_dir:
+        return Text(f"{label}/", style="lp.label")
+    if entry.entry_type.lower() == "symlink":
+        return Text(label, style="lp.text.secondary")
+    return Text(label)
 
 
 def _listing_next_steps(result: ListingResult) -> list[str]:

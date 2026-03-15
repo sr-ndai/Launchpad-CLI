@@ -15,6 +15,7 @@ import asyncssh
 import click
 from loguru import logger
 from rich.console import Group
+from rich.rule import Rule
 from rich.text import Text
 
 from launchpad_cli.core.config import LaunchpadConfig, resolve_config
@@ -25,11 +26,10 @@ from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.task_selectors import load_job_manifest, resolve_manifest_task_reference
 from launchpad_cli.display import (
     build_console,
-    build_detail_panel,
+    build_inline_kv,
+    build_next_steps,
     build_logs_picker_panel,
-    build_next_steps_panel,
-    build_status_badge,
-    build_summary_table,
+    build_warning_line,
 )
 from launchpad_cli.solvers import AnsysAdapter, NastranAdapter
 
@@ -824,68 +824,62 @@ def _log_kind(*, solver_log: bool, log_kind: str | None, err: bool) -> str:
 
 
 def _build_logs_renderable(result: LogsResult) -> Group:
-    """Render the buffered log view in the shared Phase 7 layout."""
-
-    intro = Text()
-    intro.append("Remote log snapshot", style="lp.brand.secondary")
-    intro.append(
-        " for the selected SLURM target and log file.",
-        style="lp.brand.subtle",
-    )
+    """Render the buffered log view with a minimal header and raw content."""
 
     renderables = [
-        build_detail_panel(
-            Group(intro, _build_logs_summary(result)),
-            title="Log Snapshot",
-        )
+        _build_logs_header(result),
+        build_inline_kv("path", result.remote_path, label_width=8),
+        Rule(style="lp.rule", align="left"),
     ]
     if result.content.strip():
-        renderables.append(
-            build_detail_panel(
-                Text(result.content.rstrip("\n")),
-                title="Tail Output",
-            )
-        )
+        renderables.extend([Text(), Text(result.content.rstrip("\n"))])
     else:
-        renderables.append(
-            build_detail_panel(
-                "The selected log is empty right now. The job may still be starting or this file has not been written yet.",
-                title="No Log Output Yet",
-                tone="warn",
-            )
+        renderables.extend(
+            [
+                Text(),
+                build_warning_line(
+                    "No log output yet. The job may still be starting or this file has not been written yet."
+                ),
+                Text(),
+                build_next_steps(_logs_next_steps(result)),
+            ]
         )
-
-    renderables.append(build_next_steps_panel(_logs_next_steps(result)))
     return Group(*renderables)
 
 
 def _build_live_logs_renderable(result: LogsResult) -> Group:
-    """Render the pre-stream banner for `launchpad logs --follow`."""
+    """Render the single header shown before `launchpad logs --follow` starts streaming."""
 
-    intro = Text()
-    intro.append("Streaming", style="lp.brand.secondary")
-    intro.append(
-        " the selected remote log. Press Ctrl+C to stop.",
-        style="lp.brand.subtle",
-    )
     return Group(
-        build_detail_panel(
-            Group(intro, _build_logs_summary(result)),
-            title="Live Log Tail",
-        )
+        _build_logs_header(result),
+        build_inline_kv("path", result.remote_path, label_width=8),
+        Rule(style="lp.rule", align="left"),
     )
 
 
-def _build_logs_summary(result: LogsResult):
-    summary = build_summary_table()
-    summary.add_row("Job", result.job_id)
-    summary.add_row("Task", result.task_id or "—")
-    summary.add_row("Run name", result.run_name or "—")
-    summary.add_row("State", build_status_badge(result.state))
-    summary.add_row("Log kind", result.log_kind)
-    summary.add_row("Path", result.remote_path)
-    summary.add_row("Lines", f"last {result.lines}")
-    return summary
+def _build_logs_header(result: LogsResult) -> Text:
+    """Return the minimal log identity line used by snapshot and follow flows."""
+
+    header = Text("  Job ")
+    header.append(result.job_id, style="lp.label")
+    if result.task_id:
+        header.append(f" · Task {result.task_id}", style="lp.value")
+    if result.run_name:
+        header.append(f" ({result.run_name})", style="lp.text.tertiary")
+    header.append(f" · {_log_kind_label(result.log_kind)}", style="lp.text.secondary")
+    return header
+
+
+def _log_kind_label(log_kind: str) -> str:
+    """Return the restrained display label for a resolved log kind."""
+
+    if log_kind == "stdout":
+        return "SLURM log"
+    if log_kind == "stderr":
+        return "SLURM stderr"
+    if log_kind == "solver":
+        return "solver log"
+    return f"{log_kind} log"
 
 
 def _logs_next_steps(result: LogsResult) -> list[str]:

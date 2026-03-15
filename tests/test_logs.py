@@ -59,10 +59,11 @@ def test_logs_command_reads_slurm_stdout_for_specific_task(monkeypatch: pytest.M
     result = CliRunner().invoke(cli, ["logs", "12345", "2"])
 
     assert result.exit_code == 0
-    assert "Log Snapshot" in result.output
-    assert "Tail Output" in result.output
+    assert "Job 12345" in result.output
+    assert "Task 2" in result.output
+    assert "SLURM log" in result.output
     assert "solver line 1" in result.output
-    assert "launchpad status 12345" in result.output
+    assert "/shared/sergey/tank_v3/logs/slurm_12345_2.out" in result.output
 
 
 def test_logs_command_resolves_solver_log_with_follow(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,7 +112,8 @@ def test_logs_command_resolves_solver_log_with_follow(monkeypatch: pytest.Monkey
     result = CliRunner().invoke(cli, ["logs", "12345", "2", "--solver-log", "--follow", "--lines", "100"])
 
     assert result.exit_code == 0
-    assert "Live Log Tail" in result.output
+    assert "Job 12345" in result.output
+    assert "solver log" in result.output
     assert "/shared/sergey/nastran-20260312-2148-abcd/results_wing_2/wing.f06" in result.output
     assert emitted == ["F06\n"]
 
@@ -181,7 +183,7 @@ def test_logs_command_resolves_manifest_task_alias_and_log_kind(
     result = CliRunner().invoke(cli, ["logs", "12345", "003", "--log-kind", "telemetry"])
 
     assert result.exit_code == 0
-    assert "telemetry" in result.output
+    assert "telemetry log" in result.output
     assert "wing.f04" in result.output
 
 
@@ -386,7 +388,7 @@ def test_logs_command_renders_empty_state_for_blank_log_content(monkeypatch: pyt
     result = CliRunner().invoke(cli, ["logs", "12345", "2"])
 
     assert result.exit_code == 0
-    assert "No Log Output Yet" in result.output
+    assert "No log output yet." in result.output
     assert "slurm_12345_2.out" in result.output
 
 
