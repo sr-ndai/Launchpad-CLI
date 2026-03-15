@@ -152,7 +152,8 @@ def command(
     if watch and json_output:
         raise click.ClickException("`launchpad status --watch` does not support `--json` output.")
 
-    console = build_console(no_color=not _colorize_output(ctx))
+    no_color = not _colorize_output(ctx)
+    console = build_console(no_color=no_color)
 
     try:
         if watch:
@@ -170,6 +171,7 @@ def command(
                                 **item.to_display_payload(),
                                 watch_mode=True,
                                 refresh_interval=interval,
+                                no_color=no_color,
                             ),
                             refresh=True,
                         ),
@@ -195,7 +197,7 @@ def command(
     if json_output:
         click.echo(json.dumps(snapshot.as_dict(), indent=2))
     elif not watch:
-        console.print(build_status_renderable(**snapshot.to_display_payload()))
+        console.print(build_status_renderable(**snapshot.to_display_payload(), no_color=no_color))
 
 
 async def _run_status(

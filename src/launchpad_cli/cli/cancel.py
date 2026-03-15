@@ -28,9 +28,10 @@ from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.task_selectors import load_job_manifest, resolve_task_ids
 from launchpad_cli.display import (
     build_console,
-    build_detail_panel,
-    build_next_steps_panel,
-    build_summary_table,
+    build_inline_kv,
+    build_next_steps,
+    build_success_line,
+    build_warning_line,
 )
 
 
@@ -245,8 +246,8 @@ def _cancel_target(job_id: str, task_ids: tuple[str, ...]) -> str:
 
 def _confirmation_text(job_id: str, task_ids: tuple[str, ...]) -> str:
     if not task_ids:
-        return f"Proceed with cancellation for SLURM job {job_id}?"
-    return f"Proceed with cancellation for SLURM job {job_id} task(s) {', '.join(task_ids)}?"
+        return f"Cancel job {job_id}?"
+    return f"Cancel job {job_id} task(s) {', '.join(task_ids)}?"
 
 
 def _success_text(job_id: str, task_ids: tuple[str, ...]) -> str:
@@ -274,47 +275,23 @@ def _colorize_output(ctx: click.Context) -> bool:
 def _build_cancel_preview(job_id: str, task_ids: tuple[str, ...]) -> Group:
     """Render the human-facing preview before a destructive cancel action."""
 
-    intro = Text()
-    intro.append("This sends ", style="lp.brand.subtle")
-    intro.append("scancel", style="lp.brand.secondary")
-    intro.append(
-        " immediately once you confirm.",
-        style="lp.brand.subtle",
-    )
+    target = _cancel_target(job_id, task_ids)
     return Group(
-        build_detail_panel(
-            Group(intro, _build_cancel_summary(job_id, task_ids, target=_cancel_target(job_id, task_ids))),
-            title="Cancel Preview",
-            tone="warn",
-        ),
-        build_next_steps_panel(
-            [
-                "Review the target below before confirming.",
-                "Use Ctrl+C now if you do not want to send the cancellation request.",
-            ],
-            title="What Happens Next",
-        ),
+        build_warning_line("Cancellation sends scancel immediately once you confirm."),
+        Text(),
+        *_build_cancel_lines(job_id, task_ids, target=target),
     )
 
 
 def _build_cancel_result_renderable(result: CancelResult) -> Group:
     """Render the post-cancel success summary."""
 
-    intro = Text()
-    intro.append("Cancellation requested. ", style="lp.brand.secondary")
-    intro.append(
-        "SLURM may take a moment to reflect the new state.",
-        style="lp.brand.subtle",
-    )
-    summary = _build_cancel_summary(result.job_id, result.task_ids, target=result.target)
-    summary.add_row("Result", result.message)
     return Group(
-        build_detail_panel(
-            Group(intro, summary),
-            title="Cancellation Requested",
-            tone="success",
-        ),
-        build_next_steps_panel(
+        build_success_line(result.message),
+        Text(),
+        *_build_cancel_lines(result.job_id, result.task_ids, target=result.target),
+        Text(),
+        build_next_steps(
             [
                 f"launchpad status {result.job_id}",
                 f"launchpad logs {result.job_id}",
@@ -323,13 +300,15 @@ def _build_cancel_result_renderable(result: CancelResult) -> Group:
     )
 
 
-def _build_cancel_summary(job_id: str, task_ids: tuple[str, ...], *, target: str):
-    summary = build_summary_table()
-    summary.add_row("Job", job_id)
-    summary.add_row("Scope", _task_scope_label(task_ids))
-    summary.add_row("Tasks", ", ".join(task_ids) if task_ids else "all tasks")
-    summary.add_row("Target", target)
-    return summary
+def _build_cancel_lines(job_id: str, task_ids: tuple[str, ...], *, target: str) -> list[Text]:
+    """Return the aligned cancellation metadata lines shared by preview and result views."""
+
+    return [
+        build_inline_kv("job", job_id, label_width=12),
+        build_inline_kv("scope", _task_scope_label(task_ids), label_width=12),
+        build_inline_kv("tasks", ", ".join(task_ids) if task_ids else "all tasks", label_width=12),
+        build_inline_kv("target", target, label_width=12),
+    ]
 
 
 def _task_scope_label(task_ids: tuple[str, ...]) -> str:

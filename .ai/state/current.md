@@ -6,13 +6,13 @@
 > repair this snapshot before ending the session.
 
 ## Last Updated
-2026-03-14
+2026-03-15
 
 ## Active Phase
-Phase 8 — Task References and Solver-Aware Logs
+Phase 9 — CLI Visual Overhaul
 
 ## Active Task
-None.
+None — Phase 9 complete
 
 ## Queue Snapshot
 - pending: —
@@ -24,111 +24,29 @@ None.
 
 ## Repo State
 - default branch: `main`
-- coordination branch: `phase/08-task-references-and-solver-aware-logs`
+- coordination branch: `phase/09-cli-visual-overhaul`
 - active task branch: `none`
-- last processed builder session: `2026-03-14-1805-builder-8.8.md`
+- last processed builder session: `2026-03-15-0937-builder-9.7.md`
 
 ## What Changed Recently
-- Merged the latest `origin/main` into
-  `phase/08-task-references-and-solver-aware-logs` to resolve the current PR
-  conflict set while preserving the accepted `8.8` planning, queue, routing,
-  and decision state.
-- Opened PR `#12` from `phase/08-task-references-and-solver-aware-logs` to
-  `main` for the post-merge `8.8` follow-up after confirming that PR `#11`
-  had already been merged into `main` on 2026-03-15.
-- Accepted task `8.8` after review and prompt verification, then merged
-  `task/8.8-slurm-parser-hardening` into the phase branch.
-- Phase 8 now also includes the shared SLURM parser hardening for the
-  reported Slurm 23.11 payload shape and the related regression coverage from
-  `8.8`.
-- Reopened Phase 8 with task `8.8` after field debugging showed that
-  `launchpad status` can crash on cluster-specific SLURM JSON when a host-like
-  scheduler field is parsed as an integer.
-- Assigned task `8.8` on branch `task/8.8-slurm-parser-hardening` to harden
-  the shared SLURM parser and add regression coverage for the reported payload
-  shape.
-- Merged the latest `main` into
-  `phase/08-task-references-and-solver-aware-logs` to resolve the current PR
-  conflict set, keeping the accepted `8.6` workspace-root changes and `8.7`
-  config-show highlighting intact.
-- Opened PR `#11` from `phase/08-task-references-and-solver-aware-logs` to
-  `main` for the post-merge follow-ups after confirming that PR `#10` had
-  already been merged into `main` on 2026-03-14.
-- Accepted task `8.7` after review and prompt verification, then merged
-  `task/8.7-config-show-syntax-highlighting` into the phase branch.
-- Phase 8 now also includes syntax-highlighted human-readable
-  `launchpad config show` output, the shared syntax helper, and the related
-  docs/tests from `8.7`.
-- Reopened Phase 8 with task `8.7` after field feedback showed that
-  `launchpad config show` still renders resolved TOML as plain text instead of
-  using Rich syntax highlighting in the primary human-readable path.
-- Assigned task `8.7` on branch `task/8.7-config-show-syntax-highlighting` to
-  add syntax-highlighted `config show` rendering while preserving the existing
-  `--json` and `--docs` outputs.
-- Accepted task `8.6` after review and prompt verification, then merged
-  `task/8.6-configurable-workspace-root` into the phase branch.
-- Phase 8 now also includes the configurable `cluster.workspace_root` model,
-  the shared workspace-root resolver, and the aligned submit, doctor, ls,
-  cleanup, docs, and regression updates from `8.6`.
-- Reopened Phase 8 with task `8.6` after field debugging showed that
-  Launchpad still hardcodes the writable remote workspace as
-  `<shared_root>/<ssh.username>` even when the cluster uses a different shared
-  writable directory such as `/shared/launchpad`.
-- Assigned task `8.6` on branch `task/8.6-configurable-workspace-root` to add
-  a dedicated workspace-root config field, centralize the resolver, and align
-  submit, doctor, ls, cleanup, docs, and regression coverage around it.
-- Merged the latest `main` into
-  `phase/08-task-references-and-solver-aware-logs` to resolve the PR conflict
-  set, keeping the Phase 8 follow-up state and the `8.5` scheduler-shell
-  implementation intact.
-- Opened PR `#10` from `phase/08-task-references-and-solver-aware-logs` to
-  `main` after confirming GitHub no longer had the older Phase 8 PR open.
-- Accepted task `8.5` after review and prompt verification, then merged
-  `task/8.5-slurm-login-shell` into the phase branch.
-- Phase 8 now also includes the shared SLURM login-shell execution path, the
-  aligned doctor scheduler-binary checks, and the related docs/tests from
-  `8.5`.
-- Reopened Phase 8 again with task `8.5` after field debugging showed that
-  `status` and `logs` still fail when `squeue` and `sacct` are only available
-  through the head node's login-shell initialization.
-- Committed the repository-level `.gitignore` follow-up to ignore `*.pem`
-  private-key files without mixing that housekeeping into product task work.
-- Accepted task `8.4` after review and prompt verification, then merged
-  `task/8.4-cluster-access-diagnostics` into the phase branch.
-- Phase 8 now includes the doctor exec-environment fix, the Windows
-  `launchpad ssh` OpenSSH fallback, the related docs updates, and regression
-  coverage from `8.4`.
-- Reopened Phase 8 with follow-up task `8.4` after field debugging showed that
-  `doctor` probes the wrong remote shell environment for binary checks and that
-  `launchpad ssh` crashes on Windows during AsyncSSH stdio redirection.
-- Assigned task `8.4` on branch `task/8.4-cluster-access-diagnostics` to fix
-  the doctor probe alignment, the Windows SSH path, and the related docs/tests
-  before PR `#9` is merged.
-- Accepted task `8.3` after the interactive picker, retry-by-name follow mode,
-  and final docs/help updates passed review and prompt verification.
-- Merged `task/8.3-interactive-log-picker` into
-  `phase/08-task-references-and-solver-aware-logs`, bringing the TTY-only
-  picker, final logs UX, and docs updates onto the shared phase branch.
-- Opened PR `#9` from `phase/08-task-references-and-solver-aware-logs` to
-  `main` after Phase 8 closed locally.
+- Processed Builder session `2026-03-15-0937-builder-9.7.md` and reran the
+  Phase 9 verification command set plus the full `uv run pytest` suite during
+  review.
+- Accepted task `9.7`, merged
+  `task/9.7-help-docs-and-regression-hardening` into
+  `phase/09-cli-visual-overhaul`, and brought the final docs/help alignment
+  plus regression hardening updates onto the phase branch.
+- Marked all Phase 9 tasks `done`, pushed `phase/09-cli-visual-overhaul`, and
+  opened PR `#13` for human review.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Human should review PR `#12` from
-`phase/08-task-references-and-solver-aware-logs` to `main`, now including the
-workspace-root follow-up from task `8.6`, the syntax-highlighted `config show`
-follow-up from task `8.7`, and the shared SLURM parser hardening from
-task `8.8`.
+Human should review PR `#13`:
+`https://github.com/sr-ndai/Launchpad-CLI/pull/13`
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1905-coordinator-resolve-phase-8-main-conflicts.md`
-4. `.ai/sessions/2026-03-14-1808-coordinator-open-phase-8-pr-12.md`
-5. `.ai/sessions/2026-03-14-1807-coordinator-accept-8.8-update-pr.md`
-6. `.ai/reviews/8.8.md`
-7. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-8. `.ai/plan.md`
-9. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-15-0943-coordinator-complete-phase-9-open-pr-13.md`

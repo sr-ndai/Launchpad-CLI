@@ -26,9 +26,12 @@ from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
     build_console,
-    build_detail_panel,
-    build_next_steps_panel,
-    build_summary_table,
+    build_inline_kv,
+    build_next_steps,
+    build_success_line,
+    build_suggestion_line,
+    build_warning_line,
+    make_table,
 )
 
 TERMINAL_STATES = {
@@ -338,7 +341,7 @@ def _select_targets_from_prompt(
         return targets
 
     response = click.prompt(
-        "Directories to delete (comma-separated numbers, `all`, or `none`)",
+        "Delete which? (comma-separated numbers, or 'all')",
         default="none",
         show_default=False,
         err=err,
@@ -467,21 +470,19 @@ def _sort_int(value: str | None) -> int:
         return 10**9
 
 
-def _build_target_table(targets: tuple[CleanupTarget, ...], *, title: str | None = None) -> Table:
-    table = Table(title=title, show_header=True, header_style="bold")
+def _build_target_table(targets: tuple[CleanupTarget, ...]) -> Table:
+    table = make_table()
     table.add_column("#", justify="right")
-    table.add_column("Label")
+    table.add_column("Run Name")
     table.add_column("Size", justify="right")
-    table.add_column("Modified")
-    table.add_column("Path")
+    table.add_column("Age")
 
     for index, target in enumerate(targets, start=1):
         table.add_row(
             str(index),
             target.label,
             _format_bytes(target.size_bytes),
-            _format_timestamp(target.modified_epoch),
-            target.path,
+            _format_age(target.modified_epoch),
         )
 
     return table
@@ -516,6 +517,28 @@ def _format_timestamp(value: float | None) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(value))
 
 
+def _format_age(value: float | None) -> str:
+    """Return a coarse relative age label for cleanup candidate tables."""
+
+    if value is None:
+        return "—"
+
+    delta = max(int(time.time() - value), 0)
+    if delta < 60:
+        return f"{delta} sec" if delta != 1 else "1 sec"
+    if delta < 60 * 60:
+        minutes = delta // 60
+        return f"{minutes} min" if minutes != 1 else "1 min"
+    if delta < 60 * 60 * 24:
+        hours = delta // (60 * 60)
+        return f"{hours} hr" if hours != 1 else "1 hr"
+    if delta < 60 * 60 * 24 * 7:
+        days = delta // (60 * 60 * 24)
+        return f"{days} days" if days != 1 else "1 day"
+    weeks = delta // (60 * 60 * 24 * 7)
+    return f"{weeks} weeks" if weeks != 1 else "1 week"
+
+
 def _verbosity(ctx: click.Context) -> int:
     options = getattr(ctx.find_root(), "obj", None)
     return int(getattr(options, "verbose", 0))
@@ -539,27 +562,16 @@ def _build_cleanup_candidates_renderable(
 ) -> Group:
     """Render the root-scan candidate list before prompting for a selection."""
 
-    intro = Text()
-    intro.append("Review the numbered directories", style="lp.brand.secondary")
-    intro.append(
-        " before selecting what to delete.",
-        style="lp.brand.subtle",
-    )
-    return Group(
-        build_detail_panel(
-            Group(intro, _build_cleanup_summary(targets, older_than=older_than, requested_job_ids=())),
-            title="Cleanup Candidates",
-            tone="warn",
-        ),
-        build_detail_panel(_build_target_table(targets), title="Candidate Directories"),
-        build_next_steps_panel(
-            [
-                "Enter comma-separated numbers, `all`, or `none` at the prompt.",
-                "Launchpad will ask for one final confirmation before deletion.",
-            ],
-            title="Selection Guide",
-        ),
-    )
+    renderables: list[object] = [
+        _build_cleanup_header(targets),
+        build_inline_kv("age filter", older_than or "none", label_width=12),
+        Text(),
+        _build_target_table(targets),
+        Text(),
+        build_suggestion_line("Enter comma-separated numbers, `all`, or `none` at the prompt.", indent=2),
+        build_suggestion_line("Launchpad will ask for one final confirmation before deletion.", indent=2),
+    ]
+    return Group(*renderables)
 
 
 def _build_cleanup_preview_renderable(
@@ -570,67 +582,83 @@ def _build_cleanup_preview_renderable(
 ) -> Group:
     """Render the final destructive-action preview for cleanup."""
 
-    intro = Text()
-    intro.append("These remote directories will be deleted", style="lp.brand.secondary")
-    intro.append(
-        " if you confirm.",
-        style="lp.brand.subtle",
-    )
     return Group(
-        build_detail_panel(
-            Group(intro, _build_cleanup_summary(targets, older_than=older_than, requested_job_ids=requested_job_ids)),
-            title="Cleanup Preview",
-            tone="warn",
+        build_warning_line("These remote directories will be deleted if you confirm."),
+        Text(),
+        *_build_cleanup_context_lines(
+            targets,
+            older_than=older_than,
+            requested_job_ids=requested_job_ids,
         ),
-        build_detail_panel(_build_target_table(targets), title="Selected Directories"),
+        Text(),
+        _build_target_table(targets),
     )
 
 
 def _build_cleanup_result_renderable(result: CleanupResult) -> Group:
-    """Render cleanup outcomes in the shared Phase 7 layout."""
+    """Render cleanup outcomes in the restrained Phase 9 utility-command style."""
 
-    title = "Cleanup Complete" if result.deleted_paths else "Nothing To Clean"
-    tone = "success" if result.deleted_paths else "warn"
-    intro = Text()
-    intro.append(result.message, style="lp.brand.secondary" if result.deleted_paths else "lp.brand.subtle")
-
-    renderables = [
-        build_detail_panel(
-            Group(
-                intro,
-                _build_cleanup_summary(
+    renderables: list[object] = [
+        build_success_line(_cleanup_result_line(result))
+        if result.deleted_paths
+        else build_warning_line(result.message)
+    ]
+    if result.selected_targets:
+        renderables.extend(
+            [
+                Text(),
+                *_build_cleanup_context_lines(
                     result.selected_targets,
                     older_than=result.older_than,
                     requested_job_ids=result.requested_job_ids,
                 ),
-            ),
-            title=title,
-            tone=tone,
-        )
-    ]
-    if result.selected_targets:
-        renderables.append(
-            build_detail_panel(
+                Text(),
                 _build_target_table(result.selected_targets),
-                title="Affected Directories",
-            )
+            ]
         )
-    renderables.append(build_next_steps_panel(_cleanup_next_steps(result)))
+    renderables.extend([Text(), build_next_steps(_cleanup_next_steps(result))])
     return Group(*renderables)
 
 
-def _build_cleanup_summary(
+def _build_cleanup_context_lines(
     targets: tuple[CleanupTarget, ...],
     *,
     older_than: str | None,
     requested_job_ids: tuple[str, ...],
-):
-    summary = build_summary_table()
-    summary.add_row("Requested jobs", ", ".join(requested_job_ids) if requested_job_ids else "root scan")
-    summary.add_row("Age filter", older_than or "none")
-    summary.add_row("Directories", str(len(targets)))
-    summary.add_row("Labels", ", ".join(target.label for target in targets) if targets else "—")
-    return summary
+) -> list[Text]:
+    """Return aligned cleanup metadata lines shared by preview and results."""
+
+    return [
+        build_inline_kv(
+            "requested",
+            ", ".join(requested_job_ids) if requested_job_ids else "root scan",
+            label_width=12,
+        ),
+        build_inline_kv("age filter", older_than or "none", label_width=12),
+        build_inline_kv("directories", str(len(targets)), label_width=12),
+        build_inline_kv(
+            "labels",
+            ", ".join(target.label for target in targets) if targets else "—",
+            label_width=12,
+        ),
+    ]
+
+
+def _build_cleanup_header(targets: tuple[CleanupTarget, ...]) -> Text:
+    """Return the root-directory heading shown above cleanup candidate tables."""
+
+    parents = {str(PurePosixPath(target.path).parent) for target in targets}
+    root = parents.pop() if len(parents) == 1 else "selected directories"
+    header = Text("  Remote directories in ", style="lp.text.secondary")
+    header.append(root, style="lp.label")
+    return header
+
+
+def _cleanup_result_line(result: CleanupResult) -> str:
+    """Return the concise success line for human-readable cleanup results."""
+
+    count = len(result.deleted_paths)
+    return f"Deleted {count} remote director{'y' if count == 1 else 'ies'}."
 
 
 def _cleanup_next_steps(result: CleanupResult) -> list[str]:

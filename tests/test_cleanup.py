@@ -53,8 +53,8 @@ def test_cleanup_command_deletes_explicit_job_ids_with_yes(monkeypatch: pytest.M
     result = CliRunner().invoke(cli, ["cleanup", "12345", "23456", "--yes"])
 
     assert result.exit_code == 0
-    assert "Cleanup Complete" in result.output
-    assert "Deleted 2 remote directories" in result.output
+    assert "Deleted 2 remote directories." in result.output
+    assert "12345, 23456" in result.output
 
 
 def test_cleanup_command_emits_json_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -110,7 +110,6 @@ def test_cleanup_command_renders_empty_state_when_nothing_matches(
     result = CliRunner().invoke(cli, ["cleanup", "--older-than", "30d", "--yes"])
 
     assert result.exit_code == 0
-    assert "Nothing To Clean" in result.output
     assert "No matching remote job directories found." in result.output
 
 

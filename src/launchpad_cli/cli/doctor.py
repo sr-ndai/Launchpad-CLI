@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import shlex
 import sys
 from dataclasses import asdict, dataclass
@@ -14,21 +13,24 @@ from typing import Mapping
 
 import asyncssh
 import click
-from rich.table import Table
 from rich.text import Text
 
-from launchpad_cli.core.config import DEFAULT_CLUSTER_CONFIG_PATH, LaunchpadConfig, SSHConfig, resolve_config
+from launchpad_cli.core.config import (
+    DEFAULT_CLUSTER_CONFIG_PATH,
+    LaunchpadConfig,
+    SSHConfig,
+    resolve_config,
+)
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.slurm import resolve_slurm_executable
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
-    build_badge,
     build_console,
-    build_detail_panel,
-    build_launchpad_wordmark,
-    build_next_steps_panel,
-    build_summary_table,
+    build_next_steps,
+    build_section_rule,
+    build_status_entry,
+    build_suggestion_line,
 )
 
 
@@ -105,21 +107,21 @@ async def _collect_diagnostics(
             DiagnosticResult(
                 name="ssh-connection",
                 status="skip",
-                detail="Skipped remote checks because local SSH configuration is incomplete.",
+                detail="skipped (SSH not configured)",
             )
         )
         results.append(
             DiagnosticResult(
                 name="remote-binaries",
                 status="skip",
-                detail="Skipped remote binary checks because local SSH configuration is incomplete.",
+                detail="skipped (SSH not configured)",
             )
         )
         results.append(
             DiagnosticResult(
                 name="remote-root",
                 status="skip",
-                detail="Skipped remote writable-path checks because local SSH configuration is incomplete.",
+                detail="skipped (SSH not configured)",
             )
         )
         return results
@@ -148,14 +150,14 @@ async def _collect_diagnostics(
             DiagnosticResult(
                 name="remote-binaries",
                 status="skip",
-                detail="Skipped remote binary checks because the SSH connection did not succeed.",
+                detail="skipped (SSH connection failed)",
             )
         )
         results.append(
             DiagnosticResult(
                 name="remote-root",
                 status="skip",
-                detail="Skipped remote writable-path checks because the SSH connection did not succeed.",
+                detail="skipped (SSH connection failed)",
             )
         )
 
@@ -181,10 +183,16 @@ def _python_version_check() -> DiagnosticResult:
     )
 
 
-def _config_resolution_check(loaded_files: tuple[Path, ...], config: LaunchpadConfig) -> DiagnosticResult:
+def _config_resolution_check(
+    loaded_files: tuple[Path, ...], config: LaunchpadConfig
+) -> DiagnosticResult:
     """Summarize the resolved configuration inputs relevant to operator commands."""
 
-    source_text = ", ".join(str(path) for path in loaded_files) if loaded_files else "defaults only"
+    source_text = (
+        ", ".join(str(path) for path in loaded_files)
+        if loaded_files
+        else "defaults only"
+    )
     missing_fields: list[str] = []
     if not config.ssh.host:
         missing_fields.append("ssh.host")
@@ -222,7 +230,7 @@ def _ssh_key_check(config: SSHConfig) -> DiagnosticResult:
         return DiagnosticResult(
             name="ssh-key",
             status="fail",
-            detail="No SSH private key is configured.",
+            detail="not configured",
             suggestion="Run `launchpad config init` or set `LAUNCHPAD_KEY` to a valid private key path.",
         )
 
@@ -231,14 +239,14 @@ def _ssh_key_check(config: SSHConfig) -> DiagnosticResult:
         return DiagnosticResult(
             name="ssh-key",
             status="fail",
-            detail=f"SSH private key not found: {key_path}",
+            detail=f"not found: {key_path}",
             suggestion="Update `ssh.key_path` to a readable private key file.",
         )
 
     return DiagnosticResult(
         name="ssh-key",
         status="pass",
-        detail=f"SSH private key found: {key_path}",
+        detail=f"configured: {key_path}",
     )
 
 
@@ -249,18 +257,20 @@ def _shared_config_check() -> DiagnosticResult:
         return DiagnosticResult(
             name="shared-config",
             status="pass",
-            detail=f"Shared config readable: {DEFAULT_CLUSTER_CONFIG_PATH}",
+            detail=f"readable: {DEFAULT_CLUSTER_CONFIG_PATH}",
         )
 
     return DiagnosticResult(
         name="shared-config",
         status="fail",
-        detail=f"Shared config not found: {DEFAULT_CLUSTER_CONFIG_PATH}",
+        detail=f"not found: {DEFAULT_CLUSTER_CONFIG_PATH}",
         suggestion="Mount the shared `/shared` filesystem or rely on user/project/env config overrides.",
     )
 
 
-async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: LaunchpadConfig) -> DiagnosticResult:
+async def _remote_binaries_check(
+    conn: asyncssh.SSHClientConnection, config: LaunchpadConfig
+) -> DiagnosticResult:
     """Ensure the configured remote binaries resolve to executables."""
 
     resolved_paths: list[str] = []
@@ -268,7 +278,9 @@ async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: Lau
     missing_exec: list[str] = []
     scheduler_binaries = {"sbatch", "squeue", "sacct"}
 
-    for name, configured_value in config.remote_binaries.model_dump(mode="python").items():
+    for name, configured_value in config.remote_binaries.model_dump(
+        mode="python"
+    ).items():
         if name in scheduler_binaries:
             result = await resolve_slurm_executable(conn, str(configured_value))
         else:
@@ -319,12 +331,16 @@ async def _remote_binaries_check(conn: asyncssh.SSHClientConnection, config: Lau
     )
 
 
-async def _remote_root_check(conn: asyncssh.SSHClientConnection, config: LaunchpadConfig) -> DiagnosticResult:
+async def _remote_root_check(
+    conn: asyncssh.SSHClientConnection, config: LaunchpadConfig
+) -> DiagnosticResult:
     """Verify that the user's shared remote root exists and is writable."""
 
     remote_root = resolve_remote_workspace_root(config)
     quoted_root = shlex.quote(remote_root)
-    result = await conn.run(f"test -d {quoted_root} && test -w {quoted_root}", check=False)
+    result = await conn.run(
+        f"test -d {quoted_root} && test -w {quoted_root}", check=False
+    )
 
     if result.exit_status == 0:
         return DiagnosticResult(
@@ -373,59 +389,70 @@ def _render_results(results: list[DiagnosticResult], *, no_color: bool) -> None:
     passed = sum(result.status == "pass" for result in results)
     failed = sum(result.status == "fail" for result in results)
     skipped = sum(result.status == "skip" for result in results)
-    all_passed = failed == 0 and skipped == 0
 
-    if all_passed:
-        wordmark = build_launchpad_wordmark(width=_detect_terminal_width())
-        if wordmark is not None and not no_color and _stdout_supports_branding():
-            console.print(wordmark)
-        console.print(Text("Doctor checks passed. Launchpad is ready for the next run.", style="lp.brand.secondary"))
-
-    summary = build_summary_table()
-    summary.add_row("Checks", str(len(results)))
-    summary.add_row("Passed", str(passed))
-    summary.add_row("Failed", str(failed))
-    summary.add_row("Skipped", str(skipped))
-    summary.add_row("Overall", "ready" if all_passed else "needs attention")
-    console.print(
-        build_detail_panel(
-            summary,
-            title="Doctor Summary",
-            tone="success" if all_passed else ("danger" if failed else "warn"),
-        )
-    )
-
+    console.print(build_section_rule("Doctor"))
     local_results, remote_results = _partition_results(results)
     if local_results:
-        console.print(_build_diagnostic_panel("Local Setup", local_results))
+        console.print(Text("  Local Setup", style="lp.label" if not no_color else None))
+        for result in local_results:
+            _print_diagnostic_result(console, result, no_color=no_color)
+        console.print()
     if remote_results:
-        console.print(_build_diagnostic_panel("Cluster Access", remote_results))
+        console.print(
+            Text("  Cluster Access", style="lp.label" if not no_color else None)
+        )
+        for result in remote_results:
+            _print_diagnostic_result(console, result, no_color=no_color)
+        console.print()
 
-    console.print(build_next_steps_panel(_doctor_next_steps(results)))
+    console.print(
+        _build_summary_line(
+            len(results),
+            passed=passed,
+            failed=failed,
+            skipped=skipped,
+            no_color=no_color,
+        )
+    )
+    console.print()
+    console.print(build_next_steps(_doctor_next_steps(results), no_color=no_color))
 
 
-def _build_diagnostic_panel(title: str, results: list[DiagnosticResult]):
-    table = Table.grid(expand=True, padding=(0, 1))
-    table.add_column(width=10)
-    table.add_column()
-    for result in results:
-        body = Text(_diagnostic_title(result.name), style="lp.label")
-        body.append(f"\n{result.detail}", style="lp.value")
-        if result.suggestion:
-            body.append("\nNext: ", style="lp.brand.subtle")
-            body.append(result.suggestion, style="lp.brand.subtle")
-        table.add_row(_diagnostic_badge(result.status), body)
-    return build_detail_panel(table, title=title, tone=_panel_tone(results))
+def _print_diagnostic_result(
+    console, result: DiagnosticResult, *, no_color: bool
+) -> None:
+    tone = {
+        "pass": "success",
+        "fail": "error",
+        "skip": "muted",
+    }.get(result.status, "muted")
+    console.print(
+        build_status_entry(
+            tone,
+            _diagnostic_title(result.name),
+            _normalized_detail(result),
+            indent=4,
+            label_width=24,
+            no_color=no_color,
+            inline_detail_tier="value" if result.status == "pass" else "tertiary",
+        )
+    )
+    if result.suggestion:
+        for line in result.suggestion.splitlines():
+            console.print(build_suggestion_line(line, indent=7, no_color=no_color))
 
 
-def _diagnostic_badge(status: str) -> Text:
-    mapping = {
-        "pass": ("pass", "success"),
-        "fail": ("fail", "danger"),
-        "skip": ("skip", "warn"),
-    }
-    label, tone = mapping.get(status, (status, "neutral"))
-    return build_badge(label, tone=tone)
+def _normalized_detail(result: DiagnosticResult) -> str:
+    """Collapse repeated doctor skip copy into the shorter Phase 9 wording."""
+
+    if result.status != "skip":
+        return result.detail
+
+    if "local SSH configuration is incomplete" in result.detail:
+        return "skipped (SSH not configured)"
+    if "SSH connection did not succeed" in result.detail:
+        return "skipped (SSH connection failed)"
+    return result.detail
 
 
 def _diagnostic_title(name: str) -> str:
@@ -441,15 +468,9 @@ def _diagnostic_title(name: str) -> str:
     return titles.get(name, name.replace("-", " ").title())
 
 
-def _panel_tone(results: list[DiagnosticResult]) -> str:
-    if any(result.status == "fail" for result in results):
-        return "danger"
-    if any(result.status == "skip" for result in results):
-        return "warn"
-    return "success"
-
-
-def _partition_results(results: list[DiagnosticResult]) -> tuple[list[DiagnosticResult], list[DiagnosticResult]]:
+def _partition_results(
+    results: list[DiagnosticResult],
+) -> tuple[list[DiagnosticResult], list[DiagnosticResult]]:
     local_names = {"python", "config", "ssh-key", "shared-config"}
     local_results = [result for result in results if result.name in local_names]
     remote_results = [result for result in results if result.name not in local_names]
@@ -480,7 +501,10 @@ def _doctor_next_steps(results: list[DiagnosticResult]) -> list[str]:
             "launchpad doctor",
         ]
 
-    if statuses.get("remote-binaries") == "fail" or statuses.get("remote-root") == "fail":
+    if (
+        statuses.get("remote-binaries") == "fail"
+        or statuses.get("remote-root") == "fail"
+    ):
         return [
             "Fix the cluster-side prerequisite listed above.",
             "launchpad doctor",
@@ -497,15 +521,30 @@ def _doctor_next_steps(results: list[DiagnosticResult]) -> list[str]:
     return ["launchpad doctor"]
 
 
-def _stdout_supports_branding() -> bool:
-    return "NO_COLOR" not in os.environ and hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-
-
-def _detect_terminal_width() -> int | None:
-    try:
-        return shutil.get_terminal_size(fallback=(80, 24)).columns
-    except OSError:
-        return None
+def _build_summary_line(
+    total: int,
+    *,
+    passed: int,
+    failed: int,
+    skipped: int,
+    no_color: bool,
+) -> Text:
+    summary = Text(f"  {total} checks: ")
+    summary.append(str(passed), style="lp.status.success" if not no_color else None)
+    summary.append(" passed")
+    if failed:
+        summary.append(", ")
+        summary.append(str(failed), style="lp.status.error" if not no_color else None)
+        summary.append(" failed")
+    if skipped:
+        summary.append(", ")
+        summary.append(str(skipped), style="lp.text.tertiary" if not no_color else None)
+        summary.append(" skipped")
+    if not failed and not skipped:
+        summary.append(
+            ", ready for the next run", style="lp.text.tertiary" if not no_color else None
+        )
+    return summary
 
 
 def _verbosity(ctx: click.Context) -> int:

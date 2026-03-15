@@ -290,6 +290,7 @@ async def test_striped_download_resumes_existing_part_and_assembles_locally(
 
     storage = {"/shared/results/payload.bin": b"abcdefghij"}
     control_connection = FakeConnection(FakeSFTPClient(storage))
+    progress_updates: list[int] = []
 
     @asynccontextmanager
     async def fake_ssh_session(_config: SSHConfig):
@@ -305,11 +306,15 @@ async def test_striped_download_resumes_existing_part_and_assembles_locally(
         streams=3,
         chunk_size=4,
         resume=True,
+        progress_callback=progress_updates.append,
     )
 
     assert result.effective_streams == 3
     assert destination.read_bytes() == b"abcdefghij"
     assert not part_dir.exists()
+    assert progress_updates
+    assert progress_updates[-1] == 10
+    assert progress_updates == sorted(progress_updates)
 
 
 @pytest.mark.asyncio
@@ -362,6 +367,7 @@ async def test_download_many_uses_worker_pool_to_copy_multiple_files(
         "/shared/results/one.txt": b"one",
         "/shared/results/two.txt": b"two",
     }
+    progress_updates: list[int] = []
 
     @asynccontextmanager
     async def fake_ssh_session(_config: SSHConfig):
@@ -377,8 +383,12 @@ async def test_download_many_uses_worker_pool_to_copy_multiple_files(
         ),
         streams=2,
         resume=True,
+        progress_callback=progress_updates.append,
     )
 
     assert result.effective_streams == 2
     assert (tmp_path / "one.txt").read_text(encoding="utf-8") == "one"
     assert (tmp_path / "two.txt").read_text(encoding="utf-8") == "two"
+    assert progress_updates
+    assert progress_updates[-1] == 6
+    assert progress_updates == sorted(progress_updates)

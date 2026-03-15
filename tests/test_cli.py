@@ -16,17 +16,18 @@ def test_root_command_shows_welcome_screen_when_invoked_without_subcommand() -> 
     result = runner.invoke(cli, [])
 
     assert result.exit_code == 0
-    assert "From folder to cluster in one command." in result.output
-    assert "submit" in result.output
-    assert "doctor" in result.output
-    assert "Key Commands" in result.output
-    assert "launchpad <command> --help" in result.output
-    assert "Get started: launchpad config init -> doctor -> submit --dry-run ." in result.output
+    assert "Launchpad  v0.1.0" in result.output
+    assert "Submit, monitor, and retrieve solver jobs on your SLURM cluster." in result.output
+    assert "launchpad submit" in result.output
+    assert "launchpad doctor" in result.output
+    assert "Run launchpad -h for all commands." in result.output
+    assert "Key Commands" not in result.output
+    assert "Get started: launchpad config init -> doctor -> submit --dry-run ." not in result.output
     assert "Usage:" not in result.output
 
 
 def test_root_help_is_a_compact_reference_card() -> None:
-    """`launchpad --help` should stay dry and grouped into the four root panels."""
+    """`launchpad --help` should stay dry and grouped into the root help sections."""
 
     runner = CliRunner()
 
@@ -41,8 +42,9 @@ def test_root_help_is_a_compact_reference_card() -> None:
     assert "--json" in result.output
     assert "--no-color" in result.output
     assert "--version" in result.output
-    assert "Get started: launchpad config init -> doctor -> submit --dry-run ." in result.output
+    assert "Use launchpad <command> --help for command-specific examples." in result.output
     assert "From folder to cluster in one command." not in result.output
+    assert "Launchpad  v0.1.0" not in result.output
     assert "Key Commands" not in result.output
     assert "Examples:" not in result.output
     assert "Primary Workflows" not in result.output
@@ -71,8 +73,9 @@ def test_root_welcome_shows_wordmark_when_branding_is_allowed(monkeypatch) -> No
     result = runner.invoke(cli, [], color=True)
 
     assert result.exit_code == 0
-    assert "From folder to cluster in one command." in result.output
+    assert "Submit, monitor, and retrieve solver jobs on your SLURM cluster." in result.output
     assert "____ ___  ______" in result.output
+    assert "→ launchpad submit" in result.output
 
 
 def test_root_welcome_uses_compact_wordmark_on_narrow_ttys(monkeypatch) -> None:
@@ -88,6 +91,7 @@ def test_root_welcome_uses_compact_wordmark_on_narrow_ttys(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Launchpad" in result.output
     assert "____ ___  ______" not in result.output
+    assert "Run launchpad -h for all commands." in result.output
 
 
 def test_root_welcome_suppresses_wordmark_with_no_color(monkeypatch) -> None:
@@ -101,8 +105,9 @@ def test_root_welcome_suppresses_wordmark_with_no_color(monkeypatch) -> None:
     result = runner.invoke(cli, ["--no-color"], color=True)
 
     assert result.exit_code == 0
-    assert "From folder to cluster in one command." in result.output
+    assert "Submit, monitor, and retrieve solver jobs on your SLURM cluster." in result.output
     assert "____ ___  ______" not in result.output
+    assert "-> launchpad submit" in result.output
 
 
 def test_submit_help_uses_grouped_sections_and_examples() -> None:
@@ -134,3 +139,33 @@ def test_logs_help_mentions_task_refs_and_log_kind() -> None:
     assert "--log-kind" in result.output
     assert "launchpad logs 12345 --follow" in result.output
     assert "launchpad logs 12345 001 --log-kind telemetry" in result.output
+
+
+def test_cancel_help_mentions_task_refs_and_examples() -> None:
+    """Cancel help should expose task-ref syntax and final examples."""
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["cancel", "--help"], prog_name="launchpad")
+
+    assert result.exit_code == 0
+    assert "TASK_REFS" in result.output
+    assert "--yes" in result.output
+    assert "launchpad cancel 12345 002 wing.dat --yes" in result.output
+
+
+def test_ls_and_cleanup_help_keep_final_examples() -> None:
+    """The remaining utility-command help surfaces should stay aligned with Phase 9 examples."""
+
+    runner = CliRunner()
+
+    ls_result = runner.invoke(cli, ["ls", "--help"], prog_name="launchpad")
+    cleanup_result = runner.invoke(cli, ["cleanup", "--help"], prog_name="launchpad")
+
+    assert ls_result.exit_code == 0
+    assert "launchpad ls tank_v3/*.txt --long" in ls_result.output
+    assert "--long" in ls_result.output
+
+    assert cleanup_result.exit_code == 0
+    assert "--older-than" in cleanup_result.output
+    assert "launchpad cleanup --older-than 30d" in cleanup_result.output
