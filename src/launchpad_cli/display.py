@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 from rich.console import Console, Group
+from rich.padding import Padding
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -67,7 +68,7 @@ LAUNCHPAD_THEME = Theme(
         "lp.badge.neutral": f"bold {PALETTE['ink']} on {PALETTE['mist']}",
         "lp.label": f"bold {PALETTE['ice']}",
         "lp.value": PALETTE["ice"],
-        "lp.text.label": f"dim {PALETTE['mist']}",
+        "lp.text.label": f"bold {PALETTE['mist']}",
         "lp.text.detail": f"dim {PALETTE['mist']}",
         "lp.status.success": f"bold {PALETTE['green']}",
         "lp.status.error": f"bold {PALETTE['red']}",
@@ -424,6 +425,34 @@ def build_status_badge(state: object) -> Text:
     return build_badge(text, tone=tone)
 
 
+def build_state_text(state: object, *, no_color: bool = False) -> Text:
+    """Return an inline Phase 9 state label with symbol and color semantics."""
+
+    text = str(state or "UNKNOWN").upper()
+    symbol_name = {
+        "RUNNING": "running",
+        "COMPLETED": "success",
+        "PENDING": "pending",
+        "FAILED": "error",
+        "CANCELLED": "error",
+        "TIMEOUT": "error",
+    }.get(text, "warn")
+    style = {
+        "RUNNING": "lp.status.success",
+        "COMPLETED": "lp.status.info",
+        "PENDING": "lp.status.pending",
+        "FAILED": "lp.status.error",
+        "CANCELLED": "lp.status.error",
+        "TIMEOUT": "lp.status.error",
+    }.get(text)
+
+    state_text = Text()
+    state_text.append(_symbol(symbol_name, no_color=no_color), style=_status_style(symbol_name, no_color=no_color))
+    state_text.append("  ")
+    state_text.append(text, style=style if not no_color else None)
+    return state_text
+
+
 def build_section_heading(title: str, *, detail: str | None = None) -> Text:
     """Return a reusable section heading."""
 
@@ -514,58 +543,67 @@ def render_submit_dry_run(
     begin: str | None,
     script_preview: str,
 ) -> None:
-    """Render a Rich dry-run preview for `launchpad submit`."""
+    """Render the Phase 9 dry-run preview for `launchpad submit`."""
 
-    intro = Text()
-    intro.append("Ready to stage this run. ", style="lp.brand.secondary")
-    intro.append(
-        "Nothing has been uploaded yet; review the manifest and script below.",
-        style="lp.brand.subtle",
+    no_color = bool(getattr(console, "no_color", False))
+    console.print(
+        build_hero_panel(
+            "Submit Preview",
+            [
+                ("Run name", run_name),
+                ("Solver", solver_name),
+                ("Remote", remote_job_dir),
+            ],
+            label_width=12,
+        )
     )
-
-    summary = build_summary_table()
-    summary.add_row("Run name", run_name)
-    summary.add_row("Solver", solver_name)
-    summary.add_row("Input dir", str(input_dir))
-    summary.add_row("Transfer mode", transfer_mode)
-    summary.add_row("Streams", str(requested_streams))
-    summary.add_row("Payload", payload_label)
-    summary.add_row("Remote job dir", remote_job_dir)
-    summary.add_row("Partition", partition)
-    summary.add_row("Time", time_limit)
-    summary.add_row("Begin", begin or "immediate")
-
-    manifest = Table(title="Detected Inputs", show_header=True, header_style="bold")
-    manifest.add_column("Label")
-    manifest.add_column("Alias")
-    manifest.add_column("Task", justify="right")
-    manifest.add_column("Primary input")
-    manifest.add_column("Size (bytes)", justify="right")
+    console.print()
+    console.print(Text("  Tasks", style="lp.label" if not no_color else None))
+    manifest = make_table()
+    manifest.add_column("Alias", style="lp.text.label")
+    manifest.add_column("Label", style="lp.label")
+    manifest.add_column("Input", style="lp.text.detail")
     for task_ref, item in zip(task_references, primary_inputs, strict=True):
         manifest.add_row(
-            task_ref.display_label,
             task_ref.alias,
-            task_ref.task_id,
+            task_ref.display_label,
             item.relative_path.as_posix(),
-            str(item.size_bytes),
         )
+    console.print(Padding(manifest, (0, 0, 0, 2)))
 
-    package_table = Table(title="Payload Contents", show_header=True, header_style="bold")
-    package_table.add_column("Path")
-    for path in package_files:
-        package_table.add_row(str(path))
+    console.print()
+    console.print(Text("  Transfer", style="lp.label" if not no_color else None))
+    for label, value in (
+        ("mode", transfer_mode),
+        ("streams", str(requested_streams)),
+        ("payload", payload_label),
+        ("input_dir", str(input_dir)),
+        ("partition", partition),
+        ("time", time_limit),
+        ("begin", begin or "immediate"),
+    ):
+        console.print(build_inline_kv(label, value, indent=4, label_width=14))
 
-    console.print(build_detail_panel(Group(intro, summary), title="Submit Preview"))
-    console.print(manifest)
-    console.print(package_table)
-    console.print(build_detail_panel(script_preview, title="Generated SLURM Script"))
+    if package_files:
+        console.print()
+        console.print(Text("  Payload", style="lp.label" if not no_color else None))
+        package_table = make_table(show_header=False)
+        package_table.add_column("Path", style="lp.text.detail")
+        for path in package_files:
+            package_table.add_row(str(path))
+        console.print(Padding(package_table, (0, 0, 0, 2)))
+
+    console.print()
+    console.print(build_section_rule("Generated Script"))
+    console.print(Padding(build_syntax_renderable(script_preview, lexer="bash"), (0, 0, 0, 2)))
+    console.print()
     console.print(
-        build_next_steps_panel(
+        build_next_steps(
             [
                 f"launchpad submit {input_dir}",
                 "Adjust flags and rerun --dry-run if anything looks off.",
             ],
-            title="If This Looks Right",
+            no_color=no_color,
         )
     )
 
@@ -583,47 +621,52 @@ def render_submit_confirmation(
     requested_streams: int,
     effective_streams: int,
 ) -> None:
-    """Render the Rich submit confirmation panel."""
+    """Render the Phase 9 submit confirmation surface."""
 
-    intro = Text()
-    intro.append("Submission accepted. ", style="lp.brand.secondary")
-    intro.append("Use the job ID below as the anchor for the rest of the workflow.", style="lp.brand.subtle")
-
-    summary = build_summary_table()
-    summary.add_row("Run name", run_name)
-    summary.add_row("Job ID", job_id)
-    summary.add_row("Remote job dir", remote_job_dir)
-    summary.add_row("Transfer mode", transfer_mode)
-    summary.add_row(
-        "Streams", f"requested {requested_streams}, effective {effective_streams}"
-    )
-    summary.add_row("Payload", payload_label)
-    summary.add_row("Remote payload", remote_payload_path)
-
+    no_color = bool(getattr(console, "no_color", False))
     console.print(
-        build_detail_panel(Group(intro, summary), title="Submission Complete", tone="success")
+        build_hero_panel(
+            "Submitted",
+            [
+                ("Run name", run_name),
+                ("Job ID", job_id),
+                ("Remote", remote_job_dir),
+            ],
+            tone="success",
+            label_width=12,
+        )
     )
-    if len(task_references) > 1:
-        references = Table(show_header=True, header_style="bold")
-        references.add_column("Label")
-        references.add_column("Alias")
-        references.add_column("Task", justify="right")
-        references.add_column("Input")
-        for task_ref in task_references:
-            references.add_row(
-                task_ref.display_label,
-                task_ref.alias,
-                task_ref.task_id,
-                task_ref.input_relative_path,
-            )
-        console.print(build_detail_panel(references, title="Task References"))
+    console.print()
+    console.print(Text("  Tasks", style="lp.label" if not no_color else None))
+    references = make_table()
+    references.add_column("Alias", style="lp.text.label")
+    references.add_column("Label", style="lp.label")
+    references.add_column("Input", style="lp.text.detail")
+    for task_ref in task_references:
+        references.add_row(
+            task_ref.alias,
+            task_ref.display_label,
+            task_ref.input_relative_path,
+        )
+    console.print(Padding(references, (0, 0, 0, 2)))
+    console.print()
+    console.print(Text("  Transfer", style="lp.label" if not no_color else None))
+    for label, value in (
+        ("mode", transfer_mode),
+        ("streams", f"requested {requested_streams} -> effective {effective_streams}"),
+        ("payload", payload_label),
+        ("remote_payload", remote_payload_path),
+    ):
+        console.print(build_inline_kv(label, value, indent=4, label_width=16))
+    console.print()
     console.print(
-        build_next_steps_panel(
+        build_next_steps(
             [
                 f"launchpad status {job_id}",
                 f"launchpad status {job_id} --watch",
                 f"launchpad download {job_id}",
-            ]
+            ],
+            no_color=no_color,
         )
     )
 
@@ -642,6 +685,7 @@ def build_status_renderable(
     rows: Sequence[Mapping[str, object]],
     watch_mode: bool = False,
     refresh_interval: int | None = None,
+    no_color: bool = False,
 ):
     """Build the Rich renderable used by `launchpad status`."""
 
@@ -657,6 +701,7 @@ def build_status_renderable(
             rows=rows,
             watch_mode=watch_mode,
             refresh_interval=refresh_interval,
+            no_color=no_color,
         )
 
     return _build_status_overview_renderable(
@@ -667,6 +712,7 @@ def build_status_renderable(
         rows=rows,
         watch_mode=watch_mode,
         refresh_interval=refresh_interval,
+        no_color=no_color,
     )
 
 
@@ -679,43 +725,47 @@ def _build_status_overview_renderable(
     rows: Sequence[Mapping[str, object]],
     watch_mode: bool,
     refresh_interval: int | None,
+    no_color: bool,
 ) -> Group:
-    title = "Live Status" if watch_mode else "Status Overview"
+    renderables: list[Any] = []
     if watch_mode:
-        intro = Text()
-        intro.append("Watching", style="lp.brand.secondary")
-        intro.append(
-            f" current jobs with a {refresh_interval}s refresh cadence.",
-            style="lp.brand.subtle",
+        renderables.append(
+            build_status_line(
+                "running",
+                "Watching",
+                f"current jobs with a {refresh_interval}s refresh cadence.",
+                no_color=no_color,
+            )
         )
+        renderables.append(Text())
     else:
-        intro = Text("Current queue snapshot for the configured operator.", style="lp.brand.subtle")
+        renderables.append(build_section_rule("Status"))
 
-    summary = build_summary_table()
-    summary.add_row("User", queried_user or "configured user")
-    summary.add_row(
-        "Scope", "active + recent completed" if include_all else "active only"
+    renderables.append(build_inline_kv("user", queried_user or "configured user", indent=2, label_width=12))
+    renderables.append(
+        build_inline_kv(
+            "scope",
+            "active + recent completed" if include_all else "active only",
+            indent=2,
+            label_width=12,
+        )
     )
-    summary.add_row("Updated", generated_at)
-    summary.add_row("Rows", str(len(rows)))
-    summary.add_row("Summary", _format_state_counts(state_counts))
+    renderables.append(build_inline_kv("updated", generated_at, indent=2, label_width=12))
 
     if not rows:
-        empty = build_detail_panel(
-            "No matching SLURM jobs were found. If you expected older jobs, rerun with `--all`.",
-            title="Nothing To Show",
-            tone="warn",
+        renderables.append(Text())
+        renderables.append(
+            build_warning_line(
+                "No matching SLURM jobs were found. If you expected older jobs, rerun with --all.",
+                no_color=no_color,
+            )
         )
-        return Group(
-            build_detail_panel(Group(intro, summary), title=title),
-            empty,
-            build_next_steps_panel(
-                ["launchpad status --all", "launchpad doctor"],
-                title="Try Next",
-            ),
-        )
+        renderables.append(Text())
+        renderables.append(build_next_steps(["launchpad status --all", "launchpad doctor"], no_color=no_color))
+        return Group(*renderables)
 
-    table = Table(title="Jobs", show_header=True, header_style="bold")
+    renderables.append(Text())
+    table = make_table()
     table.add_column("Job", justify="right")
     table.add_column("Task", justify="right")
     table.add_column("Name")
@@ -729,13 +779,18 @@ def _build_status_overview_renderable(
             str(row.get("job_id") or "—"),
             str(row.get("task_id") or "—"),
             str(row.get("run_name") or "—"),
-            build_status_badge(row.get("state")),
+            build_state_text(row.get("state"), no_color=no_color),
             str(row.get("partition") or "—"),
             str(row.get("node") or "—"),
             str(row.get("elapsed") or "—"),
         )
 
-    return Group(build_detail_panel(Group(intro, summary), title=title), table)
+    renderables.append(Padding(table, (0, 0, 0, 2)))
+    renderables.append(Text())
+    renderables.append(_build_summary_text(state_counts, no_color=no_color))
+    renderables.append(Text())
+    renderables.append(build_next_steps(["launchpad status --all", "launchpad doctor"], no_color=no_color))
+    return Group(*renderables)
 
 
 def _build_job_detail_renderable(
@@ -750,32 +805,38 @@ def _build_job_detail_renderable(
     rows: Sequence[Mapping[str, object]],
     watch_mode: bool,
     refresh_interval: int | None,
+    no_color: bool,
 ) -> Group:
-    title = "Live Job Status" if watch_mode else "Job Status"
-    intro = Text()
+    renderables: list[Any] = []
     if watch_mode:
-        intro.append("Watching", style="lp.brand.secondary")
-        intro.append(
-            f" job {requested_job_id} with a {refresh_interval}s refresh cadence.",
-            style="lp.brand.subtle",
+        renderables.append(
+            build_status_line(
+                "running",
+                "Watching",
+                f"job {requested_job_id} with a {refresh_interval}s refresh cadence.",
+                no_color=no_color,
+            )
         )
-    else:
-        intro.append(f"Job {requested_job_id}", style="lp.brand.secondary")
-        intro.append(" detail across the active and accounting views.", style="lp.brand.subtle")
+        renderables.append(Text())
 
-    summary = build_summary_table()
-    summary.add_row("Job", requested_job_id)
-    summary.add_row("Run name", run_name or "—")
-    summary.add_row("Partition", partition or "—")
-    summary.add_row("Array", array_range or "—")
-    summary.add_row("Remote job dir", remote_job_dir or "—")
-    summary.add_row("Updated", generated_at)
-    summary.add_row("Summary", _format_state_counts(state_counts))
+    header = Text("  ")
+    header.append(f"Job {requested_job_id}", style="lp.label" if not no_color else None)
+    if run_name:
+        header.append(f"  {run_name}", style="lp.status.info" if not no_color else None)
+    renderables.append(header)
 
-    table = Table(title="Tasks", show_header=True, header_style="bold")
-    table.add_column("Label")
-    table.add_column("Alias")
-    table.add_column("Task", justify="right")
+    detail_line = Text("  ")
+    detail_line.append(f"Array {array_range or '—'}", style="lp.text.label" if not no_color else None)
+    detail_line.append(f"  Partition {partition or '—'}", style="lp.text.label" if not no_color else None)
+    detail_line.append(f"  Updated {generated_at}", style="lp.text.detail" if not no_color else None)
+    renderables.append(detail_line)
+    if remote_job_dir:
+        renderables.append(build_inline_kv("remote", remote_job_dir, indent=2, label_width=12))
+    renderables.append(Text())
+
+    table = make_table()
+    table.add_column("Alias", style="lp.text.label")
+    table.add_column("Label", style="lp.label")
     table.add_column("State")
     table.add_column("Node")
     table.add_column("Elapsed")
@@ -789,10 +850,9 @@ def _build_job_detail_renderable(
 
     for row in rows:
         columns = [
+            str(row.get("alias") or row.get("task_id") or "—"),
             str(row.get("display_label") or row.get("task_id") or "—"),
-            str(row.get("alias") or "—"),
-            str(row.get("task_id") or "—"),
-            build_status_badge(row.get("state")),
+            build_state_text(row.get("state"), no_color=no_color),
             str(row.get("node") or "—"),
             str(row.get("elapsed") or "—"),
         ]
@@ -802,20 +862,49 @@ def _build_job_detail_renderable(
             columns.append(str(row.get("max_rss") or "—"))
         table.add_row(*columns)
 
-    return Group(
-        build_detail_panel(Group(intro, summary), title=title),
-        table,
-        build_next_steps_panel(
-            [
-                f"launchpad status {requested_job_id} --watch",
-                f"launchpad download {requested_job_id}",
-            ],
-            title="Next Commands",
-        ),
-    )
+    renderables.append(Padding(table, (0, 0, 0, 2)))
+    renderables.append(Text())
+    renderables.append(_build_summary_text(state_counts, no_color=no_color))
+    renderables.append(Text())
+    first_alias = next((str(row.get("alias")) for row in rows if row.get("alias")), None)
+    next_steps = [f"launchpad download {requested_job_id}"]
+    if first_alias:
+        next_steps.insert(0, f"launchpad logs {requested_job_id} {first_alias}")
+    else:
+        next_steps.insert(0, f"launchpad status {requested_job_id} --watch")
+    renderables.append(build_next_steps(next_steps, no_color=no_color))
+    return Group(*renderables)
 
 
 def _format_state_counts(counts: Mapping[str, int]) -> str:
     if not counts:
         return "no jobs"
-    return ", ".join(f"{state.lower()}={count}" for state, count in counts.items())
+    return ", ".join(f"{count} {state.lower()}" for state, count in counts.items())
+
+
+def _build_summary_text(counts: Mapping[str, int], *, no_color: bool) -> Text:
+    summary = Text("  Summary: ")
+    if not counts:
+        summary.append("no jobs", style="lp.text.detail" if not no_color else None)
+        return summary
+
+    segments: list[Text] = []
+    for state, count in counts.items():
+        part = Text()
+        style = {
+            "RUNNING": "lp.status.success",
+            "COMPLETED": "lp.status.info",
+            "PENDING": "lp.status.pending",
+            "FAILED": "lp.status.error",
+            "CANCELLED": "lp.status.error",
+            "TIMEOUT": "lp.status.error",
+        }.get(state)
+        part.append(str(count), style=style if not no_color else None)
+        part.append(f" {state.lower()}")
+        segments.append(part)
+
+    for index, part in enumerate(segments):
+        if index:
+            summary.append(", ")
+        summary.append_text(part)
+    return summary
