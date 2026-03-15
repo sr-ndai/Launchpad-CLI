@@ -125,7 +125,32 @@ def test_render_config_docs_includes_key_paths() -> None:
     assert "cluster.default_partition" in docs
     assert "cluster.workspace_root" in docs
     assert "remote_binaries.sbatch" in docs
+    assert "remote_binaries.sstat" in docs
     assert "solvers.nastran.logs.solver" in docs
+    assert "solvers.nastran.environment" in docs
+
+
+def test_resolve_config_reads_project_nastran_environment_override(tmp_path: Path) -> None:
+    """Project-local config should support solver environment exports."""
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / ".launchpad.toml").write_text(
+        "\n".join(
+            [
+                "[solvers.nastran]",
+                'environment = { SPLM_LICENSE_SERVER = "29001@eng-apps-license-01.rs.corp" }',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = resolve_config(cwd=project_dir, env={})
+
+    assert resolved.config.solvers.nastran.environment == {
+        "SPLM_LICENSE_SERVER": "29001@eng-apps-license-01.rs.corp",
+    }
 
 
 def test_resolve_remote_workspace_root_prefers_configured_root() -> None:

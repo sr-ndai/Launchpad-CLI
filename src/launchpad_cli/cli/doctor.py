@@ -22,7 +22,7 @@ from launchpad_cli.core.config import (
     resolve_config,
 )
 from launchpad_cli.core.logging import configure_logging
-from launchpad_cli.core.slurm import resolve_slurm_executable
+from launchpad_cli.core.slurm import build_slurm_login_shell_command, resolve_slurm_executable
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.workspace import resolve_remote_workspace_root
 from launchpad_cli.display import (
@@ -274,9 +274,13 @@ async def _remote_binaries_check(
     """Ensure the configured remote binaries resolve to executables."""
 
     resolved_paths: list[str] = []
-    missing_scheduler: list[str] = []
+    missing_required_scheduler: list[str] = []
+    missing_optional_scheduler: list[str] = []
     missing_exec: list[str] = []
-    scheduler_binaries = {"sbatch", "squeue", "sacct"}
+    capability_warnings: list[str] = []
+    required_scheduler_binaries = {"sbatch", "squeue"}
+    optional_scheduler_binaries = {"sacct", "sstat"}
+    scheduler_binaries = required_scheduler_binaries | optional_scheduler_binaries
 
     for name, configured_value in config.remote_binaries.model_dump(
         mode="python"
@@ -288,25 +292,64 @@ async def _remote_binaries_check(
         if result is None:
             rendered = f"{name}={configured_value}"
             if name in scheduler_binaries:
-                missing_scheduler.append(rendered)
+                if name in required_scheduler_binaries:
+                    missing_required_scheduler.append(rendered)
+                else:
+                    missing_optional_scheduler.append(rendered)
             else:
                 missing_exec.append(rendered)
         else:
             resolved_paths.append(f"{name}={result}")
 
-    if missing_scheduler or missing_exec:
+    if "sacct" not in {
+        entry.split("=", 1)[0] for entry in missing_required_scheduler + missing_optional_scheduler
+    }:
+        accounting_command = [
+            shlex.quote(config.remote_binaries.sacct),
+            "--json",
+            "--allocations",
+            "--starttime",
+            "now-1days",
+        ]
+        if config.ssh.username:
+            accounting_command.extend(["--user", shlex.quote(config.ssh.username)])
+        accounting_probe = await conn.run(
+            build_slurm_login_shell_command(" ".join(accounting_command)),
+            check=False,
+        )
+        if accounting_probe.exit_status != 0:
+            stderr = getattr(accounting_probe, "stderr", "") or ""
+            stdout = getattr(accounting_probe, "stdout", "") or ""
+            detail = stderr.strip() or stdout.strip() or "unknown error"
+            capability_warnings.append(
+                "SLURM accounting queries are unavailable; completed-job history and resource totals may be limited."
+            )
+            resolved_paths.append(f"sacct=degraded ({detail})")
+
+    if missing_required_scheduler or missing_optional_scheduler or missing_exec or capability_warnings:
         detail_parts: list[str] = []
         suggestion_parts: list[str] = []
+        status = "warn"
 
-        if missing_scheduler:
+        if missing_required_scheduler:
             detail_parts.append(
                 "Launchpad's scheduler login-shell environment could not resolve these executables: "
-                f"{', '.join(missing_scheduler)}"
+                f"{', '.join(missing_required_scheduler)}"
             )
             suggestion_parts.append(
                 "Ensure the head-node login-shell initialization exposes SLURM there, or set "
-                "`remote_binaries.sbatch`, `remote_binaries.squeue`, and `remote_binaries.sacct` "
+                "`remote_binaries.sbatch` and `remote_binaries.squeue` "
                 "to absolute paths as needed."
+            )
+            status = "fail"
+        if missing_optional_scheduler:
+            detail_parts.append(
+                "Optional scheduler observability commands could not be resolved: "
+                f"{', '.join(missing_optional_scheduler)}"
+            )
+            suggestion_parts.append(
+                "Set `remote_binaries.sacct` or `remote_binaries.sstat` to absolute paths if you "
+                "want completed-job history or live resource metrics on this cluster."
             )
         if missing_exec:
             detail_parts.append(
@@ -317,9 +360,16 @@ async def _remote_binaries_check(
                 "Set `remote_binaries.*` to absolute paths or make the tools available on the "
                 "PATH for non-interactive SSH exec sessions."
             )
+            status = "fail"
+        detail_parts.extend(capability_warnings)
+        if capability_warnings:
+            suggestion_parts.append(
+                "Clusters without SLURM accounting remain supported, but `status --all` and "
+                "completed-job metrics will be limited until accounting is enabled."
+            )
         return DiagnosticResult(
             name="remote-binaries",
-            status="fail",
+            status=status,
             detail=" ".join(detail_parts),
             suggestion=" ".join(suggestion_parts) + " Then rerun `launchpad doctor`.",
         )
@@ -387,6 +437,7 @@ def _render_results(results: list[DiagnosticResult], *, no_color: bool) -> None:
 
     console = build_console(no_color=no_color)
     passed = sum(result.status == "pass" for result in results)
+    warned = sum(result.status == "warn" for result in results)
     failed = sum(result.status == "fail" for result in results)
     skipped = sum(result.status == "skip" for result in results)
 
@@ -409,6 +460,7 @@ def _render_results(results: list[DiagnosticResult], *, no_color: bool) -> None:
         _build_summary_line(
             len(results),
             passed=passed,
+            warned=warned,
             failed=failed,
             skipped=skipped,
             no_color=no_color,
@@ -423,6 +475,7 @@ def _print_diagnostic_result(
 ) -> None:
     tone = {
         "pass": "success",
+        "warn": "warn",
         "fail": "error",
         "skip": "muted",
     }.get(result.status, "muted")
@@ -487,6 +540,15 @@ def _doctor_next_steps(results: list[DiagnosticResult]) -> list[str]:
             "launchpad status <JOB_ID>",
         ]
 
+    if any(result.status == "warn" for result in results) and not any(
+        result.status == "fail" for result in results
+    ):
+        return [
+            "launchpad submit --dry-run .",
+            "launchpad status <JOB_ID>",
+            "Review the degraded-observability note above if you need completed-job metrics.",
+        ]
+
     if statuses.get("config") == "fail" or statuses.get("ssh-key") == "fail":
         return [
             "launchpad config init",
@@ -525,6 +587,7 @@ def _build_summary_line(
     total: int,
     *,
     passed: int,
+    warned: int,
     failed: int,
     skipped: int,
     no_color: bool,
@@ -532,6 +595,10 @@ def _build_summary_line(
     summary = Text(f"  {total} checks: ")
     summary.append(str(passed), style="lp.status.success" if not no_color else None)
     summary.append(" passed")
+    if warned:
+        summary.append(", ")
+        summary.append(str(warned), style="lp.status.pending" if not no_color else None)
+        summary.append(" warned")
     if failed:
         summary.append(", ")
         summary.append(str(failed), style="lp.status.error" if not no_color else None)
@@ -540,7 +607,7 @@ def _build_summary_line(
         summary.append(", ")
         summary.append(str(skipped), style="lp.text.tertiary" if not no_color else None)
         summary.append(" skipped")
-    if not failed and not skipped:
+    if not failed and not warned and not skipped:
         summary.append(
             ", ready for the next run", style="lp.text.tertiary" if not no_color else None
         )

@@ -85,6 +85,45 @@ def test_nastran_build_scratch_env_uses_shared_filesystem_path() -> None:
     }
 
 
+def test_nastran_adapter_from_config_carries_configured_environment() -> None:
+    """Project-configured solver env vars should flow into the concrete adapter."""
+
+    config = LaunchpadConfig(
+        solvers={
+            "nastran": {
+                "environment": {
+                    "SPLM_LICENSE_SERVER": "29001@eng-apps-license-01.rs.corp",
+                }
+            }
+        }
+    )
+
+    adapter = NastranAdapter.from_config(config)
+
+    assert adapter.configured_env == {
+        "SPLM_LICENSE_SERVER": "29001@eng-apps-license-01.rs.corp",
+    }
+
+
+def test_nastran_build_scratch_env_allows_config_overrides() -> None:
+    """Explicit project env vars should merge with and override default scratch exports."""
+
+    scratch_env = NastranAdapter(
+        configured_env={
+            "SPLM_LICENSE_SERVER": "29001@eng-apps-license-01.rs.corp",
+            "TMPDIR": "/custom/tmp",
+        }
+    ).build_scratch_env("/shared/sergey/run/scratch")
+
+    assert scratch_env == {
+        "NASTRAN_SCRATCH": "/shared/sergey/run/scratch",
+        "TMPDIR": "/custom/tmp",
+        "TMP": "/shared/sergey/run/scratch",
+        "TEMP": "/shared/sergey/run/scratch",
+        "SPLM_LICENSE_SERVER": "29001@eng-apps-license-01.rs.corp",
+    }
+
+
 def test_ansys_adapter_raises_clear_stub_errors() -> None:
     """ANSYS should remain an explicit stub until the workflow is defined."""
 
