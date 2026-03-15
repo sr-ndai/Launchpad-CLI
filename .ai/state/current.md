@@ -12,12 +12,12 @@
 Phase 8 — Task References and Solver-Aware Logs
 
 ## Active Task
-8.6 — Configurable remote workspace root
+None.
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 8.6
+- in-progress: —
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,10 +25,15 @@ Phase 8 — Task References and Solver-Aware Logs
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/08-task-references-and-solver-aware-logs`
-- active task branch: `task/8.6-configurable-workspace-root`
-- last processed builder session: `2026-03-14-1617-builder-8.5.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-14-1711-builder-8.6.md`
 
 ## What Changed Recently
+- Accepted task `8.6` after review and prompt verification, then merged
+  `task/8.6-configurable-workspace-root` into the phase branch.
+- Phase 8 now also includes the configurable `cluster.workspace_root` model,
+  the shared workspace-root resolver, and the aligned submit, doctor, ls,
+  cleanup, docs, and regression updates from `8.6`.
 - Reopened Phase 8 with task `8.6` after field debugging showed that
   Launchpad still hardcodes the writable remote workspace as
   `<shared_root>/<ssh.username>` even when the cluster uses a different shared
@@ -75,19 +80,15 @@ Phase 8 — Task References and Solver-Aware Logs
 - None.
 
 ## Next Recommended Action
-Builder should implement task `8.6` on
-`task/8.6-configurable-workspace-root`, then record a Builder session note with
-verification results and `Outcome: READY_FOR_REVIEW`.
+Human should review PR `#10` from
+`phase/08-task-references-and-solver-aware-logs` to `main`, now including the
+workspace-root follow-up from task `8.6`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/8.6.md`
-4. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-5. `.ai/plan.md`
-6. `src/launchpad_cli/core/config.py`
-7. `src/launchpad_cli/cli/submit.py`
-8. `src/launchpad_cli/cli/doctor.py`
-9. `src/launchpad_cli/cli/ls.py`
-10. `src/launchpad_cli/cli/cleanup.py`
-11. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1714-coordinator-accept-8.6-update-pr.md`
+4. `.ai/reviews/8.6.md`
+5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+6. `.ai/plan.md`
+7. `.ai/git-rules.md`
