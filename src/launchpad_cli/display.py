@@ -7,6 +7,7 @@ from typing import Mapping, Sequence
 
 from rich.console import Console, Group
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
@@ -76,6 +77,12 @@ def build_console(*, stderr: bool = False, no_color: bool = False) -> Console:
     """Create a Rich console with the repository's baseline output defaults."""
 
     return Console(stderr=stderr, no_color=no_color, theme=LAUNCHPAD_THEME)
+
+
+def build_syntax_renderable(code: str, *, lexer: str) -> Syntax:
+    """Return a syntax-highlighted block that respects the active console settings."""
+
+    return Syntax(code, lexer, background_color="default", line_numbers=False, word_wrap=False)
 
 
 def build_launchpad_wordmark(*, width: int | None = None) -> Text | None:

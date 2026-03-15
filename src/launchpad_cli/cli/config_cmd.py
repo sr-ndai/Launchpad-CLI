@@ -26,6 +26,7 @@ from launchpad_cli.display import (
     build_launchpad_wordmark,
     build_next_steps_panel,
     build_summary_table,
+    build_syntax_renderable,
 )
 
 from ._helpers import not_implemented
@@ -63,7 +64,8 @@ def show_command(ctx: click.Context, docs: bool) -> None:
         click.echo(json.dumps(resolved.as_dict(), indent=2))
         return
 
-    click.echo(dumps_toml(resolved.as_dict()))
+    console = build_console(no_color=not _colorize_output(ctx))
+    console.print(build_syntax_renderable(dumps_toml(resolved.as_dict()), lexer="toml"))
 
 
 @command.command("edit", short_help="Open the user configuration file.")

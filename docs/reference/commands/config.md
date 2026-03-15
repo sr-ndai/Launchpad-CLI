@@ -69,6 +69,8 @@ launchpad config show --docs
 ## Notes
 
 - `config init` writes `~/.launchpad/config.toml`
-- `config show` reflects all config layers together
+- `config show` reflects all config layers together and renders the resolved
+  TOML with syntax highlighting in human-readable mode
+- `launchpad --json config show` stays plain JSON for scripts
 - the exhaustive schema lives in `launchpad config show --docs`, not only in
   this page
