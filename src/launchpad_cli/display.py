@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from textwrap import indent as textwrap_indent
 from typing import Any, Mapping, Sequence
 from rich.console import Console, Group
 from rich.padding import Padding
@@ -286,9 +287,10 @@ def build_status_entry(
         line.append(detail, style=inline_style)
         return line
 
+    indented_detail = textwrap_indent(detail, " " * (indent + 3), lambda _: True)
     return Group(
         line,
-        Text(" " * (indent + 3) + detail, style="lp.text.tertiary" if not no_color else None),
+        Text(indented_detail, style="lp.text.tertiary" if not no_color else None),
     )
 
 

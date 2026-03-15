@@ -96,3 +96,13 @@ def test_status_entry_wraps_long_detail_and_suggestions_use_action_affordance() 
     assert "config.toml -> ssh.host=cluster.example.com, ssh.username=sergey" in rendered_entry
     assert rendered_entry.count("\n") >= 2
     assert "→ Set ssh.key_path to a readable private key file." in rendered_suggestion
+
+
+def test_status_entry_indents_every_embedded_newline_in_detail_block() -> None:
+    """Multiline detail should keep each continuation line inside the status gutter."""
+
+    rendered = _render(build_status_entry("warn", "Connectivity", "line one\nline two"))
+
+    assert "▲  Connectivity" in rendered
+    assert "\n     line one" in rendered
+    assert "\n     line two" in rendered
