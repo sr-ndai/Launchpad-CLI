@@ -17,7 +17,7 @@ from rich_click.rich_panel import RichCommandPanel, RichOptionPanel
 from rich.text import Text
 
 from launchpad_cli import __version__
-from launchpad_cli.display import PALETTE, build_console, build_get_started_text, build_welcome_screen
+from launchpad_cli.display import PALETTE, build_console, build_root_help_footer, build_welcome_screen
 
 patch_rich_click()
 
@@ -134,7 +134,7 @@ def cli(
     json_output: bool,
     no_color: bool,
 ) -> None:
-    """Launchpad coordinates solver submissions, monitoring, and result retrieval."""
+    """Submit, monitor, and retrieve solver jobs on your SLURM cluster."""
 
     ctx.obj = GlobalOptions(
         verbose=verbose,
@@ -363,7 +363,7 @@ def _examples_epilog(lines: list[str]) -> str:
 
 
 def _root_help_footer() -> Text:
-    return build_get_started_text(subdued=True)
+    return build_root_help_footer()
 
 
 def _is_root_help_request(argv: list[str]) -> bool:
@@ -394,11 +394,13 @@ def _stdout_supports_branding() -> bool:
 
 
 def _render_welcome_screen(options: GlobalOptions) -> None:
-    console = build_console(no_color=_console_should_disable_color(options))
+    no_color = _console_should_disable_color(options)
+    console = build_console(no_color=no_color)
     console.print(
         build_welcome_screen(
             show_wordmark=_welcome_screen_supports_branding(options),
             width=_detect_terminal_width(),
+            no_color=no_color,
         )
     )
 

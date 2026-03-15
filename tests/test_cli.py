@@ -16,12 +16,13 @@ def test_root_command_shows_welcome_screen_when_invoked_without_subcommand() -> 
     result = runner.invoke(cli, [])
 
     assert result.exit_code == 0
-    assert "From folder to cluster in one command." in result.output
-    assert "submit" in result.output
-    assert "doctor" in result.output
-    assert "Key Commands" in result.output
-    assert "launchpad <command> --help" in result.output
-    assert "Get started: launchpad config init -> doctor -> submit --dry-run ." in result.output
+    assert "Launchpad  v0.1.0" in result.output
+    assert "Submit, monitor, and retrieve solver jobs on your SLURM cluster." in result.output
+    assert "launchpad submit" in result.output
+    assert "launchpad doctor" in result.output
+    assert "Run launchpad -h for all commands." in result.output
+    assert "Key Commands" not in result.output
+    assert "Get started: launchpad config init -> doctor -> submit --dry-run ." not in result.output
     assert "Usage:" not in result.output
 
 
@@ -41,8 +42,9 @@ def test_root_help_is_a_compact_reference_card() -> None:
     assert "--json" in result.output
     assert "--no-color" in result.output
     assert "--version" in result.output
-    assert "Get started: launchpad config init -> doctor -> submit --dry-run ." in result.output
+    assert "Use launchpad <command> --help for command-specific examples." in result.output
     assert "From folder to cluster in one command." not in result.output
+    assert "Launchpad  v0.1.0" not in result.output
     assert "Key Commands" not in result.output
     assert "Examples:" not in result.output
     assert "Primary Workflows" not in result.output
@@ -71,8 +73,9 @@ def test_root_welcome_shows_wordmark_when_branding_is_allowed(monkeypatch) -> No
     result = runner.invoke(cli, [], color=True)
 
     assert result.exit_code == 0
-    assert "From folder to cluster in one command." in result.output
+    assert "Submit, monitor, and retrieve solver jobs on your SLURM cluster." in result.output
     assert "____ ___  ______" in result.output
+    assert "→ launchpad submit" in result.output
 
 
 def test_root_welcome_uses_compact_wordmark_on_narrow_ttys(monkeypatch) -> None:
@@ -88,6 +91,7 @@ def test_root_welcome_uses_compact_wordmark_on_narrow_ttys(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Launchpad" in result.output
     assert "____ ___  ______" not in result.output
+    assert "Run launchpad -h for all commands." in result.output
 
 
 def test_root_welcome_suppresses_wordmark_with_no_color(monkeypatch) -> None:
@@ -101,8 +105,9 @@ def test_root_welcome_suppresses_wordmark_with_no_color(monkeypatch) -> None:
     result = runner.invoke(cli, ["--no-color"], color=True)
 
     assert result.exit_code == 0
-    assert "From folder to cluster in one command." in result.output
+    assert "Submit, monitor, and retrieve solver jobs on your SLURM cluster." in result.output
     assert "____ ___  ______" not in result.output
+    assert "-> launchpad submit" in result.output
 
 
 def test_submit_help_uses_grouped_sections_and_examples() -> None:
