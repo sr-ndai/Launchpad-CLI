@@ -114,22 +114,21 @@ def test_doctor_command_groups_results_and_points_to_next_steps(
     result = CliRunner().invoke(cli, ["doctor"])
 
     assert result.exit_code == 1
-    assert "Doctor Summary" in result.output
+    assert "Doctor" in result.output
     assert "Local Setup" in result.output
     assert "Cluster Access" in result.output
     assert "Config Resolution" in result.output
-    assert "Next Steps" in result.output
+    assert "3 checks:" in result.output
+    assert "Next" in result.output
     assert "launchpad config init" in result.output
     assert "launchpad doctor" in result.output
 
 
-def test_doctor_render_results_shows_branded_success_when_all_checks_pass(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_doctor_render_results_uses_restrained_success_path(
+    capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Doctor should reserve branding for the all-green success path."""
+    """Doctor should no longer show the wordmark on the all-green success path."""
 
-    monkeypatch.setattr(doctor_module, "_stdout_supports_branding", lambda: True)
-    monkeypatch.setattr(doctor_module, "_detect_terminal_width", lambda: 120)
     results = [
         doctor_module.DiagnosticResult("python", "pass", "Python 3.12.13"),
         doctor_module.DiagnosticResult("config", "pass", "Resolved config is complete."),
@@ -143,8 +142,10 @@ def test_doctor_render_results_shows_branded_success_when_all_checks_pass(
     doctor_module._render_results(results, no_color=False)
     captured = capsys.readouterr()
 
-    assert "Doctor checks passed." in captured.out
-    assert "____ ___  ______" in captured.out
+    assert "Doctor" in captured.out
+    assert "7 checks: 7 passed" in captured.out
+    assert "ready for the next run" in captured.out
+    assert "____ ___  ______" not in captured.out
 
 
 def test_doctor_ssh_key_check_requires_existing_key(tmp_path: Path) -> None:

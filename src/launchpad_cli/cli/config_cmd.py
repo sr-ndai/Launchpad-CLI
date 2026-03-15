@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import sys
 from pathlib import Path
 
 import click
@@ -13,8 +11,9 @@ from rich.text import Text
 
 from launchpad_cli.core.config import (
     DEFAULT_CLUSTER_CONFIG_PATH,
+    ConfigLayer,
+    ResolvedConfig,
     default_user_config_path,
-    dumps_toml,
     render_config_docs,
     resolve_config,
     write_toml_file,
@@ -22,11 +21,11 @@ from launchpad_cli.core.config import (
 from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.display import (
     build_console,
-    build_detail_panel,
-    build_launchpad_wordmark,
-    build_next_steps_panel,
-    build_summary_table,
-    build_syntax_renderable,
+    build_inline_kv,
+    build_next_steps,
+    build_section_rule,
+    build_status_line,
+    build_success_line,
 )
 
 from ._helpers import not_implemented
@@ -65,7 +64,7 @@ def show_command(ctx: click.Context, docs: bool) -> None:
         return
 
     console = build_console(no_color=not _colorize_output(ctx))
-    console.print(build_syntax_renderable(dumps_toml(resolved.as_dict()), lexer="toml"))
+    _render_config_show(console, resolved=resolved, no_color=not _colorize_output(ctx))
 
 
 @command.command("edit", short_help="Open the user configuration file.")
@@ -138,7 +137,6 @@ def init_command(
         _render_init_intro(
             console,
             user_config_path=user_config_path,
-            show_wordmark=_show_setup_branding(ctx),
         )
 
     resolved_host = _resolve_init_value(
@@ -189,7 +187,7 @@ def init_command(
         user_config_path=user_config_path,
         payload=payload,
         shared_config_available=DEFAULT_CLUSTER_CONFIG_PATH.exists(),
-        show_wordmark=_show_setup_branding(ctx),
+        no_color=not _colorize_output(ctx),
     )
 
 
@@ -287,18 +285,21 @@ def _render_init_intro(
     console,
     *,
     user_config_path: Path,
-    show_wordmark: bool,
 ) -> None:
-    if show_wordmark:
-        wordmark = build_launchpad_wordmark(width=_detect_terminal_width())
-        if wordmark is not None:
-            console.print(wordmark)
-    console.print(Text("Set up Launchpad for your cluster.", style="lp.brand.secondary"))
-    summary = build_summary_table()
-    summary.add_row("Config file", str(user_config_path))
-    summary.add_row("Prompts", "host, username, key path, port")
-    summary.add_row("Optional", "known_hosts_path stays inherited unless you pass a flag")
-    console.print(build_detail_panel(summary, title="Guided Setup"))
+    console.print(build_section_rule("Guided Setup"))
+    console.print(Text("Set up Launchpad for your cluster.", style="lp.value"))
+    console.print(build_inline_kv("config_file", user_config_path, indent=2, label_width=18))
+    console.print(
+        build_inline_kv("required_prompts", "host, username, key_path, port", indent=2, label_width=18)
+    )
+    console.print(
+        build_inline_kv(
+            "optional",
+            "known_hosts_path stays inherited unless you pass a flag",
+            indent=2,
+            label_width=18,
+        )
+    )
 
 
 def _render_init_success(
@@ -307,56 +308,159 @@ def _render_init_success(
     user_config_path: Path,
     payload: dict[str, object],
     shared_config_available: bool,
-    show_wordmark: bool,
+    no_color: bool,
 ) -> None:
-    if show_wordmark:
-        wordmark = build_launchpad_wordmark(width=_detect_terminal_width())
-        if wordmark is not None:
-            console.print(wordmark)
-
     ssh_payload = payload["ssh"]
     assert isinstance(ssh_payload, dict)
-    summary = build_summary_table()
-    summary.add_row("User config", str(user_config_path))
-    summary.add_row("Host", str(ssh_payload["host"]))
-    summary.add_row("Port", str(ssh_payload["port"]))
-    summary.add_row("Username", str(ssh_payload["username"]))
-    summary.add_row("SSH key", str(ssh_payload["key_path"]))
-    summary.add_row(
-        "Known hosts",
-        str(ssh_payload.get("known_hosts_path") or "system default / inherited"),
-    )
-    summary.add_row(
-        "Shared config",
-        (
-            f"detected at {DEFAULT_CLUSTER_CONFIG_PATH}"
-            if shared_config_available
-            else "not detected; user, project, env, and CLI overrides still work"
-        ),
-    )
-    console.print(build_detail_panel(summary, title="Config Ready", tone="success"))
+    console.print(build_section_rule("Config Ready"))
+    console.print(build_success_line(f"Saved user config at {user_config_path}", no_color=no_color))
+    console.print(Text("  SSH", style="lp.label" if not no_color else None))
+    console.print(build_inline_kv("host", ssh_payload["host"], indent=4, label_width=18))
+    console.print(build_inline_kv("port", ssh_payload["port"], indent=4, label_width=18))
+    console.print(build_inline_kv("username", ssh_payload["username"], indent=4, label_width=18))
+    console.print(build_inline_kv("key_path", ssh_payload["key_path"], indent=4, label_width=18))
     console.print(
-        build_next_steps_panel(
+        build_inline_kv(
+            "known_hosts_path",
+            ssh_payload.get("known_hosts_path") or "system default / inherited",
+            indent=4,
+            label_width=18,
+        )
+    )
+    console.print()
+    console.print(Text("  Shared Config", style="lp.label" if not no_color else None))
+    console.print(
+        build_status_line(
+            "success" if shared_config_available else "muted",
+            "shared config",
+            (
+                f"detected at {DEFAULT_CLUSTER_CONFIG_PATH}"
+                if shared_config_available
+                else "not detected; user, project, env, and CLI overrides still work"
+            ),
+            indent=4,
+            no_color=no_color,
+        )
+    )
+    console.print()
+    console.print(
+        build_next_steps(
             [
                 "launchpad config show",
                 "launchpad doctor",
                 "launchpad submit --dry-run .",
-            ]
+            ],
+            no_color=no_color,
         )
     )
 
 
-def _show_setup_branding(ctx: click.Context) -> bool:
-    options = getattr(ctx.find_root(), "obj", None)
-    if bool(getattr(options, "quiet", False)) or bool(getattr(options, "json_output", False)):
-        return False
-    if bool(getattr(options, "no_color", False)) or "NO_COLOR" in os.environ:
-        return False
-    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+def _render_config_show(console, *, resolved: ResolvedConfig, no_color: bool) -> None:
+    console.print(build_section_rule("Resolved Configuration"))
+    console.print(Text("  Sources (highest to lowest priority)", style="lp.label" if not no_color else None))
+    for index, layer in enumerate(reversed(resolved.layers), start=1):
+        console.print(
+            build_inline_kv(
+                f"{index}. {_layer_heading(layer)}",
+                _layer_detail(layer),
+                indent=4,
+                label_width=30,
+            )
+        )
+
+    for section_name, section_value in resolved.as_dict().items():
+        if not isinstance(section_value, dict) or not section_value:
+            continue
+        console.print()
+        _render_mapping_section(
+            console,
+            title=_display_section_name(section_name),
+            mapping=section_value,
+            no_color=no_color,
+            indent=2,
+        )
 
 
-def _detect_terminal_width() -> int | None:
-    try:
-        return shutil.get_terminal_size(fallback=(80, 24)).columns
-    except OSError:
-        return None
+def _render_mapping_section(
+    console,
+    *,
+    title: str,
+    mapping: dict[str, object],
+    no_color: bool,
+    indent: int,
+) -> None:
+    console.print(Text(" " * indent + title, style="lp.label" if not no_color else None))
+    for key, value in mapping.items():
+        if isinstance(value, dict):
+            console.print(
+                Text(" " * (indent + 2) + _display_section_name(key), style="lp.label" if not no_color else None)
+            )
+            _render_nested_mapping(console, mapping=value, no_color=no_color, indent=indent + 4)
+            continue
+        console.print(build_inline_kv(key, _render_value(value), indent=indent + 2, label_width=18))
+
+
+def _render_nested_mapping(
+    console,
+    *,
+    mapping: dict[str, object],
+    no_color: bool,
+    indent: int,
+) -> None:
+    for key, value in mapping.items():
+        if isinstance(value, dict):
+            console.print(Text(" " * indent + _display_section_name(key), style="lp.label" if not no_color else None))
+            _render_nested_mapping(console, mapping=value, no_color=no_color, indent=indent + 2)
+            continue
+        console.print(build_inline_kv(key, _render_value(value), indent=indent, label_width=18))
+
+
+def _display_section_name(name: str) -> str:
+    aliases = {
+        "ssh": "SSH",
+        "remote_binaries": "Remote Binaries",
+    }
+    if name in aliases:
+        return aliases[name]
+    return name.replace("_", " ").title()
+
+
+def _render_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "enabled" if value else "disabled"
+    return str(value)
+
+
+def _layer_heading(layer: ConfigLayer) -> str:
+    headings = {
+        "cli": "CLI flags",
+        "environment": "Environment variables",
+        "project": "Project config",
+        "user": "User config",
+        "cluster": "Shared config",
+    }
+    return headings.get(layer.name, layer.name.replace("_", " "))
+
+
+def _layer_detail(layer: ConfigLayer) -> str:
+    if layer.name in {"cluster", "user", "project"}:
+        if layer.loaded and layer.path is not None:
+            return str(layer.path)
+        return "not found"
+
+    if not layer.loaded:
+        return "none"
+
+    flattened = ", ".join(_flatten_keys(layer.data))
+    return flattened or "overrides applied"
+
+
+def _flatten_keys(data: dict[str, object], prefix: str = "") -> list[str]:
+    keys: list[str] = []
+    for key, value in data.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            keys.extend(_flatten_keys(value, prefix=path))
+        else:
+            keys.append(path)
+    return keys
