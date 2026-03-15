@@ -29,6 +29,9 @@ None.
 - last processed builder session: `2026-03-14-1723-builder-8.7.md`
 
 ## What Changed Recently
+- Opened PR `#11` from `phase/08-task-references-and-solver-aware-logs` to
+  `main` for the post-merge follow-ups after confirming that PR `#10` had
+  already been merged into `main` on 2026-03-14.
 - Accepted task `8.7` after review and prompt verification, then merged
   `task/8.7-config-show-syntax-highlighting` into the phase branch.
 - Phase 8 now also includes syntax-highlighted human-readable
@@ -91,15 +94,17 @@ None.
 - None.
 
 ## Next Recommended Action
-Human should review PR `#10` from
+Human should review PR `#11` from
 `phase/08-task-references-and-solver-aware-logs` to `main`, now including the
-syntax-highlighted `config show` follow-up from task `8.7`.
+workspace-root follow-up from task `8.6` and the syntax-highlighted
+`config show` follow-up from task `8.7`.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/sessions/2026-03-14-1725-coordinator-accept-8.7-update-pr.md`
-4. `.ai/reviews/8.7.md`
-5. `.ai/plans/08-task-references-and-solver-aware-logs.md`
-6. `.ai/plan.md`
-7. `.ai/git-rules.md`
+3. `.ai/sessions/2026-03-14-1730-coordinator-open-phase-8-pr-11.md`
+4. `.ai/sessions/2026-03-14-1725-coordinator-accept-8.7-update-pr.md`
+5. `.ai/reviews/8.7.md`
+6. `.ai/plans/08-task-references-and-solver-aware-logs.md`
+7. `.ai/plan.md`
+8. `.ai/git-rules.md`
