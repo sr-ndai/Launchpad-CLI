@@ -13,6 +13,8 @@ interfaces.
   `launchpad ssh` session body itself
 - Keep bare `launchpad` as the only branded wordmark surface and move all
   other surfaces to the restrained visual grammar
+- Correct the shared text hierarchy after the first redesign pass so labels,
+  values, hints, and suggestions no longer collapse into the same dim band
 - Replace default human `launchpad config show` with the new sectioned summary
   while preserving `--json` and `--docs`
 - Land shared display primitives, prompt/progress helpers, and root shell
@@ -42,6 +44,9 @@ interfaces.
   the new display primitives and emits no more than one hero panel per command
 - Bare `launchpad` is the only wordmark surface; onboarding, runtime, and
   operator commands all use the restrained grammar
+- Shared display primitives enforce the corrected hierarchy: brighter values,
+  secondary labels, tertiary hints, faint separators, and multiline handling
+  for long diagnostic/status details
 - Human `launchpad config show` renders the grouped summary by default while
   `--json` and `--docs` remain backward compatible
 - The queue, docs, and tests reflect the redesigned CLI and no stale Phase 7
@@ -55,8 +60,9 @@ interfaces.
 | 9.2 | Onboarding, config, and diagnostics redesign | `config init`, `config show`, and `doctor` still carry the old Phase 7 panel stack and wordmark usage; they need to move to the new restrained layout early because later docs and help text depend on that settled direction. | 9.1 |
 | 9.3 | Submit and status redesign | Submit and status already depend heavily on shared rendering helpers, so they should be the first primary workflows migrated to the new hero-card, borderless-table, and inline-metadata model. | 9.1 |
 | 9.4 | Download and transfer feedback redesign | Download still uses panel summaries and plain confirmations; it needs the new preflight summary, shared progress/spinner feedback, and restrained completion layout after the display foundation is stable. | 9.1, 9.3 |
-| 9.5 | Logs and utility command redesign | Logs, ls, cancel, and cleanup still use command-local panel-heavy renderers and destructive-flow copy that should be unified after the primary workflow patterns settle. | 9.1, 9.4 |
-| 9.6 | Help, docs, and regression hardening | After all surfaces move, the remaining help/examples/docs and regression coverage must be refreshed so the new UX is documented and protected without relying on brittle snapshots. | 9.2, 9.3, 9.4, 9.5 |
+| 9.5 | Display hierarchy revision and Phase 9 retrofits | Expert review showed that the first redesign pass fixed structure but still leaves too many labels, values, hints, and suggestions in the same washed-out tier, so the shared display primitives and already-migrated screens need a focused correction before more command migrations land. | 9.1, 9.2, 9.3, 9.4 |
+| 9.6 | Logs and utility command redesign | Logs, ls, cancel, and cleanup still use command-local panel-heavy renderers and destructive-flow copy, and they should only move once the corrected hierarchy system from `9.5` is in place. | 9.5 |
+| 9.7 | Help, docs, and regression hardening | After the hierarchy fix and the final command migrations land, help/examples/docs plus regression coverage must be refreshed so the final Phase 9 UI is consistent and protected without brittle snapshots. | 9.5, 9.6 |
 
 ## Risks
 
@@ -76,3 +82,6 @@ interfaces.
   layer; `core/` modules should continue returning plain data and callbacks
 - Keep the current testing style: semantic CLI assertions plus focused helper
   coverage, not brittle full-output snapshot files
+- `.ai/plans/LAUNCHPAD_UI_REVISION.md` is the corrective follow-up for the
+  Phase 9 text hierarchy and should be read alongside the original redesign
+  brief, not instead of it

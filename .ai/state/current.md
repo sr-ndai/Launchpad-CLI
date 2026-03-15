@@ -12,10 +12,10 @@
 Phase 9 — CLI Visual Overhaul
 
 ## Active Task
-9.5 — Logs and utility command redesign
+9.5 — Display hierarchy revision and Phase 9 retrofits
 
 ## Queue Snapshot
-- pending: 9.6
+- pending: 9.6, 9.7
 - ready: —
 - in-progress: 9.5
 - needs-review: —
@@ -29,30 +29,33 @@ Phase 9 — CLI Visual Overhaul
 - last processed builder session: `2026-03-14-2152-builder-9.4.md`
 
 ## What Changed Recently
-- Processed Builder session `2026-03-14-2152-builder-9.4.md`, reran the `9.4`
-  verification commands, and confirmed the download/transfer feedback redesign
-  plus the shared progress-callback coverage updates.
-- Accepted task `9.4`, merged `task/9.4-download-and-transfer-feedback-redesign`
-  into `phase/09-cli-visual-overhaul`, and brought the Phase 9 download flow,
-  transfer-feedback surface, review record, and Builder evidence onto the
-  phase branch.
-- Opened `9.5`, wrote the next Builder prompt for logs and utility commands,
-  and moved the active task branch to the remaining operator-surface work.
+- Adopted the expert-feedback revision in
+  `.ai/plans/LAUNCHPAD_UI_REVISION.md` as the Phase 9 hierarchy correction
+  rather than as a replacement design direction.
+- Revised the active `9.5` task on its task branch before Builder work starts
+  so it now focuses on shared display hierarchy fixes and retrofits for the
+  already-migrated Phase 9 surfaces.
+- Reordered the remaining queue: logs/utilities move to `9.6`, help/docs and
+  regression hardening move to `9.7`, and the updated prompts now reflect that
+  sequence.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
 Builder should switch to `task/9.5-logs-and-utility-command-redesign`, read
-the new `9.5` prompt, and redesign `logs`, `ls`, `cancel`, and `cleanup` on
-top of the Phase 9 display primitives without changing selectors, destructive
-semantics, or machine-readable paths.
+the revised `9.5` prompt on that task branch, use
+`.ai/plans/LAUNCHPAD_UI_REVISION.md` plus the existing Phase 9 redesign brief
+as the visual references, and implement the shared hierarchy correction plus
+the `doctor`/`config`/`submit`/`status`/`download` retrofits without changing
+behavior or machine-readable paths.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
 3. `.ai/tasks/prompts/9.5.md`
-4. `.ai/plans/09-cli-visual-overhaul.md`
-5. `.ai/plans/LAUNCHPAD_UI_REDESIGN_PLAN.md`
-6. `.ai/plan.md`
-7. `.ai/git-rules.md`
+4. `.ai/plans/LAUNCHPAD_UI_REVISION.md`
+5. `.ai/plans/09-cli-visual-overhaul.md`
+6. `.ai/plans/LAUNCHPAD_UI_REDESIGN_PLAN.md`
+7. `.ai/plan.md`
+8. `.ai/git-rules.md`

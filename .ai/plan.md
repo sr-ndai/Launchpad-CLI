@@ -1328,19 +1328,27 @@ by explicit submitted metadata instead of naming heuristics.
   all other human-readable output to the new visual grammar
 - [ ] Redesign the full human-facing CLI surface area except the interactive
   `launchpad ssh` session body itself
+- [ ] Correct the shared Phase 9 text hierarchy so labels, values, hints, and
+  suggestions occupy distinct visual tiers instead of one dim-heavy band
 - [ ] Change default human `launchpad config show` from syntax-highlighted TOML
   to a sectioned summary while preserving `--json` and `--docs`
 - [ ] Rework submit, status, and download around one-hero-panel max, borderless
-  tables, inline metadata, and shared progress/spinner helpers
-- [ ] Bring logs, ls, cancel, and cleanup into the same restrained layout,
-  especially for empty states, destructive confirmations, and live log reading
+  tables, inline metadata, shared progress/spinner helpers, and the corrected
+  hierarchy rules
+- [ ] Retrofit already-migrated Phase 9 screens (`doctor`, `config`, `submit`,
+  `status`, `download`) to the corrected hierarchy before finishing the
+  remaining command migrations
+- [ ] Bring logs, ls, cancel, and cleanup into the same restrained layout after
+  the hierarchy fix, especially for empty states, destructive confirmations,
+  and live log reading
 - [ ] Preserve command names, flags, exit codes, JSON payloads, selector
   behavior, `--quiet`, `--no-color`, and non-TTY behavior throughout
 - [ ] Refresh help, docs, and CLI regression coverage to match the new output
 
 **Milestone:** Launchpad keeps the Phase 8 behavior and machine interfaces
 intact, but every human-readable surface now feels like one coherent, modern
-CLI with welcome-only branding and consistent display primitives.
+CLI with welcome-only branding, corrected text hierarchy, and consistent
+display primitives.
 
 ---
 
