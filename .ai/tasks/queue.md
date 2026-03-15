@@ -59,5 +59,5 @@
 | 9.3 | 9 | Submit and status redesign | done | 9.1 | task/9.3-submit-and-status-redesign | — |
 | 9.4 | 9 | Download and transfer feedback redesign | done | 9.1, 9.3 | task/9.4-download-and-transfer-feedback-redesign | — |
 | 9.5 | 9 | Display hierarchy revision and Phase 9 retrofits | done | 9.1, 9.2, 9.3, 9.4 | task/9.5-logs-and-utility-command-redesign | — |
-| 9.6 | 9 | Logs and utility command redesign | in-progress | 9.5 | task/9.6-logs-and-utility-command-redesign | Builder |
-| 9.7 | 9 | Help, docs, and regression hardening | pending | 9.5, 9.6 | task/9.7-help-docs-and-regression-hardening | — |
+| 9.6 | 9 | Logs and utility command redesign | done | 9.5 | task/9.6-logs-and-utility-command-redesign | — |
+| 9.7 | 9 | Help, docs, and regression hardening | in-progress | 9.5, 9.6 | task/9.7-help-docs-and-regression-hardening | Builder |
