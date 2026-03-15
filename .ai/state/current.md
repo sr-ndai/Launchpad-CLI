@@ -12,12 +12,12 @@
 Phase 9 — CLI Visual Overhaul
 
 ## Active Task
-9.7 — Help, docs, and regression hardening
+None — Phase 9 complete
 
 ## Queue Snapshot
 - pending: —
 - ready: —
-- in-progress: 9.7
+- in-progress: —
 - needs-review: —
 - revision-needed: —
 - blocked: —
@@ -25,34 +25,31 @@ Phase 9 — CLI Visual Overhaul
 ## Repo State
 - default branch: `main`
 - coordination branch: `phase/09-cli-visual-overhaul`
-- active task branch: `task/9.7-help-docs-and-regression-hardening`
-- last processed builder session: `2026-03-15-0928-builder-9.6.md`
+- active task branch: `none`
+- last processed builder session: `2026-03-15-0937-builder-9.7.md`
 
 ## What Changed Recently
-- Processed Builder session `2026-03-15-0928-builder-9.6.md` and reran the
-  task-focused operator-command verification plus the full `uv run pytest`
-  suite during review.
-- Accepted task `9.6`, merged
-  `task/9.6-logs-and-utility-command-redesign` into
-  `phase/09-cli-visual-overhaul`, and brought the operator-command redesign
-  plus updated review/session evidence onto the phase branch.
-- Advanced the queue to `9.7`, the final Phase 9 task covering help/docs
-  consistency and regression hardening before PR preparation.
+- Processed Builder session `2026-03-15-0937-builder-9.7.md` and reran the
+  Phase 9 verification command set plus the full `uv run pytest` suite during
+  review.
+- Accepted task `9.7`, merged
+  `task/9.7-help-docs-and-regression-hardening` into
+  `phase/09-cli-visual-overhaul`, and brought the final docs/help alignment
+  plus regression hardening updates onto the phase branch.
+- Marked all Phase 9 tasks `done`; the phase branch is ready for PR creation
+  and human review.
 
 ## Known Blockers
 - None.
 
 ## Next Recommended Action
-Builder should switch to `task/9.7-help-docs-and-regression-hardening`, read
-the `9.7` prompt, refresh help/examples/docs for the final Phase 9 UI, tighten
-the remaining regression coverage, and rerun the listed verification commands
-before the final handoff.
+Coordinator should push `phase/09-cli-visual-overhaul`, open the PR to `main`,
+and then route the next action to human review once the PR URL is available.
 
 ## Next Agent Read Order
 1. `.ai/state/current.md`
 2. `.ai/tasks/queue.md`
-3. `.ai/tasks/prompts/9.7.md`
-4. `.ai/plans/09-cli-visual-overhaul.md`
-5. `.ai/plans/LAUNCHPAD_UI_REVISION.md`
-6. `.ai/plans/LAUNCHPAD_UI_REDESIGN_PLAN.md`
-7. `.ai/git-rules.md`
+3. `.ai/plans/09-cli-visual-overhaul.md`
+4. `.ai/plans/LAUNCHPAD_UI_REVISION.md`
+5. `.ai/plans/LAUNCHPAD_UI_REDESIGN_PLAN.md`
+6. `.ai/git-rules.md`
