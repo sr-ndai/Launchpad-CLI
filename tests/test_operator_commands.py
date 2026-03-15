@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -190,6 +191,16 @@ def test_doctor_config_check_passes_for_complete_ssh_configuration() -> None:
     assert result.status == "pass"
     assert "cluster.example.com" in result.detail
     assert "sergey" in result.detail
+
+
+def test_doctor_python_version_check_uses_runtime_sys_version() -> None:
+    """The real Python-version helper should execute without mocked diagnostics state."""
+
+    result = doctor_module._python_version_check()
+
+    assert result.name == "python"
+    assert result.detail.startswith("Python ")
+    assert result.status == ("pass" if sys.version_info >= (3, 12) else "fail")
 
 
 @pytest.mark.asyncio
