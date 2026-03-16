@@ -541,7 +541,7 @@ def _parse_job_status(job: dict[str, Any]) -> JobStatus:
         array_task_id=_optional_string(job, "array.task_id", "array_task_id") or derived_array_task_id,
         user_name=_optional_string(job, "user_name", "user"),
         partition=_optional_string(job, "partition"),
-        node_list=_optional_string(job, "node_list", "nodes_alloc"),
+        node_list=_optional_string(job, "node_list", "nodes_alloc", "nodes"),
         nodes=_optional_int(job, "node_count", "nodes"),
         cpus=_optional_int(job, "cpus", "cpus_per_task", "num_cpus"),
         elapsed=_optional_string(job, "time.elapsed", "elapsed", "elapsed_time"),
@@ -571,12 +571,12 @@ def _parse_job_accounting(job: dict[str, Any]) -> JobAccounting:
         array_job_id=_optional_string(job, "array.job_id", "array_job_id") or derived_array_job_id,
         array_task_id=_optional_string(job, "array.task_id", "array_task_id") or derived_array_task_id,
         partition=_optional_string(job, "partition"),
-        node_list=_optional_string(job, "node_list", "nodes_alloc"),
+        node_list=_optional_string(job, "node_list", "nodes_alloc", "nodes"),
         elapsed=_optional_string(job, "elapsed", "time.elapsed", "elapsed_time"),
-        total_cpu=_optional_string(job, "total_cpu"),
-        max_rss=_optional_string(job, "max_rss"),
-        max_disk_read=_optional_string(job, "max_disk_read"),
-        max_disk_write=_optional_string(job, "max_disk_write"),
+        total_cpu=_optional_string(job, "total_cpu", "time.total_cpu"),
+        max_rss=_optional_size_string(job, "max_rss", "stats.max_rss"),
+        max_disk_read=_optional_size_string(job, "max_disk_read", "stats.max_disk_read"),
+        max_disk_write=_optional_size_string(job, "max_disk_write", "stats.max_disk_write"),
         exit_code=_optional_exit_code(job, "exit_code"),
         derived_exit_code=_optional_exit_code(job, "derived_exit_code"),
         comment=_optional_string(job, "comment"),
@@ -680,6 +680,30 @@ def _normalize_sstat_value(value: str) -> str | None:
     if not cleaned or cleaned.upper() == "N/A":
         return None
     return cleaned
+
+
+def _format_bytes(size_bytes: int) -> str:
+    """Format a byte count as a human-readable size string (e.g. '1.0 GB')."""
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    value = float(size_bytes)
+    unit = units[0]
+    for unit in units:
+        if abs(value) < 1024 or unit == units[-1]:
+            break
+        value /= 1024
+    if unit == "B":
+        return f"{int(value)} {unit}"
+    return f"{value:.1f} {unit}"
+
+
+def _optional_size_string(record: dict[str, Any], *paths: str) -> str | None:
+    """Like _optional_string but converts raw numeric byte values to human-readable sizes."""
+    value = _coalesce(record, *paths)
+    if value is _MISSING:
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _format_bytes(int(value))
+    return _render_string(value)
 
 
 def _parse_sstat_job_id(job_id: str) -> tuple[str, str | None, str]:

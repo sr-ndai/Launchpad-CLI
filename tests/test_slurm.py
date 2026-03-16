@@ -185,6 +185,63 @@ SSTAT_SAMPLE = "\n".join(
     ]
 )
 
+# SLURM 21.08+ sacct JSON: resource fields under "stats"/"time", node name under "nodes"
+SACCT_NESTED_FIELDS_SAMPLE = json.dumps(
+    {
+        "meta": {"plugin": "test"},
+        "jobs": [
+            {
+                "job_id": "99001",
+                "name": "gpu-job",
+                "partition": "gpu",
+                "state": {"current": "COMPLETED", "reason": "None"},
+                "nodes": "gpu-compute-01",
+                "elapsed": "00:30:00",
+                "time": {
+                    "elapsed": "00:30:00",
+                    "total_cpu": "02:00:00",
+                    "submission": "2026-03-14T10:00:00",
+                    "start": "2026-03-14T10:01:00",
+                    "end": "2026-03-14T10:31:00",
+                },
+                "stats": {
+                    "max_rss": {"set": True, "number": 1073741824.0},
+                    "max_disk_read": {"set": True, "number": 524288.0},
+                    "max_disk_write": {"set": True, "number": 262144.0},
+                },
+                "comment": "/shared/launchpad/gpu-job",
+                "work_dir": "/shared/launchpad/gpu-job/results",
+            }
+        ],
+    }
+)
+
+# SLURM squeue JSON where nodelist is under "nodes" (plain string) instead of "node_list"
+SQUEUE_NODES_FIELD_SAMPLE = json.dumps(
+    {
+        "meta": {"plugin": "test"},
+        "jobs": [
+            {
+                "job_id": 88001,
+                "name": "cfd-run",
+                "partition": "compute",
+                "user_name": "alice",
+                "state": {"current": "RUNNING", "reason": "None"},
+                "nodes": "compute-node-03",
+                "node_count": {"set": True, "number": 1},
+                "cpus": 8,
+                "time": {
+                    "elapsed": "01:00:00",
+                    "limit": "08:00:00",
+                    "submission": "2026-03-14T09:00:00",
+                    "start": "2026-03-14T09:01:00",
+                },
+                "comment": "/shared/launchpad/cfd-run",
+            }
+        ],
+    }
+)
+
 
 def test_build_submit_script_includes_expected_slurm_and_solver_content() -> None:
     """Submit script generation should preserve the documented Phase 2 decisions."""
@@ -329,6 +386,28 @@ def test_parse_sacct_output_handles_typed_wrappers_and_host_style_nodes_alloc() 
     assert jobs[0].node_list == "simulation-r61-8x-dy-r6i-8xlarge7-2"
     assert jobs[0].total_cpu == "02:24.000"
     assert jobs[0].remote_job_dir == "/shared/launchpad/tank_v3"
+
+
+def test_parse_sacct_output_handles_nested_slurm21_fields() -> None:
+    """sacct parsing should pick up node, cpu, and memory from SLURM 21.08+ nested paths."""
+
+    jobs = parse_sacct_output(SACCT_NESTED_FIELDS_SAMPLE)
+
+    assert len(jobs) == 1
+    assert jobs[0].node_list == "gpu-compute-01"
+    assert jobs[0].total_cpu == "02:00:00"
+    assert jobs[0].max_rss == "1.0 GB"
+    assert jobs[0].max_disk_read == "512.0 KB"
+    assert jobs[0].max_disk_write == "256.0 KB"
+
+
+def test_parse_squeue_output_handles_nodes_field_as_nodelist() -> None:
+    """squeue parsing should fall back to 'nodes' as a nodelist string when node_list is absent."""
+
+    jobs = parse_squeue_output(SQUEUE_NODES_FIELD_SAMPLE)
+
+    assert len(jobs) == 1
+    assert jobs[0].node_list == "compute-node-03"
 
 
 def test_parse_sstat_output_returns_structured_runtime_stats() -> None:
