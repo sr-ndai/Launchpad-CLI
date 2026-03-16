@@ -428,6 +428,7 @@ async def _build_download_plan(
 
     source_roots = _build_source_roots(
         selected_rows=selected_rows,
+        manifest=manifest,
         remote_job_dir=remote_job_dir,
         include_scratch=include_scratch,
     )
@@ -827,23 +828,37 @@ def _select_download_rows(
 def _build_source_roots(
     *,
     selected_rows: tuple[DownloadJobRow, ...],
+    manifest: JobManifest | None,
     remote_job_dir: str,
     include_scratch: bool,
 ) -> tuple[RemoteSource, ...]:
-    """Resolve the remote result directories selected for download."""
+    """Resolve the remote result directories selected for download.
 
+    Manifest task references are the authoritative source for result directory
+    paths. ``sacct`` reports the job submission directory (not the task result
+    directory) for completed jobs, so ``row.work_dir`` is only used as a
+    fallback for legacy jobs without a manifest.
+    """
+
+    task_refs_by_id: dict[str, JobManifest] = (
+        {ref.task_id: ref for ref in manifest.tasks} if manifest else {}
+    )
     sources: list[RemoteSource] = []
     seen: set[str] = set()
 
     for row in selected_rows:
-        if not row.work_dir:
+        task_ref = task_refs_by_id.get(row.task_id or "")
+        if task_ref is not None:
+            work_dir = str(PurePosixPath(remote_job_dir) / task_ref.result_dir)
+        elif row.work_dir:
+            work_dir = str(PurePosixPath(row.work_dir))
+        else:
             raise RuntimeError(
                 f"No remote work directory is available for job {row.job_id}"
                 + (f" task {row.task_id}" if row.task_id is not None else "")
                 + "."
             )
 
-        work_dir = str(PurePosixPath(row.work_dir))
         if work_dir not in seen:
             sources.append(
                 RemoteSource(
