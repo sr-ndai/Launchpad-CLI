@@ -343,13 +343,11 @@ async def _run_download(
 
     async with ssh_session(resolved.config.ssh) as conn:
         rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
-        manifest = await load_job_manifest(conn, _remote_job_dir(rows))
         plan = await _build_download_plan(
             conn=conn,
             config=resolved.config,
             job_id=job_id,
             rows=rows,
-            manifest=manifest,
             destination=destination,
             requested_tasks=requested_tasks,
             cleanup=cleanup,
@@ -391,7 +389,6 @@ async def _build_download_plan(
     config: LaunchpadConfig,
     job_id: str,
     rows: tuple[DownloadJobRow, ...],
-    manifest: JobManifest | None,
     destination: Path | None,
     requested_tasks: tuple[str, ...],
     cleanup: bool,
@@ -404,6 +401,14 @@ async def _build_download_plan(
 ) -> DownloadPlan:
     """Resolve the selected remote paths, transfer mode, and local requirements."""
 
+    primary_row = rows[0]
+    run_name = primary_row.run_name or f"job-{job_id}"
+    remote_job_dir = primary_row.remote_job_dir
+    if not remote_job_dir:
+        remote_job_dir = await infer_remote_job_dir(conn, config, run_name=run_name, job_id=job_id)
+
+    manifest = await load_job_manifest(conn, remote_job_dir)
+
     selected_rows = _select_download_rows(
         rows,
         requested_tasks=resolve_task_ids(
@@ -414,10 +419,6 @@ async def _build_download_plan(
         ),
     )
     primary_row = selected_rows[0]
-    run_name = primary_row.run_name or f"job-{job_id}"
-    remote_job_dir = primary_row.remote_job_dir
-    if not remote_job_dir:
-        remote_job_dir = await infer_remote_job_dir(conn, config, run_name=run_name, job_id=job_id)
 
     destination_dir = resolve_download_destination(destination, run_name=run_name)
     if destination_dir.exists() and any(destination_dir.iterdir()):
