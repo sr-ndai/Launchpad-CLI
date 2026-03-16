@@ -214,7 +214,7 @@ async def _run_logs(
         remote_job_dir = _remote_job_dir(rows)
         manifest = await load_job_manifest(conn, remote_job_dir)
         effective_log_kind = _log_kind(solver_log=solver_log, log_kind=log_kind, err=err)
-        selection = _select_row(
+        selection = await _select_row(
             rows,
             job_id=job_id,
             requested_task_ref=task_ref,
@@ -301,7 +301,7 @@ async def _query_job_rows(
     raise RuntimeError(f"No SLURM job data found for {job_id}.")
 
 
-def _select_row(
+async def _select_row(
     rows: tuple[JobLogRow, ...],
     *,
     job_id: str,
@@ -333,7 +333,7 @@ def _select_row(
         return LogSelection(row=task_rows[0], task_ref=_task_ref_for_row(task_rows[0], manifest))
     if len(task_rows) > 1:
         if interactive:
-            return _pick_task_interactively(
+            return await _pick_task_interactively(
                 job_id=job_id,
                 task_rows=task_rows,
                 manifest=manifest,
@@ -384,7 +384,7 @@ def _task_ref_for_row(row: JobLogRow, manifest: JobManifest | None) -> TaskRefer
     return None
 
 
-def _pick_task_interactively(
+async def _pick_task_interactively(
     *,
     job_id: str,
     task_rows: tuple[JobLogRow, ...],
@@ -413,7 +413,7 @@ def _pick_task_interactively(
             )
         )
 
-    selected = _launch_log_picker(options, colorize_output=colorize_output)
+    selected = await _launch_log_picker(options, colorize_output=colorize_output)
     if selected is None:
         raise click.ClickException("Log selection aborted.")
     return LogSelection(row=selected.row, task_ref=selected.task_ref)
@@ -464,7 +464,7 @@ def _picker_label(row: JobLogRow, task_ref: TaskReference | None) -> str:
     return row.run_name or "job"
 
 
-def _launch_log_picker(
+async def _launch_log_picker(
     options: tuple[LogPickerOption, ...],
     *,
     colorize_output: bool,
@@ -528,7 +528,7 @@ def _launch_log_picker(
         )
         for option in options
     ]
-    return questionary.select(
+    return await questionary.select(
         message,
         choices=choices,
         instruction="Use arrows to move and Enter to select",
@@ -536,7 +536,7 @@ def _launch_log_picker(
         pointer=">",
         use_shortcuts=False,
         style=style,
-    ).ask()
+    ).ask_async()
 
 
 def _picker_column_widths(options: tuple[LogPickerOption, ...]) -> dict[str, int]:
