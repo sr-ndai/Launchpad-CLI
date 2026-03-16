@@ -296,7 +296,7 @@ def test_logs_command_uses_interactive_picker_for_human_multitask_flow(
             ),
         )
 
-    def fake_pick_task_interactively(**kwargs) -> logs_module.LogSelection:  # type: ignore[no-untyped-def]
+    async def fake_pick_task_interactively(**kwargs) -> logs_module.LogSelection:  # type: ignore[no-untyped-def]
         picker_calls.append((kwargs["job_id"], kwargs["log_kind"]))
         return logs_module.LogSelection(row=kwargs["task_rows"][1], task_ref=None)
 
