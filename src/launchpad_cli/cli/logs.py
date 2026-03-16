@@ -24,6 +24,7 @@ from launchpad_cli.core.logging import configure_logging
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
 from launchpad_cli.core.task_selectors import load_job_manifest, resolve_manifest_task_reference
+from launchpad_cli.core.workspace import infer_remote_job_dir
 from launchpad_cli.display import (
     build_console,
     build_inline_kv,
@@ -212,6 +213,15 @@ async def _run_logs(
     async with ssh_session(resolved.config.ssh) as conn:
         rows = await _query_job_rows(conn, resolved.config, job_id=job_id)
         remote_job_dir = _remote_job_dir(rows)
+        if remote_job_dir is None:
+            run_name = next((row.run_name for row in rows if row.run_name), None)
+            if run_name:
+                try:
+                    remote_job_dir = await infer_remote_job_dir(
+                        conn, resolved.config, run_name=run_name, job_id=job_id
+                    )
+                except Exception:
+                    pass
         manifest = await load_job_manifest(conn, remote_job_dir)
         effective_log_kind = _log_kind(solver_log=solver_log, log_kind=log_kind, err=err)
         selection = await _select_row(

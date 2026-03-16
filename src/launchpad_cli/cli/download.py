@@ -38,6 +38,7 @@ from launchpad_cli.core.remote_ops import (
 )
 from launchpad_cli.core.slurm import JobAccounting, JobStatus, query_sacct, query_squeue
 from launchpad_cli.core.ssh import ssh_session
+from launchpad_cli.core.workspace import infer_remote_job_dir, resolve_remote_workspace_root
 from launchpad_cli.core.task_selectors import load_job_manifest, resolve_task_ids
 from launchpad_cli.core.transfer import (
     DownloadItem,
@@ -416,7 +417,7 @@ async def _build_download_plan(
     run_name = primary_row.run_name or f"job-{job_id}"
     remote_job_dir = primary_row.remote_job_dir
     if not remote_job_dir:
-        raise RuntimeError(f"No remote job directory metadata is available for job {job_id}.")
+        remote_job_dir = await infer_remote_job_dir(conn, config, run_name=run_name, job_id=job_id)
 
     destination_dir = resolve_download_destination(destination, run_name=run_name)
     if destination_dir.exists() and any(destination_dir.iterdir()):
