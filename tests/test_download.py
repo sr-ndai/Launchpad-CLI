@@ -600,15 +600,18 @@ async def test_build_download_plan_resolves_manifest_task_references(
     async def fake_select_transfer_mode(*args, **kwargs) -> str:  # type: ignore[no-untyped-def]
         return "multi-file"
 
+    async def fake_load_job_manifest(conn, remote_job_dir) -> object:  # type: ignore[no-untyped-def]
+        return manifest
+
     monkeypatch.setattr(download_module, "measure_remote_path", fake_measure_remote_path)
     monkeypatch.setattr(download_module, "_select_transfer_mode", fake_select_transfer_mode)
+    monkeypatch.setattr(download_module, "load_job_manifest", fake_load_job_manifest)
 
     plan = await download_module._build_download_plan(
         conn=object(),
         config=LaunchpadConfig(ssh=SSHConfig(host="cluster.example.com", username="sergey")),
         job_id="12345",
         rows=rows,
-        manifest=manifest,
         destination=tmp_path / "results_tank_v3",
         requested_tasks=("002", "inputs/wing.dat"),
         cleanup=False,
@@ -683,13 +686,17 @@ async def test_build_download_plan_rejects_non_numeric_legacy_task_refs(
         ),
     )
 
+    async def fake_load_job_manifest_none(conn, remote_job_dir) -> None:  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr(download_module, "load_job_manifest", fake_load_job_manifest_none)
+
     with pytest.raises(ValueError, match="Only raw numeric task IDs are supported"):
         await download_module._build_download_plan(
             conn=object(),
             config=LaunchpadConfig(ssh=SSHConfig(host="cluster.example.com", username="sergey")),
             job_id="12345",
             rows=rows,
-            manifest=None,
             destination=tmp_path / "results_tank_v3",
             requested_tasks=("wing.dat",),
             cleanup=False,
